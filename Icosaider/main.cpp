@@ -3,21 +3,43 @@
 #include <map>
 #include <cmath>
 #include <GLFW/glfw3.h>
+
+#define M_PI 3.14159265358979323846
+
+// Структура для представления вектора в 3D пространстве
 struct Vector3 {
     float x, y, z;
 
     Vector3(float x = 0, float y = 0, float z = 0) : x(x), y(y), z(z) {}
 
+    // Нормализация вектора
     Vector3 normalize() const {
         float len = std::sqrt(x * x + y * y + z * z);
         return Vector3(x / len, y / len, z / len);
     }
 
+    // Оператор масштабирования вектора
     Vector3 operator*(float scalar) const {
         return Vector3(x * scalar, y * scalar, z * scalar);
     }
+
+    // Оператор масштабирования с присваиванием
+    Vector3& operator*=(float scalar) {
+        x *= scalar;
+        y *= scalar;
+        z *= scalar;
+        return *this;
+    }
 };
 
+// Функция для установки пользовательской перспективной проекции
+void customPerspective(float fovY, float aspect, float zNear, float zFar) {
+    float fH = tan(fovY / 360.0f * M_PI) * zNear;
+    float fW = fH * aspect;
+    glFrustum(-fW, fW, -fH, fH, zNear, zFar);
+}
+
+// Класс для создания геодезической сферы
 class GeodesicSphere {
 private:
     std::vector<Vector3> vertices;
@@ -32,13 +54,14 @@ public:
     }
 
 private:
+    // Создание икосаэдра
     void createIcosahedron() {
         const float t = (1.0f + std::sqrt(5.0f)) / 2.0f;
 
         vertices = {
-            Vector3(-1,  t,  0), Vector3(1, t,  0), Vector3(-1, -t,  0), Vector3(1, -t,  0),
-            Vector3(0, -1,  t), Vector3(0, 1,  t), Vector3(0, -1, -t), Vector3(0,  1, -t),
-            Vector3(t,  0, -1), Vector3(t, 0,  1), Vector3(-t,  0, -1), Vector3(-t,  0,  1)
+            Vector3(-1,  t,  0), Vector3( 1, t,  0), Vector3(-1, -t,  0), Vector3( 1, -t,  0),
+            Vector3( 0, -1,  t), Vector3( 0,  1,  t), Vector3( 0, -1, -t), Vector3( 0,  1, -t),
+            Vector3( t,  0, -1), Vector3( t,  0,  1), Vector3(-t,  0, -1), Vector3(-t,  0,  1)
         };
 
         for (auto& v : vertices) {
@@ -53,6 +76,7 @@ private:
         };
     }
 
+    // Подразделение треугольников
     void subdivide() {
         for (int i = 0; i < subdivision; i++) {
             std::vector<int> newIndices;
@@ -77,6 +101,7 @@ private:
         }
     }
 
+    // Получение средней точки между двумя вершинами
     int getMidPoint(int v1, int v2, std::map<std::pair<int, int>, int>& cache) {
         bool reverse = v1 > v2;
         if (reverse) std::swap(v1, v2);
@@ -94,37 +119,37 @@ private:
         middle = middle.normalize() * radius;
 
         vertices.push_back(middle);
-        cache[key] = vertices.size() - 1;
+        cache[key] = static_cast<int>(vertices.size()) - 1;
 
-        return vertices.size() - 1;
+        return static_cast<int>(vertices.size()) - 1;
     }
 
 public:
+    // Рисование геодезической сферы
     void draw() const {
-        // Рисуем закрашенные треугольники
-        glColor3f(0.0f, 0.0f, 0.0f); // Черный цвет для заливки
+        // Рисуем треугольники с черной заливкой
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glColor3f(0.0f, 0.0f, 0.0f); // Устанавливаем черный цвет для заливки
         glBegin(GL_TRIANGLES);
         for (size_t i = 0; i < indices.size(); i += 3) {
             Vector3 v1 = vertices[indices[i]];
             Vector3 v2 = vertices[indices[i + 1]];
             Vector3 v3 = vertices[indices[i + 2]];
-
             glVertex3f(v1.x, v1.y, v1.z);
             glVertex3f(v2.x, v2.y, v2.z);
             glVertex3f(v3.x, v3.y, v3.z);
         }
         glEnd();
 
-        // Рисуем обводку треугольников
-        glColor3f(1.0f, 1.0f, 1.0f); // Белый цвет для обводки
+        // Рисуем обводку белым цветом
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glColor3f(1.0f, 1.0f, 1.0f); // Устанавливаем белый цвет для обводки
+        glLineWidth(2.0f); // Устанавливаем толщину линии
         glBegin(GL_TRIANGLES);
         for (size_t i = 0; i < indices.size(); i += 3) {
             Vector3 v1 = vertices[indices[i]];
             Vector3 v2 = vertices[indices[i + 1]];
             Vector3 v3 = vertices[indices[i + 2]];
-
             glVertex3f(v1.x, v1.y, v1.z);
             glVertex3f(v2.x, v2.y, v2.z);
             glVertex3f(v3.x, v3.y, v3.z);
@@ -136,15 +161,22 @@ public:
     const std::vector<int>& getIndices() const { return indices; }
 };
 
+// Создание сферы с радиусом 1.0 и 3 уровнями подразделения
 GeodesicSphere sphere(1.0f, 3);
 
+// Функция для отображения сферы
 void display() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
+    glTranslatef(0.0f, 0.0f, -5.0f); // Отодвигаем камеру на 5 единиц по оси Z
+    glRotatef(25.0f, 1.0f, 0.0f, 0.0f); // Вращение для лучшей визуализации
+    glRotatef(25.0f, 0.0f, 1.0f, 0.0f);
     sphere.draw();
     glfwSwapBuffers(glfwGetCurrentContext());
 }
 
+
+// Точка входа
 int main() {
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
@@ -160,6 +192,10 @@ int main() {
 
     glfwMakeContextCurrent(window);
     glEnable(GL_DEPTH_TEST);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    customPerspective(45.0f, 800.0f / 600.0f, 0.1f, 200.0f); // Увеличиваем zFar до 200.0f
+    glMatrixMode(GL_MODELVIEW);
 
     while (!glfwWindowShouldClose(window)) {
         display();
