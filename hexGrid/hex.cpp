@@ -4,26 +4,35 @@
 #include <glew.h>
 #include "corecrt_math_defines.h"
 
-HexGrid::HexGrid(int width, int height, float hexSize)
+HexGrid::HexGrid(int width, int height, float hexSize, float screenWidth, float screenHeight)
     : width(width), height(height), hexSize(hexSize) {
-    hexWidth = hexSize * 2;
-    hexHeight = sqrt(2) * hexSize;
+    hexWidth = 2 * hexSize;
+    hexHeight = sqrt(3) * hexSize;
+
+    // Вычисляем размеры сетки по центрам
+    // Минимальные координаты считаются равными нулю,
+    // а максимальные по X: hexSize * 1.5 * (width - 1)
+    // по Y: для столбцов сдвигаем на hexHeight*0.5, поэтому максимальное значение = hexHeight * (height - 1 + 0.5)
+    float gridCenterX = (0 + hexSize * 1.5f * (width - 1)) / 2.0f;
+    float gridCenterY = (0 + hexHeight * (height - 1 + 0.5f)) / 2.0f;
+
+    // Вычисляем смещение, чтобы центр сетки совпадал с центром окна
+    offset.x = screenWidth / 2.0f - gridCenterX;
+    offset.y = screenHeight / 2.0f - gridCenterY;
+
     generateGrid();
 }
 
-
 Vec2 HexGrid::getHexCenter(int col, int row) {
-    float x = hexWidth * (col + 0.5f * (row % 2)); //* 0.75 ;
-    float y = row * hexHeight; //* 0.75f;
-    return Vec2(x, y);
+    float x = hexSize * 1.5f * col;
+    float y = hexHeight * (row + 0.5f * (col % 2));
+    return Vec2(x, y) + offset;
 }
-
-
 
 std::vector<Vec2> HexGrid::getHexVertices(const Vec2& center) {
     std::vector<Vec2> vertices;
     for (int i = 0; i < 6; ++i) {
-        float angle = i * M_PI / 3.0f;
+        float angle = M_PI / 6.0f + i * M_PI / 3.0f + M_PI / 2.0f;
         vertices.emplace_back(
             center.x + hexSize * cos(angle),
             center.y + hexSize * sin(angle)
@@ -32,37 +41,43 @@ std::vector<Vec2> HexGrid::getHexVertices(const Vec2& center) {
     return vertices;
 }
 
-
 std::pair<int, int> HexGrid::getHexAtPosition(float x, float y) {
-    float hexHeight = sqrt(3) * hexSize;
-    float hexWidth = 2 * hexSize;
+    // Определяем приблизительный столбец и строку
+    int approxCol = static_cast<int>((x - offset.x) / (hexSize * 1.5f));
+    int approxRow = static_cast<int>((y - offset.y) / hexHeight - 0.5f * (approxCol % 2));
 
-    float gridY = y / (hexHeight * 0.75f);
-    int row = static_cast<int>(std::round(gridY));
-    if (row < 0 || row >= height) return { -1, -1 };
+    // Собираем кандидатов: первоначально выбранный и его соседи
+    std::vector<std::pair<int, int>> candidates;
+    candidates.push_back({ approxCol, approxRow });
+    int dx[6] = { -1, 0, 1, 1, 0, -1 };
+    int dy[6] = { 0, -1, 0, 1, 1, 1 };
+    for (int i = 0; i < 6; i++) {
+        int ncol = approxCol + dx[i];
+        int nrow = approxRow + dy[i];
+        candidates.push_back({ ncol, nrow });
+    }
 
-    float offset = (row % 2) * 0.5f;
-    float gridX = (x / (hexWidth * 0.75f)) - offset;
-    int col = static_cast<int>(std::round(gridX));
-    if (col < 0 || col >= width) return { -1, -1 };
+    // Проверяем кандидатов с помощью алгоритма определения попадания в многоугольник
+    for (const auto& candidate : candidates) {
+        int col = candidate.first;
+        int row = candidate.second;
+        if (col < 0 || col >= width || row < 0 || row >= height)
+            continue;
 
-    bool inside = false;
-    int n = vertices.size();
-    for (int i = 0, j = n - 1; i < n; j = i++) {
-        const Vec2& p1 = vertices[j];
-        const Vec2& p2 = vertices[i];
-        if (p1.y == p2.y) continue;
-
-        if ((y > std::min(p1.y, p2.y)) && (y <= std::max(p1.y, p2.y))) {
-            float t = (y - p1.y) / (p2.y - p1.y);
-            float intersectX = p1.x + t * (p2.x - p1.x);
-            if (x <= intersectX) {
+        Vec2 center = getHexCenter(col, row);
+        std::vector<Vec2> hexVerts = getHexVertices(center);
+        bool inside = false;
+        for (size_t i = 0, j = hexVerts.size() - 1; i < hexVerts.size(); j = i++) {
+            if (((hexVerts[i].y > y) != (hexVerts[j].y > y)) &&
+                (x < (hexVerts[j].x - hexVerts[i].x) * (y - hexVerts[i].y) / (hexVerts[j].y - hexVerts[i].y) + hexVerts[i].x)) {
                 inside = !inside;
             }
         }
+        if (inside)
+            return std::make_pair(col, row);
     }
 
-    return inside ? std::make_pair(col, row) : std::make_pair(-1, -1);
+    return std::make_pair(-1, -1);
 }
 
 void HexGrid::generateGrid() {

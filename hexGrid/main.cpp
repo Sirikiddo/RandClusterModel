@@ -37,6 +37,7 @@ int main() {
     }
 
     // Настройка контекста OpenGL
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -107,7 +108,7 @@ int main() {
 
 
     // Инициализация сетки
-    HexGrid grid(10, 10, 30.0f); // Увеличьте размер гекса для лучшей видимости
+    HexGrid grid(10, 10, 30.0f, 800.0f, 600.0f); // Увеличьте размер гекса для лучшей видимости
     AppData appData;
     appData.grid = &grid;
     glfwSetWindowUserPointer(window, &appData);
@@ -154,10 +155,23 @@ int main() {
 
         // Рисуем черные выбранные шестиугольники
         glUniform4f(glGetUniformLocation(shaderProgram, "uColor"), 0.0f, 0.0f, 0.0f, 1.0f);
+        glBindVertexArray(VAO); // Включаем VAO перед отрисовкой!
+
         for (const auto& hex : appData.selectedHexes) {
-            int baseIndex = (hex.second * grid.getWidth() + hex.first) * 18; // 18 индексов на гекс (6 треугольников)
+            int col = hex.first;
+            int row = hex.second;
+
+            if (col < 0 || col >= grid.getWidth() || row < 0 || row >= grid.getHeight()) {
+                continue; // Пропускаем неверные индексы
+            }
+
+            int hexIndex = row * grid.getWidth() + col;
+            int baseIndex = hexIndex * 18; // 18 индексов на один гекс (6 треугольников)
+
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
             glDrawElements(GL_TRIANGLES, 18, GL_UNSIGNED_INT, (void*)(baseIndex * sizeof(unsigned int)));
         }
+
 
         // Рисуем контуры
         glUniform4f(glGetUniformLocation(shaderProgram, "uColor"), 0.0f, 0.0f, 0.0f, 1.0f);
