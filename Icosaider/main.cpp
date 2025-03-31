@@ -24,7 +24,7 @@ struct Vector3 {
     }
 
     // Оператор масштабирования с присваиванием
-    Vector3& operator*=(float scalar) {
+    Vector3 operator*=(float scalar) {
         x *= scalar;
         y *= scalar;
         z *= scalar;
@@ -59,9 +59,9 @@ private:
         const float t = (1.0f + std::sqrt(5.0f)) / 2.0f;
 
         vertices = {
-            Vector3(-1,  t,  0), Vector3( 1, t,  0), Vector3(-1, -t,  0), Vector3( 1, -t,  0),
-            Vector3( 0, -1,  t), Vector3( 0,  1,  t), Vector3( 0, -1, -t), Vector3( 0,  1, -t),
-            Vector3( t,  0, -1), Vector3( t,  0,  1), Vector3(-t,  0, -1), Vector3(-t,  0,  1)
+            Vector3(-1,  t,  0), Vector3(1, t,  0), Vector3(-1, -t,  0), Vector3(1, -t,  0),
+            Vector3(0, -1,  t), Vector3(0,  1,  t), Vector3(0, -1, -t), Vector3(0,  1, -t),
+            Vector3(t,  0, -1), Vector3(t,  0,  1), Vector3(-t,  0, -1), Vector3(-t,  0,  1)
         };
 
         for (auto& v : vertices) {
@@ -127,9 +127,8 @@ private:
 public:
     // Рисование геодезической сферы
     void draw() const {
-        // Рисуем треугольники с черной заливкой
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        glColor3f(0.0f, 0.0f, 0.0f); // Устанавливаем черный цвет для заливки
+        glColor3f(0.0f, 0.0f, 0.0f);
         glBegin(GL_TRIANGLES);
         for (size_t i = 0; i < indices.size(); i += 3) {
             Vector3 v1 = vertices[indices[i]];
@@ -141,10 +140,9 @@ public:
         }
         glEnd();
 
-        // Рисуем обводку белым цветом
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        glColor3f(1.0f, 1.0f, 1.0f); // Устанавливаем белый цвет для обводки
-        glLineWidth(2.0f); // Устанавливаем толщину линии
+        glColor3f(1.0f, 1.0f, 1.0f);
+        glLineWidth(2.0f);
         glBegin(GL_TRIANGLES);
         for (size_t i = 0; i < indices.size(); i += 3) {
             Vector3 v1 = vertices[indices[i]];
@@ -161,6 +159,42 @@ public:
     const std::vector<int>& getIndices() const { return indices; }
 };
 
+// Глобальные переменные для хранения уровня увеличения и углов поворота
+float zoomLevel = 0.0f;
+float rotateX = 0.0f;
+float rotateY = 0.0f;
+bool isRotating = false;
+double lastX, lastY;
+
+// Колбэк для обработки событий колесика мыши
+void scrollCallback(GLFWwindow* window, double xOffset, double yOffset) {
+    zoomLevel += yOffset * 0.1f; 
+}
+
+// Колбэк для обработки событий нажатия кнопок мыши
+void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        isRotating = true;
+        glfwGetCursorPos(window, &lastX, &lastY);
+    }
+    else if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+        isRotating = false;
+    }
+}
+
+// Колбэк для обработки событий движения мыши
+void cursorPosCallback(GLFWwindow* window, double xPos, double yPos) {
+    if (isRotating) {
+        double deltaX = xPos - lastX;
+        double deltaY = yPos - lastY;
+        lastX = xPos;
+        lastY = yPos;
+
+        rotateY += deltaX * 0.5f;
+        rotateX += deltaY * 0.5f;
+    }
+}
+
 // Создание сферы с радиусом 1.0 и 3 уровнями подразделения
 GeodesicSphere sphere(1.0f, 3);
 
@@ -168,13 +202,12 @@ GeodesicSphere sphere(1.0f, 3);
 void display() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
-    glTranslatef(0.0f, 0.0f, -5.0f); // Отодвигаем камеру на 5 единиц по оси Z
-    glRotatef(25.0f, 1.0f, 0.0f, 0.0f); // Вращение для лучшей визуализации
-    glRotatef(25.0f, 0.0f, 1.0f, 0.0f);
+    glTranslatef(0.0f, 0.0f, -5.0f + zoomLevel); 
+    glRotatef(rotateX, 1.0f, 0.0f, 0.0f); 
+    glRotatef(rotateY, 0.0f, 1.0f, 0.0f); 
     sphere.draw();
     glfwSwapBuffers(glfwGetCurrentContext());
 }
-
 
 // Точка входа
 int main() {
@@ -192,9 +225,12 @@ int main() {
 
     glfwMakeContextCurrent(window);
     glEnable(GL_DEPTH_TEST);
+    glfwSetScrollCallback(window, scrollCallback); 
+    glfwSetMouseButtonCallback(window, mouseButtonCallback); 
+    glfwSetCursorPosCallback(window, cursorPosCallback); 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    customPerspective(45.0f, 800.0f / 600.0f, 0.1f, 200.0f); // Увеличиваем zFar до 200.0f
+    customPerspective(45.0f, 800.0f / 600.0f, 0.1f, 200.0f);
     glMatrixMode(GL_MODELVIEW);
 
     while (!glfwWindowShouldClose(window)) {
