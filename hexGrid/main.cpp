@@ -1,4 +1,4 @@
-#include <glm.hpp>
+п»ї#include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
 #include <gtc/type_ptr.hpp>
 #include <glew.h>
@@ -6,10 +6,13 @@
 #include "hex.h"
 #include <iostream>
 #include <utility>
+#include <map>
 
 struct AppData {
-    HexGrid* grid;
-    std::vector<std::pair<int, int>> selectedHexes;
+    HexGrid* grid = nullptr;
+    std::map<std::pair<int, int>, int> hexClickCount;
+    std::vector<std::pair<int, int>> path;
+    GLuint textVAO = 0, textVBO = 0;
 };
 
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
@@ -18,16 +21,52 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         double xpos, ypos;
         glfwGetCursorPos(window, &xpos, &ypos);
 
-        // Конвертация координат окна в мировые (с инверсией Y)
         float worldX = static_cast<float>(xpos);
-        float worldY = static_cast<float>(600 - ypos); // Инверсия Y
+        float worldY = static_cast<float>(600 - ypos);
 
-        std::pair<int, int> hexCoords = appData->grid->getHexAtPosition(worldX, worldY);
-        if (hexCoords.first != -1 && hexCoords.second != -1) {
-            std::cout << "Selected hex: (" << hexCoords.first << ", " << hexCoords.second << ")\n";
-            appData->selectedHexes.push_back(hexCoords);
+        auto hexCoords = appData->grid->getHexAtPosition(worldX, worldY);
+        if (hexCoords.first == -1) return;
+
+        auto& count = appData->hexClickCount[hexCoords];
+        count = (count + 1) % 4;
+
+        if (count == 2) {
+            static std::pair<int, int> firstHex = { -1, -1 };
+            if (firstHex.first == -1) {
+                firstHex = hexCoords;
+            }
+            else {
+                auto path = appData->grid->findPath(firstHex, hexCoords, appData->hexClickCount);
+                appData->path = path;
+                firstHex = { -1, -1 };
+            }
         }
+    } // <-- Р—Р°РєСЂС‹РІР°СЋС‰Р°СЏ СЃРєРѕР±РєР° РґР»СЏ if (button == GLFW_MOUSE_BUTTON_LEFT)
+} // <-- Р—Р°РєСЂС‹РІР°СЋС‰Р°СЏ СЃРєРѕР±РєР° РґР»СЏ mouseButtonCallback
+
+// ... (РѕСЃС‚Р°Р»СЊРЅРѕР№ РєРѕРґ)
+
+void renderText(GLFWwindow* window, const std::string& text, float x, float y, float scale) {
+    AppData* appData = static_cast<AppData*>(glfwGetWindowUserPointer(window));
+
+    // РџСЂРѕСЃС‚РѕР№ СЂРµРЅРґРµСЂРёРЅРі С‚РµРєСЃС‚Р° СЃ РїРѕРјРѕС‰СЊСЋ Р»РёРЅРёР№
+    glBindVertexArray(appData->textVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, appData->textVBO);
+
+    std::vector<float> vertices;
+    for (char c : text) {
+        // РџСЂРѕСЃС‚РµР№С€Р°СЏ РіРµРѕРјРµС‚СЂРёСЏ РґР»СЏ С†РёС„СЂ (РїСЂРёРјРµСЂ РґР»СЏ '0')
+        switch (c) {
+        case '0': /* РєРѕРѕСЂРґРёРЅР°С‚С‹ Р»РёРЅРёР№ РґР»СЏ 0 */ break;
+        case '1': /* РєРѕРѕСЂРґРёРЅР°С‚С‹ РґР»СЏ 1 */ break;
+            // ... Р”РѕР±Р°РІСЊС‚Рµ РіРµРѕРјРµС‚СЂРёСЋ РґР»СЏ РІСЃРµС… РЅСѓР¶РЅС‹С… СЃРёРјРІРѕР»РѕРІ
+        }
+        // Р”РѕР±Р°РІСЊС‚Рµ СЃРјРµС‰РµРЅРёРµ РґР»СЏ СЃР»РµРґСѓСЋС‰РµРіРѕ СЃРёРјРІРѕР»Р°
+        x += 15.0f * scale;
     }
+
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_DYNAMIC_DRAW);
+    glDrawArrays(GL_LINES, 0, vertices.size() / 2);
 }
 
 int main() {
@@ -36,7 +75,7 @@ int main() {
         return -1;
     }
 
-    // Настройка контекста OpenGL
+    // ГЌГ Г±ГІГ°Г®Г©ГЄГ  ГЄГ®Г­ГІГҐГЄГ±ГІГ  OpenGL
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -57,7 +96,7 @@ int main() {
         return -1;
     }
 
-    // Шейдеры
+    // ГГҐГ©Г¤ГҐГ°Г»
     const char* vertexShaderSource = R"glsl(
         #version 330 core
         layout (location = 0) in vec2 aPos;
@@ -76,7 +115,7 @@ int main() {
         }
     )glsl";
 
-    // Компиляция шейдеров
+    // ГЉГ®Г¬ГЇГЁГ«ГїГ¶ГЁГї ГёГҐГ©Г¤ГҐГ°Г®Гў
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
     glCompileShader(vertexShader);
@@ -92,7 +131,7 @@ int main() {
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
 
-    // Проверка ошибок
+    // ГЏГ°Г®ГўГҐГ°ГЄГ  Г®ГёГЁГЎГ®ГЄ
     GLint success;
     char infoLog[512];
     glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
@@ -101,20 +140,20 @@ int main() {
         std::cerr << "Shader program error: " << infoLog << "\n";
     }
 
-    // Проекционная матрица
+    // ГЏГ°Г®ГҐГЄГ¶ГЁГ®Г­Г­Г Гї Г¬Г ГІГ°ГЁГ¶Г 
     glm::mat4 projection = glm::ortho(0.0f, 800.0f, 0.0f, 600.0f, -1.0f, 1.0f);
     glUseProgram(shaderProgram);
     glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 
 
-    // Инициализация сетки
-    HexGrid grid(10, 10, 30.0f, 800.0f, 600.0f); // Увеличьте размер гекса для лучшей видимости
+    // Г€Г­ГЁГ¶ГЁГ Г«ГЁГ§Г Г¶ГЁГї Г±ГҐГІГЄГЁ
+    HexGrid grid(10, 10, 30.0f, 800.0f, 600.0f); // Г“ГўГҐГ«ГЁГ·ГјГІГҐ Г°Г Г§Г¬ГҐГ° ГЈГҐГЄГ±Г  Г¤Г«Гї Г«ГіГ·ГёГҐГ© ГўГЁГ¤ГЁГ¬Г®Г±ГІГЁ
     AppData appData;
     appData.grid = &grid;
     glfwSetWindowUserPointer(window, &appData);
     glfwSetMouseButtonCallback(window, mouseButtonCallback);
 
-    // Настройка буферов
+    // ГЌГ Г±ГІГ°Г®Г©ГЄГ  ГЎГіГґГҐГ°Г®Гў
     GLuint VAO, VBO, EBO, EBO_lines;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -123,24 +162,24 @@ int main() {
 
     glBindVertexArray(VAO);
 
-    // VBO для вершин
+    // VBO Г¤Г«Гї ГўГҐГ°ГёГЁГ­
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, grid.getVertices().size() * sizeof(Vec2), grid.getVertices().data(), GL_STATIC_DRAW);
 
-    // EBO для треугольников
+    // EBO Г¤Г«Гї ГІГ°ГҐГіГЈГ®Г«ГјГ­ГЁГЄГ®Гў
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, grid.getIndices().size() * sizeof(unsigned int), grid.getIndices().data(), GL_STATIC_DRAW);
 
-    // EBO для линий
+    // EBO Г¤Г«Гї Г«ГЁГ­ГЁГ©
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_lines);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, grid.getLineIndices().size() * sizeof(unsigned int), grid.getLineIndices().data(), GL_STATIC_DRAW);
 
-    // Настройка атрибутов
+    // ГЌГ Г±ГІГ°Г®Г©ГЄГ  Г ГІГ°ГЁГЎГіГІГ®Гў
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vec2), (void*)0);
     glEnableVertexAttribArray(0);
     glBindVertexArray(0);
 
-    // Главный цикл
+    // ГѓГ«Г ГўГ­Г»Г© Г¶ГЁГЄГ«
     while (!glfwWindowShouldClose(window)) {
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -148,41 +187,59 @@ int main() {
         glUseProgram(shaderProgram);
         glBindVertexArray(VAO);
 
-        // Рисуем белые шестиугольники
+        // ГђГЁГ±ГіГҐГ¬ ГЎГҐГ«Г»ГҐ ГёГҐГ±ГІГЁГіГЈГ®Г«ГјГ­ГЁГЄГЁ
         glUniform4f(glGetUniformLocation(shaderProgram, "uColor"), 1.0f, 1.0f, 1.0f, 1.0f);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
         glDrawElements(GL_TRIANGLES, grid.getIndices().size(), GL_UNSIGNED_INT, 0);
 
-        // Рисуем черные выбранные шестиугольники
+        // ГђГЁГ±ГіГҐГ¬ Г·ГҐГ°Г­Г»ГҐ ГўГ»ГЎГ°Г Г­Г­Г»ГҐ ГёГҐГ±ГІГЁГіГЈГ®Г«ГјГ­ГЁГЄГЁ
         glUniform4f(glGetUniformLocation(shaderProgram, "uColor"), 0.0f, 0.0f, 0.0f, 1.0f);
-        glBindVertexArray(VAO); // Включаем VAO перед отрисовкой!
+        glBindVertexArray(VAO); // Г‚ГЄГ«ГѕГ·Г ГҐГ¬ VAO ГЇГҐГ°ГҐГ¤ Г®ГІГ°ГЁГ±Г®ГўГЄГ®Г©!
 
-        for (const auto& hex : appData.selectedHexes) {
-            int col = hex.first;
-            int row = hex.second;
+        // Р РёСЃСѓРµРј РІС‹Р±СЂР°РЅРЅС‹Рµ РіРµРєСЃС‹ СЃ СЂР°Р·РЅС‹РјРё С†РІРµС‚Р°РјРё
+        for (const auto& entry : appData.hexClickCount) {
+            const auto& hexCoords = entry.first;
+            int clickCount = entry.second;
+
+            int col = hexCoords.first;
+            int row = hexCoords.second;
 
             if (col < 0 || col >= grid.getWidth() || row < 0 || row >= grid.getHeight()) {
-                continue; // Пропускаем неверные индексы
+                continue;
             }
 
-            int hexIndex = row * grid.getWidth() + col;
-            int baseIndex = hexIndex * 18; // 18 индексов на один гекс (6 треугольников)
+            glm::vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
+            switch (clickCount) {
+            case 1: color = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); break;
+            case 2: color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f); break;
+            case 3: color = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f); break;
+            default: continue;
+            }
 
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+            glUniform4f(glGetUniformLocation(shaderProgram, "uColor"), color.r, color.g, color.b, color.a);
+            int hexIndex = row * grid.getWidth() + col;
+            int baseIndex = hexIndex * 18;
+            glDrawElements(GL_TRIANGLES, 18, GL_UNSIGNED_INT, (void*)(baseIndex * sizeof(unsigned int)));
+        } // Р—Р°РєСЂС‹РІР°СЋС‰Р°СЏ СЃРєРѕР±РєР° РґР»СЏ С†РёРєР»Р° РїРѕ hexClickCount
+
+        // Р РёСЃСѓРµРј РїСѓС‚СЊ
+        glUniform4f(glGetUniformLocation(shaderProgram, "uColor"), 1.0f, 0.0f, 0.0f, 1.0f);
+        for (const auto& hex : appData.path) {
+            int hexIndex = hex.second * grid.getWidth() + hex.first;
+            int baseIndex = hexIndex * 18;
             glDrawElements(GL_TRIANGLES, 18, GL_UNSIGNED_INT, (void*)(baseIndex * sizeof(unsigned int)));
         }
 
-
-        // Рисуем контуры
+        // Р РёСЃСѓРµРј РєРѕРЅС‚СѓСЂС‹
         glUniform4f(glGetUniformLocation(shaderProgram, "uColor"), 0.0f, 0.0f, 0.0f, 1.0f);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_lines);
         glDrawElements(GL_LINES, grid.getLineIndices().size(), GL_UNSIGNED_INT, 0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
-    }
+    } // Р—Р°РєСЂС‹РІР°СЋС‰Р°СЏ СЃРєРѕР±РєР° РґР»СЏ РѕСЃРЅРѕРІРЅРѕРіРѕ С†РёРєР»Р° while
 
-    // Очистка
+    // РћС‡РёСЃС‚РєР° СЂРµСЃСѓСЂСЃРѕРІ
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
     glDeleteBuffers(1, &EBO);

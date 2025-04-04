@@ -1,6 +1,20 @@
-#pragma once
+п»ї#pragma once
 
 #include <vector>
+#include <unordered_map>
+#include <queue>
+#include <set>
+#include <map> 
+#include <functional>
+
+namespace std {
+    template <>
+    struct hash<std::pair<int, int>> {
+        size_t operator()(const std::pair<int, int>& p) const {
+            return hash<int>()(p.first) ^ (hash<int>()(p.second) << 1);
+        }
+    };
+}
 
 struct Vec2 {
     float x, y;
@@ -17,18 +31,16 @@ private:
     std::vector<Vec2> vertices;
     std::vector<unsigned int> indices;
     std::vector<unsigned int> lineIndices;
-    Vec2 offset; // Сдвиг для центрирования
+    Vec2 offset;
 
     void generateGrid();
 
 public:
-    // Новый конструктор с дополнительными параметрами для размеров окна
     HexGrid(int width, int height, float hexSize, float screenWidth, float screenHeight);
 
-    // Теперь метод возвращает центр с учетом смещения
     Vec2 getHexCenter(int col, int row);
     std::vector<Vec2> getHexVertices(const Vec2& center);
-    std::pair<int, int> getHexAtPosition(float x, float y); // Метод для определения, в какой шестиугольник попали
+    std::pair<int, int> getHexAtPosition(float x, float y);
 
     const std::vector<Vec2>& getVertices() const { return vertices; }
     const std::vector<unsigned int>& getIndices() const { return indices; }
@@ -36,4 +48,16 @@ public:
 
     int getWidth() const { return width; }
     int getHeight() const { return height; }
+
+    std::vector<std::pair<int, int>> findPath(
+        const std::pair<int, int>& start,
+        const std::pair<int, int>& end,
+        const std::map<std::pair<int, int>, int>& hexClickCount
+    );
+
+    std::vector<std::pair<int, int>> getNeighbors(
+        int col,
+        int row,
+        const std::map<std::pair<int, int>, int>& hexClickCount
+    );
 };

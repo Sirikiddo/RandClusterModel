@@ -1,22 +1,19 @@
-#include "hex.h"
+п»ї#include "hex.h"
 #include <vector>
 #include <cmath>
 #include <glew.h>
 #include "corecrt_math_defines.h"
+#include <queue>
+#include <map>
 
 HexGrid::HexGrid(int width, int height, float hexSize, float screenWidth, float screenHeight)
     : width(width), height(height), hexSize(hexSize) {
     hexWidth = 2 * hexSize;
-    hexHeight = sqrt(3) * hexSize;
+    hexHeight = static_cast<float>(sqrt(3)) * hexSize;
 
-    // Вычисляем размеры сетки по центрам
-    // Минимальные координаты считаются равными нулю,
-    // а максимальные по X: hexSize * 1.5 * (width - 1)
-    // по Y: для столбцов сдвигаем на hexHeight*0.5, поэтому максимальное значение = hexHeight * (height - 1 + 0.5)
     float gridCenterX = (0 + hexSize * 1.5f * (width - 1)) / 2.0f;
     float gridCenterY = (0 + hexHeight * (height - 1 + 0.5f)) / 2.0f;
 
-    // Вычисляем смещение, чтобы центр сетки совпадал с центром окна
     offset.x = screenWidth / 2.0f - gridCenterX;
     offset.y = screenHeight / 2.0f - gridCenterY;
 
@@ -42,11 +39,11 @@ std::vector<Vec2> HexGrid::getHexVertices(const Vec2& center) {
 }
 
 std::pair<int, int> HexGrid::getHexAtPosition(float x, float y) {
-    // Определяем приблизительный столбец и строку
+    // ГЋГЇГ°ГҐГ¤ГҐГ«ГїГҐГ¬ ГЇГ°ГЁГЎГ«ГЁГ§ГЁГІГҐГ«ГјГ­Г»Г© Г±ГІГ®Г«ГЎГҐГ¶ ГЁ Г±ГІГ°Г®ГЄГі
     int approxCol = static_cast<int>((x - offset.x) / (hexSize * 1.5f));
     int approxRow = static_cast<int>((y - offset.y) / hexHeight - 0.5f * (approxCol % 2));
 
-    // Собираем кандидатов: первоначально выбранный и его соседи
+    // Г‘Г®ГЎГЁГ°Г ГҐГ¬ ГЄГ Г­Г¤ГЁГ¤Г ГІГ®Гў: ГЇГҐГ°ГўГ®Г­Г Г·Г Г«ГјГ­Г® ГўГ»ГЎГ°Г Г­Г­Г»Г© ГЁ ГҐГЈГ® Г±Г®Г±ГҐГ¤ГЁ
     std::vector<std::pair<int, int>> candidates;
     candidates.push_back({ approxCol, approxRow });
     int dx[6] = { -1, 0, 1, 1, 0, -1 };
@@ -57,7 +54,7 @@ std::pair<int, int> HexGrid::getHexAtPosition(float x, float y) {
         candidates.push_back({ ncol, nrow });
     }
 
-    // Проверяем кандидатов с помощью алгоритма определения попадания в многоугольник
+    // ГЏГ°Г®ГўГҐГ°ГїГҐГ¬ ГЄГ Г­Г¤ГЁГ¤Г ГІГ®Гў Г± ГЇГ®Г¬Г®Г№ГјГѕ Г Г«ГЈГ®Г°ГЁГІГ¬Г  Г®ГЇГ°ГҐГ¤ГҐГ«ГҐГ­ГЁГї ГЇГ®ГЇГ Г¤Г Г­ГЁГї Гў Г¬Г­Г®ГЈГ®ГіГЈГ®Г«ГјГ­ГЁГЄ
     for (const auto& candidate : candidates) {
         int col = candidate.first;
         int row = candidate.second;
@@ -85,6 +82,8 @@ void HexGrid::generateGrid() {
     indices.clear();
     lineIndices.clear();
 
+
+
     for (int row = 0; row < height; ++row) {
         for (int col = 0; col < width; ++col) {
             Vec2 center = getHexCenter(col, row);
@@ -107,4 +106,108 @@ void HexGrid::generateGrid() {
             }
         }
     }
+}
+
+struct Node {
+    int col, row;
+    float g, h, f;
+    Node* parent;
+
+    Node(int c, int r, Node* p = nullptr)
+        : col(c), row(r), g(0), h(0), f(0), parent(p) {
+    }
+
+    bool operator<(const Node& other) const {
+        return f > other.f;
+    }
+};
+
+std::vector<std::pair<int, int>> HexGrid::findPath(
+    const std::pair<int, int>& start,
+    const std::pair<int, int>& end,
+    const std::map<std::pair<int, int>, int>& hexClickCount
+) {
+    int startCol = start.first;
+    int startRow = start.second;
+    int endCol = end.first;
+    int endRow = end.second;
+
+    std::priority_queue<Node> open;
+    std::set<std::pair<int, int>> closed;
+    std::unordered_map<std::pair<int, int>, Node*> nodes;
+
+    Node* startNode = new Node(startCol, startRow);
+    startNode->h = abs(startCol - endCol) + abs(startRow - endRow);
+    startNode->f = startNode->h;
+    open.push(*startNode);
+    nodes[{startCol, startRow}] = startNode;
+
+    while (!open.empty()) {
+        Node current = open.top();
+        open.pop();
+
+        if (current.col == endCol && current.row == endRow) {
+            std::vector<std::pair<int, int>> path;
+            Node* node = &current;
+            while (node) {
+                path.push_back({ node->col, node->row });
+                node = node->parent;
+            }
+            std::reverse(path.begin(), path.end());
+            return path;
+        }
+
+        closed.insert({ current.col, current.row });
+
+        auto neighbors = getNeighbors(current.col, current.row, hexClickCount);
+        for (const auto& neighborCoord : neighbors) {
+            int nCol = neighborCoord.first;
+            int nRow = neighborCoord.second;
+
+            if (closed.count({ nCol, nRow })) continue;
+
+            float newG = current.g + 1;
+            Node* neighbor = nodes[{nCol, nRow}];
+            if (!neighbor || newG < neighbor->g) {
+                if (!neighbor) {
+                    neighbor = new Node(nCol, nRow);
+                    nodes[{nCol, nRow}] = neighbor;
+                }
+                neighbor->parent = new Node(current.col, current.row, current.parent);
+                neighbor->g = newG;
+                neighbor->h = abs(nCol - endCol) + abs(nRow - endRow);
+                neighbor->f = neighbor->g + neighbor->h;
+                open.push(*neighbor);
+            }
+        }
+    }
+    return {};
+}
+
+std::vector<std::pair<int, int>> HexGrid::getNeighbors(
+    int col,
+    int row,
+    const std::map<std::pair<int, int>, int>& hexClickCount
+) {
+    std::vector<std::pair<int, int>> neighbors;
+    int parity = col % 2;
+    int dirs[6][2] = {
+        {1, 0}, {1 - parity, -1 + parity}, {0, -1},
+        {-1, 0}, {-1 + parity, -1 + parity}, {0, 1}
+    };
+
+    for (const auto& dir : dirs) {
+        int dx = dir[0];
+        int dy = dir[1];
+        int nCol = col + dx;
+        int nRow = row + dy;
+
+        if (nCol >= 0 && nCol < this->width && nRow >= 0 && nRow < this->height) {
+            if (hexClickCount.count({ nCol, nRow }) && hexClickCount.at({ nCol, nRow }) == 1) {
+                continue;
+            }
+            neighbors.emplace_back(nCol, nRow);
+        }
+    }
+    return neighbors;
 }
