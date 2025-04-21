@@ -8,11 +8,16 @@
 #include <map>
 #include <glfw3.h>
 
+
 struct AppData {
     HexGrid* grid = nullptr;
     std::map<std::pair<int, int>, int> hexClickCount;
     std::vector<std::pair<int, int>> path;
     GLuint textVAO = 0, textVBO = 0;
+    float rotateX = 0.0f;
+    float rotateY = 0.0f;
+    bool isRotating = false;
+    double lastX = 0, lastY = 0;
 };
 
 void mouseButtonCallbackHex(GLFWwindow* window, int button, int action, int mods) { //
@@ -41,8 +46,8 @@ void mouseButtonCallbackHex(GLFWwindow* window, int button, int action, int mods
                 firstHex = { -1, -1 };
             }
         }
-    } // <-- Закрывающая скобка для if (button == GLFW_MOUSE_BUTTON_LEFT)
-} // <-- Закрывающая скобка для mouseButtonCallback
+    }
+}
 
 
 void renderText(GLFWwindow* window, const std::string& text, float x, float y, float scale) {
