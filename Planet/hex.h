@@ -1,4 +1,4 @@
-//hex.h
+// hex.h (изменения минимальны, только добавил метод для получения hexHeight)
 #pragma once
 
 #include <vector>
@@ -49,6 +49,7 @@ public:
 
     int getWidth() const { return width; }
     int getHeight() const { return height; }
+    float getHexHeight() const { return hexHeight; } // Добавлен новый метод
 
     std::vector<std::pair<int, int>> findPath(
         const std::pair<int, int>& start,
@@ -61,4 +62,6 @@ public:
         int row,
         const std::map<std::pair<int, int>, int>& hexClickCount
     );
+
+    float getHexSize() const { return hexSize; }
 };
