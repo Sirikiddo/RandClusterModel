@@ -6,6 +6,8 @@
 #include <type_traits>
 #include <utility>
 #include <algorithm>
+#include <iostream>
+
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -59,6 +61,9 @@ std::pair<int, int> HexGrid::getHexAtPosition(float x, float y) {
     int approxCol = static_cast<int>((x - offset.x) / (hexSize * 1.5f));
     int approxRow = static_cast<int>((y - offset.y) / hexHeight - 0.5f * (approxCol % 2));
 
+    std::cout << "Input coords: (" << x << ", " << y << ")\n";
+    std::cout << "Approx hex: (" << approxCol << ", " << approxRow << ")\n";
+
     std::vector<std::pair<int, int>> candidates;
     candidates.emplace_back(approxCol, approxRow);
     int dx[6] = { -1, 0, 1, 1, 0, -1 };
@@ -98,17 +103,25 @@ void HexGrid::generateGrid() {
             auto hexVerts = getHexVertices(center);
 
             int base = static_cast<int>(vertices.size());
-            for (auto& v : hexVerts) vertices.push_back(v);
+            for (const auto& v : hexVerts) {
+                vertices.push_back(v);
+            }
 
             for (int i = 0; i < 6; ++i) {
                 indices.push_back(base);
                 indices.push_back(base + i);
-                indices.push_back(base + ((i + 1) % 6));
+                indices.push_back(base + (i + 1) % 6);
+
                 lineIndices.push_back(base + i);
-                lineIndices.push_back(base + ((i + 1) % 6));
+                lineIndices.push_back(base + (i + 1) % 6);
             }
         }
     }
+
+    // Отладочный вывод
+    std::cout << "Generated " << vertices.size() << " vertices, "
+        << indices.size() << " indices, "
+        << lineIndices.size() << " line indices.\n";
 }
 
 std::vector<std::pair<int, int>> HexGrid::findPath(
@@ -116,32 +129,33 @@ std::vector<std::pair<int, int>> HexGrid::findPath(
     const std::pair<int, int>& end,
     const std::map<std::pair<int, int>, int>& hexClickCount
 ) {
-    int startCol = start.first, startRow = start.second;
-    int endCol = end.first, endRow = end.second;
+    if (start == end) return { start };
 
     struct Node {
         int col, row;
         float g, h, f;
         Node* parent;
-        Node(int c, int r, Node* p = nullptr) :col(c), row(r), g(0), h(0), f(0), parent(p) {}
+        Node(int c, int r, Node* p = nullptr) : col(c), row(r), g(0), h(0), f(0), parent(p) {}
         bool operator<(const Node& o) const { return f > o.f; }
     };
 
     std::priority_queue<Node> open;
     std::set<std::pair<int, int>> closed;
-    std::unordered_map<std::pair<int, int>, Node*> nodes;
+    std::map<std::pair<int, int>, Node*> nodes;
 
-    Node* startNode = new Node(startCol, startRow);
-    startNode->h = std::abs(startCol - endCol) + std::abs(startRow - endRow);
+    Node* startNode = new Node(start.first, start.second);
+    startNode->h = std::abs(start.first - end.first) + std::abs(start.second - end.second);
     startNode->f = startNode->h;
     open.push(*startNode);
-    nodes[std::make_pair(startCol, startRow)] = startNode;
+    nodes[start] = startNode;
 
     while (!open.empty()) {
-        Node current = open.top(); open.pop();
-        if (current.col == endCol && current.row == endRow) {
+        Node current = open.top();
+        open.pop();
+
+        if (current.col == end.first && current.row == end.second) {
             std::vector<std::pair<int, int>> path;
-            Node* n = &current;
+            Node* n = nodes[{current.col, current.row}];
             while (n) {
                 path.emplace_back(n->col, n->row);
                 n = n->parent;
@@ -149,22 +163,24 @@ std::vector<std::pair<int, int>> HexGrid::findPath(
             std::reverse(path.begin(), path.end());
             return path;
         }
-        closed.insert(std::make_pair(current.col, current.row));
+
+        closed.insert({ current.col, current.row });
 
         auto neighbors = getNeighbors(current.col, current.row, hexClickCount);
-        for (auto& nb : neighbors) {
-            int nCol = nb.first, nRow = nb.second;
+        for (const auto& nb : neighbors) {
             if (closed.count(nb)) continue;
+
             float newG = current.g + 1.0f;
             Node* neighbor = nodes.count(nb) ? nodes[nb] : nullptr;
+
             if (!neighbor || newG < neighbor->g) {
                 if (!neighbor) {
-                    neighbor = new Node(nCol, nRow);
+                    neighbor = new Node(nb.first, nb.second);
                     nodes[nb] = neighbor;
                 }
-                neighbor->parent = new Node(current.col, current.row, current.parent);
+                neighbor->parent = nodes[{current.col, current.row}];
                 neighbor->g = newG;
-                neighbor->h = std::abs(nCol - endCol) + std::abs(nRow - endRow);
+                neighbor->h = std::abs(nb.first - end.first) + std::abs(nb.second - end.second);
                 neighbor->f = neighbor->g + neighbor->h;
                 open.push(*neighbor);
             }
