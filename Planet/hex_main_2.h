@@ -20,7 +20,8 @@ struct AppData {
     // Для кубика и raycasting
     glm::vec3 cubePosition;
     bool cubeVisible = false;
-    glm::vec3 rayEnd;
+    glm::vec3 rayStart{ 0.0f };   // ← добавили
+    glm::vec3 rayEnd{ 0.0f };
 
     // Для гексов
     HexGrid* hexGrid = nullptr;
@@ -31,8 +32,6 @@ struct AppData {
     // Расстояния до плоскостей
     float frontPlaneZ = 0.0f;
     float hexPlaneZ = -1.5f;
-
-    //glm::vec3 cameraPosition = glm::vec3(0.0f, 0.0f, 5.0f);
 };
 
 void checkOpenGLError(const char* operation) {
@@ -44,114 +43,179 @@ void checkOpenGLError(const char* operation) {
 void hexScrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
     AppData* data = static_cast<AppData*>(glfwGetWindowUserPointer(window));
     data->zoomLevel += yoffset * 0.5f;
-    //data->cameraPosition.z = 5.0f + data->zoomLevel; // Обновляем позицию камеры
 }
 
+//void processHexIntersection(AppData* data, const glm::vec3& hexIntersection) {
+//    // Преобразуем координаты в систему гексов
+//    float hexGridX = (hexIntersection.x + 1.0f) * data->hexGrid->getWidth() * data->hexGrid->getHexSize() / 2.0f;
+//    float hexGridY = (hexIntersection.y + 1.0f) * data->hexGrid->getHeight() * data->hexGrid->getHexHeight() / 2.0f;
+//
+//    auto hexCoords = data->hexGrid->getHexAtPosition(hexGridX, hexGridY);
+//    if (hexCoords.first != -1) {
+//        data->hitHexGrid = true;
+//        data->cubePosition = hexIntersection;
+//        data->cubeVisible = false;
+//        data->rayEnd = hexIntersection;
+//
+//        // Обработка кликов по гексам
+//        auto& count = data->hexClickCount[hexCoords];
+//        count = (count + 1) % 4;
+//
+//        if (count == 2) {
+//            static std::pair<int, int> firstHex = { -1, -1 };
+//            if (firstHex.first == -1) {
+//                firstHex = hexCoords;
+//            }
+//            else {
+//                auto path = data->hexGrid->findPath(firstHex, hexCoords, data->hexClickCount);
+//                data->hexPath = path;
+//                firstHex = { -1, -1 };
+//            }
+//        }
+//    }
+//}
 void processHexIntersection(AppData* data, const glm::vec3& hexIntersection) {
-    // Преобразуем координаты в систему гексов
+    // Преобразуем координаты из [-1, 1] в [0, 2], затем масштабируем
     float hexGridX = (hexIntersection.x + 1.0f) * data->hexGrid->getWidth() * data->hexGrid->getHexSize() / 2.0f;
     float hexGridY = (hexIntersection.y + 1.0f) * data->hexGrid->getHeight() * data->hexGrid->getHexHeight() / 2.0f;
 
     auto hexCoords = data->hexGrid->getHexAtPosition(hexGridX, hexGridY);
-    if (hexCoords.first != -1) {
-        data->hitHexGrid = true;
-        data->cubePosition = hexIntersection;
-        data->cubeVisible = true;
-        data->rayEnd = hexIntersection;
+    if (hexCoords.first == -1) {
+        data->hitHexGrid = false;
+        return;
+    }
 
-        // Обработка кликов по гексам
-        auto& count = data->hexClickCount[hexCoords];
-        count = (count + 1) % 4;
+    data->hitHexGrid = true;
+    data->cubeVisible = false;
 
-        if (count == 2) {
-            static std::pair<int, int> firstHex = { -1, -1 };
-            if (firstHex.first == -1) {
-                firstHex = hexCoords;
-            }
-            else {
-                auto path = data->hexGrid->findPath(firstHex, hexCoords, data->hexClickCount);
-                data->hexPath = path;
-                firstHex = { -1, -1 };
-            }
+    // Обработка кликов
+    auto& count = data->hexClickCount[hexCoords];
+    count = (count + 1) % 4;
+
+    // Удаляем гекс из пути, если он заблокирован (count == 3)
+    if (count == 3) {
+        data->hexPath.erase(
+            std::remove_if(data->hexPath.begin(), data->hexPath.end(),
+                [hexCoords](const auto& p) { return p == hexCoords; }),
+            data->hexPath.end());
+        return;
+    }
+
+    // Поиск пути между двумя выбранными гексами (count == 2)
+    static std::pair<int, int> firstHex = { -1, -1 };
+    if (count == 2) {
+        if (firstHex.first == -1) {
+            firstHex = hexCoords;
         }
+        else {
+            // Ищем путь только если оба гекса не заблокированы
+            if (data->hexClickCount[firstHex] != 3 && data->hexClickCount[hexCoords] != 3) {
+                data->hexPath = data->hexGrid->findPath(firstHex, hexCoords, data->hexClickCount);
+            }
+            firstHex = { -1, -1 };
+        }
+    }
+    else {
+        firstHex = { -1, -1 }; // Сброс, если клик не count == 2
     }
 }
 
-void raycastToPlanes(GLFWwindow* window, double xpos, double ypos, AppData* data) {
+// ── 2. raycastToPlanes ───────────────────────────────────────
+void raycastToPlanes(GLFWwindow* window, double xpos, double ypos, AppData* data)
+{
     int width, height;
     glfwGetWindowSize(window, &width, &height);
 
-    // Преобразование координат мыши в NDC
-    float x = (2.0f * xpos) / width - 1.0f;
-    float y = 1.0f - (2.0f * ypos) / height;
+    // ── 1.  Координаты курсора → NDC
+    float ndcX = 2.0f * static_cast<float>(xpos) / width - 1.0f;
+    float ndcY = -2.0f * static_cast<float>(ypos) / height + 1.0f;
 
-    // Матрицы проекции и вида
+    glm::vec4 clipNear(ndcX, ndcY, -1.0f, 1.0f);
+    glm::vec4 clipFar(ndcX, ndcY, 1.0f, 1.0f);
+
+    // ── 2.  View / Projection (с учётом zoomLevel)
+    glm::vec3 camPosWorld(0.0f, 0.0f, 5.0f + data->zoomLevel);
+
     glm::mat4 view = glm::lookAt(
-        glm::vec3(0.0f, 0.0f, 5.0f + data->zoomLevel), // Синхронизируем с основной камерой
-        glm::vec3(0.0f, 0.0f, 0.0f),
-        glm::vec3(0.0f, 1.0f, 0.0f)
-    );
-    glm::mat4 proj = glm::perspective(glm::radians(45.0f), (float)width / (float)height, 0.1f, 100.0f);
+        camPosWorld,
+        glm::vec3(0, 0, 0),
+        glm::vec3(0, 1, 0));
 
-    // Обратная матрица: proj * view
+    glm::mat4 proj = glm::perspective(glm::radians(45.0f),
+        static_cast<float>(width) / height,
+        0.1f, 100.0f);
+
     glm::mat4 invVP = glm::inverse(proj * view);
 
-    // Вычисление луча в мировых координатах
-    glm::vec4 rayStartNDC = glm::vec4(x, y, -1.0f, 1.0f);
-    glm::vec4 rayEndNDC = glm::vec4(x, y, 1.0f, 1.0f);
+    // ── 3.  Точку на far-plane переводим в мир и строим направление
+    glm::vec4 worldFar4 = invVP * clipFar;
+    glm::vec3 worldFar = glm::vec3(worldFar4) / worldFar4.w;
 
-    glm::vec4 rayStartWorld = invVP * rayStartNDC;
-    glm::vec4 rayEndWorld = invVP * rayEndNDC;
-    rayStartWorld /= rayStartWorld.w;
-    rayEndWorld /= rayEndWorld.w;
+    glm::vec3 rayOrigWorld = camPosWorld;                    // ← начало луча = камера!
+    glm::vec3 rayDirWorld = glm::normalize(worldFar - rayOrigWorld);
 
-    // Направление луча
-    glm::vec3 rayDir = glm::normalize(glm::vec3(rayEndWorld - rayStartWorld));
+    // ── 4.  В пространство модели (учёт вращений)
+    glm::mat4 rot = glm::mat4(1.0f);
+    rot = glm::rotate(rot, glm::radians(data->rotateX), glm::vec3(1, 0, 0));
+    rot = glm::rotate(rot, glm::radians(data->rotateY), glm::vec3(0, 1, 0));
 
-    // Начало луча - позиция камеры (0,0,5 + zoom)
-    glm::vec3 rayStart = glm::vec3(0.0f, 0.0f, 5.0f + data->zoomLevel);
+    glm::mat4 invRot = glm::inverse(rot);
 
-    // Проверка пересечения с передней плоскостью
-    float tFront = (data->frontPlaneZ - rayStart.z) / rayDir.z;
-    glm::vec3 frontIntersection = rayStart + rayDir * tFront;
+    glm::vec3 rayOrig = glm::vec3(invRot * glm::vec4(rayOrigWorld, 1.0f));
+    glm::vec3 rayDir = glm::normalize(glm::vec3(invRot * glm::vec4(rayDirWorld, 0.0f)));
 
-    // Проверка пересечения с плоскостью гексов
-    float tHex = (data->hexPlaneZ - rayStart.z) / rayDir.z;
-    glm::vec3 hexIntersection = rayStart + rayDir * tHex;
+    // ⑤ пересечения в model-space
+    float tFront = (data->frontPlaneZ - rayOrig.z) / rayDir.z;
+    float tHex = (data->hexPlaneZ - rayOrig.z) / rayDir.z;
 
-    data->hitHexGrid = false;
+    glm::vec3 hitFront = rayOrig + tFront * rayDir;
+    glm::vec3 hitHex = rayOrig + tHex * rayDir;
+
+    // учёт сдвига сетки гексов (-1,-1)
+    //glm::vec3 hitHexLocal = hitHex - glm::vec3(-1.0f, -1.0f, 0.0f);
+
+    bool frontOk = tFront > 0 &&
+        hitFront.x >= -1.0f && hitFront.x <= 1.0f &&
+        hitFront.y >= -1.0f && hitFront.y <= 1.0f;
+
+    bool hexOk = tHex > 0 &&
+        hitHex.x >= -1.0f && hitHex.x <= 1.0f &&
+        hitHex.y >= -1.0f && hitHex.y <= 1.0f;
+
     data->cubeVisible = false;
+    data->hitHexGrid = false;
 
-    // Проверяем, попадает ли пересечение в границы передней плоскости
-    bool hitFrontPlane = (tFront > 0) &&
-        (frontIntersection.x >= -1.0f && frontIntersection.x <= 1.0f) &&
-        (frontIntersection.y >= -1.0f && frontIntersection.y <= 1.0f);
-
-    // Проверяем, попадает ли пересечение в границы плоскости гексов
-    bool hitHexPlane = (tHex > 0) &&
-        (hexIntersection.x >= -1.0f && hexIntersection.x <= 1.0f) &&
-        (hexIntersection.y >= -1.0f && hexIntersection.y <= 1.0f);
-
-    if (hitFrontPlane && hitHexPlane) {
-        if (tFront < tHex) {
-            data->cubePosition = frontIntersection;
-            data->cubeVisible = true;
-            data->rayEnd = frontIntersection;
-        }
-        else {
-            processHexIntersection(data, hexIntersection);
-        }
-    }
-    else if (hitFrontPlane) {
-        data->cubePosition = frontIntersection;
+    if (frontOk && (!hexOk || tFront < tHex))      // ближняя плоскость
+    {
+        data->cubePosition = hitFront;             // уже в model-space
         data->cubeVisible = true;
-        data->rayEnd = frontIntersection;
+        data->rayStart = rayOrig;
+        data->rayEnd = hitFront;
     }
-    else if (hitHexPlane) {
-        processHexIntersection(data, hexIntersection);
+    else if (hexOk) {
+        data->rayStart = rayOrig;
+        data->rayEnd = hitHex;
+        processHexIntersection(data, hitHex);   // ← передаём ИМЕННО hitHex
+    }
+    if (hexOk)                                       // ① сначала пробуем гексы
+    {
+        data->rayStart = rayOrig;
+        data->rayEnd = hitHex;
+        processHexIntersection(data, hitHex);
+    }
+    else if (frontOk)                                // ② иначе — передняя плоскость
+    {
+        data->cubePosition = hitFront;
+        data->cubeVisible = true;
+        data->rayStart = rayOrig;
+        data->rayEnd = hitFront;
+    }
+    else                                              // ③ мимо всего
+    {
+        data->cubeVisible = false;
+        data->hitHexGrid = false;
     }
 }
-
 
 void myMouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     AppData* data = static_cast<AppData*>(glfwGetWindowUserPointer(window));
@@ -421,7 +485,8 @@ int HexMain() {
 
     glEnable(GL_DEPTH_TEST);
 
-    while (!glfwWindowShouldClose(window)) {
+    while (!glfwWindowShouldClose(window))
+    {
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -429,54 +494,83 @@ int HexMain() {
         glfwGetWindowSize(window, &width, &height);
         glViewport(0, 0, width, height);
 
-        // Матрицы вида и проекции
+        // Настройка матриц
         glm::mat4 view = glm::lookAt(
-            glm::vec3(0.0f, 0.0f, 5.0f + appData.zoomLevel), // Добавляем zoomLevel
+            glm::vec3(0.0f, 0.0f, 5.0f + appData.zoomLevel),
             glm::vec3(0.0f, 0.0f, 0.0f),
             glm::vec3(0.0f, 1.0f, 0.0f)
         );
 
-        // Применяем зум
-        //view = glm::translate(view, glm::vec3(0.0f, 0.0f, appData.zoomLevel));
-
         glm::mat4 projection = glm::perspective(
             glm::radians(45.0f),
-            (float)width / (float)height,
-            0.1f,
-            100.0f
+            static_cast<float>(width) / height,
+            0.1f, 100.0f
         );
 
-        // Матрица модели с вращением
         glm::mat4 model = glm::mat4(1.0f);
-        model = glm::rotate(model, glm::radians(appData.rotateX), glm::vec3(1.0f, 0.0f, 0.0f));
-        model = glm::rotate(model, glm::radians(appData.rotateY), glm::vec3(0.0f, 1.0f, 0.0f));
+        model = glm::rotate(model, glm::radians(appData.rotateX), glm::vec3(1, 0, 0));
+        model = glm::rotate(model, glm::radians(appData.rotateY), glm::vec3(0, 1, 0));
 
         glUseProgram(shaderProgram);
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 
-        // Отрисовка передней плоскости (голубая)
+        // 1. Отрисовка передней плоскости (голубая)
         glm::mat4 frontModel = glm::translate(model, glm::vec3(0.0f, 0.0f, appData.frontPlaneZ));
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(frontModel));
         glUniform3f(glGetUniformLocation(shaderProgram, "objectColor"), 0.4f, 0.6f, 0.8f);
         glBindVertexArray(planeVAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
+        // 2. Отрисовка гексов
         glm::mat4 hexModel = glm::translate(model, glm::vec3(-1.0f, -1.0f, appData.hexPlaneZ));
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(hexModel));
-
-        // Заливка гексов (белая)
-        glUniform3f(glGetUniformLocation(shaderProgram, "objectColor"), 1.0f, 1.0f, 1.0f);
         glBindVertexArray(hexVAO);
+
+        // 2.1. Основная белая заливка всех гексов
+        glUniform3f(glGetUniformLocation(shaderProgram, "objectColor"), 1.0f, 1.0f, 1.0f);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, hexEBO);
         glDrawElements(GL_TRIANGLES, appData.hexGrid->getIndices().size(), GL_UNSIGNED_INT, 0);
 
-        // Границы гексов (чёрные)
+        // 2.2. Отрисовка выбранных гексов (поверх основной заливки)
+        for (const auto& entry : appData.hexClickCount) {
+            const auto& coords = entry.first;
+            int count = entry.second;
+
+            if (coords.first < 0 || coords.second < 0 ||
+                coords.first >= appData.hexGrid->getWidth() ||
+                coords.second >= appData.hexGrid->getHeight()) {
+                continue;
+            }
+
+            glm::vec3 color;
+            switch (count) {
+            case 1: color = glm::vec3(0.0f, 0.0f, 0.0f); break; // Чёрный
+            case 2: color = glm::vec3(0.0f, 1.0f, 0.0f); break; // Зелёный
+            case 3: color = glm::vec3(1.0f, 0.0f, 0.0f); break; // Красный
+            default: continue;
+            }
+
+            glUniform3f(glGetUniformLocation(shaderProgram, "objectColor"), color.r, color.g, color.b);
+            int hexIndex = coords.second * appData.hexGrid->getWidth() + coords.first;
+            glDrawElements(GL_TRIANGLES, 18, GL_UNSIGNED_INT, (void*)(hexIndex * 18 * sizeof(unsigned int)));
+        }
+
+        // 2.3. Отрисовка пути (если есть)
+        if (!appData.hexPath.empty()) {
+            glUniform3f(glGetUniformLocation(shaderProgram, "objectColor"), 1.0f, 0.5f, 0.0f);
+            for (const auto& hex : appData.hexPath) {
+                int hexIndex = hex.second * appData.hexGrid->getWidth() + hex.first;
+                glDrawElements(GL_TRIANGLES, 18, GL_UNSIGNED_INT, (void*)(hexIndex * 18 * sizeof(unsigned int)));
+            }
+        }
+
+        // 2.4. Границы гексов (поверх всего)
         glUniform3f(glGetUniformLocation(shaderProgram, "objectColor"), 0.0f, 0.0f, 0.0f);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, hexLineEBO);
         glDrawElements(GL_LINES, appData.hexGrid->getLineIndices().size(), GL_UNSIGNED_INT, 0);
 
-        // Отрисовка куба (если виден)
+        // 3. Отрисовка куба (если виден)
         if (appData.cubeVisible) {
             glm::mat4 cubeModel = glm::translate(model, appData.cubePosition);
             glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(cubeModel));
@@ -485,17 +579,27 @@ int HexMain() {
             glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
         }
 
-        // Отрисовка луча (если нужно)
-        float rayVertices[] = {
-            0.0f, 0.0f, 0.0f,
-            appData.rayEnd.x, appData.rayEnd.y, appData.rayEnd.z
-        };
-        glBindVertexArray(rayVAO);
-        glBindBuffer(GL_ARRAY_BUFFER, rayVBO);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(rayVertices), rayVertices);
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
-        glUniform3f(glGetUniformLocation(shaderProgram, "objectColor"), 1.0f, 1.0f, 0.0f);
-        glDrawArrays(GL_LINES, 0, 2);
+        // 4. Отрисовка луча
+        {
+            float rayVerts[6] = {
+                appData.rayStart.x, appData.rayStart.y, appData.rayStart.z,
+                appData.rayEnd.x, appData.rayEnd.y, appData.rayEnd.z
+            };
+
+            glBindVertexArray(rayVAO);
+            glBindBuffer(GL_ARRAY_BUFFER, rayVBO);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(rayVerts), rayVerts);
+
+            glm::mat4 rayModel = glm::mat4(1.0f);
+            rayModel = glm::rotate(rayModel, glm::radians(appData.rotateX), glm::vec3(1, 0, 0));
+            rayModel = glm::rotate(rayModel, glm::radians(appData.rotateY), glm::vec3(0, 1, 0));
+
+            glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"),
+                1, GL_FALSE, glm::value_ptr(rayModel));
+            glUniform3f(glGetUniformLocation(shaderProgram, "objectColor"), 1.0f, 1.0f, 0.0f);
+
+            glDrawArrays(GL_LINES, 0, 2);
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
