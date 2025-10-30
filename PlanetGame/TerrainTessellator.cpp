@@ -1,4 +1,4 @@
-﻿#include "TerrainTessellator.h"
+#include "TerrainTessellator.h"
 #include <cmath>
 #include <numeric>
 
@@ -8,10 +8,12 @@ QVector3D TerrainTessellator::slerpish(const QVector3D& a, const QVector3D& b, f
     if (!x.isNull()) x.normalize();
     return x;
 }
+
 QVector3D TerrainTessellator::liftUnit(const QVector3D& unit, float h) const {
     QVector3D n = unit; if (!n.isNull()) n.normalize();
     return n * (R + h * heightStep);
 }
+
 TerrainTessellator::EdgeMode
 TerrainTessellator::classifyEdge(int hA, int hB, int k) {
     const int d = std::abs(hA - hB);
@@ -19,6 +21,7 @@ TerrainTessellator::classifyEdge(int hA, int hB, int k) {
     if (d <= k) return EdgeMode::Slope;
     return EdgeMode::Cliff;
 }
+
 int TerrainTessellator::findLocalIndex(const Cell& c, int dv) {
     for (int i = 0; i < (int)c.poly.size(); ++i) if (c.poly[i] == dv) return i;
     return -1;
@@ -32,6 +35,7 @@ float TerrainTessellator::bladeHeightForEdge(const Cell& c, int edgeIdx,
         return 0.5f * (float)c.height + 0.5f * (float)cells[size_t(nId)].height;
     return float(c.height);
 }
+
 float TerrainTessellator::cornerBlendTargetHeight(const Cell& c, int i,
     const std::vector<Cell>& cells) const {
     const int deg = (int)c.poly.size();
@@ -69,6 +73,7 @@ TerrainTessellator::makePreCell(const Cell& c, const std::vector<QVector3D>& dua
     }
     return pc;
 }
+
 TerrainTessellator::TrimDirs
 TerrainTessellator::makeTrimDirs(const PreCell& pc) const {
     TrimDirs td;
@@ -90,6 +95,7 @@ TerrainTessellator::makeTrimDirs(const PreCell& pc) const {
     }
     return td;
 }
+
 TerrainTessellator::EdgeHeights
 TerrainTessellator::makeHeights(const Cell& c, const PreCell& pc,
     const std::vector<Cell>& cells) const {
@@ -107,15 +113,31 @@ TerrainTessellator::makeHeights(const Cell& c, const PreCell& pc,
 void TerrainTessellator::MeshBuilder::triToward(QVector3D A, QVector3D B, QVector3D C,
     const QVector3D& color, const QVector3D& toward, int cellOwner)
 {
-    QVector3D n = QVector3D::crossProduct(B - A, C - A);
-    QVector3D t = toward; if (!t.isNull()) t.normalize();
-    if (QVector3D::dotProduct(n, t) < 0.f) std::swap(B, C);
+    // Вычисляем нормаль
+    QVector3D n = QVector3D::crossProduct(B - A, C - A).normalized();
+
+    // Ориентируем треугольник наружу
+    QVector3D t = toward;
+    if (!t.isNull()) t.normalize();
+    if (QVector3D::dotProduct(n, t) < 0.f) {
+        std::swap(B, C);
+        n = -n; // инвертируем нормаль при смене порядка вершин
+    }
 
     const uint32_t base = uint32_t(pos.size() / 3);
+
+    // Позиции
     pos.insert(pos.end(), { A.x(),A.y(),A.z(), B.x(),B.y(),B.z(), C.x(),C.y(),C.z() });
+
+    // Цвета
     col.insert(col.end(), { color.x(),color.y(),color.z(),
                            color.x(),color.y(),color.z(),
                            color.x(),color.y(),color.z() });
+
+    // Нормали (одинаковые для всех вершин треугольника) - ДОБАВЛЕНО из версии 2
+    norm.insert(norm.end(), { n.x(),n.y(),n.z(), n.x(),n.y(),n.z(), n.x(),n.y(),n.z() });
+
+    // Индексы
     idx.insert(idx.end(), { base, base + 1, base + 2 });
 
     if (owner) owner->push_back(cellOwner);
@@ -130,7 +152,7 @@ void TerrainTessellator::MeshBuilder::quadToward(const QVector3D& Q0, const QVec
     triToward(Q0, Q2, Q3, color, toward, cellOwner);
 }
 
-// ── “мягкие” этапы ──────────────────────────────────────────────────────────
+// ── "мягкие" этапы ──────────────────────────────────────────────────────────
 void TerrainTessellator::buildInnerFan(MeshBuilder& mb, const Cell& c, const PreCell& pc) const {
     const int deg = (int)c.poly.size();
     for (int i = 0; i < deg; ++i) {
@@ -139,6 +161,7 @@ void TerrainTessellator::buildInnerFan(MeshBuilder& mb, const Cell& c, const Pre
         mb.triToward(pc.center, A, B, pc.color, pc.center, c.id);
     }
 }
+
 void TerrainTessellator::buildBlades(MeshBuilder& mb, const Cell& c, const PreCell& pc,
     const TrimDirs& td, const EdgeHeights& eh) const {
     const int deg = (int)c.poly.size();
@@ -150,6 +173,7 @@ void TerrainTessellator::buildBlades(MeshBuilder& mb, const Cell& c, const PreCe
         mb.quadToward(pc.inner[i], pc.inner[j], O1, O0, pc.color, toward, c.id);
     }
 }
+
 void TerrainTessellator::buildCorners(MeshBuilder& mb, const Cell& c, const PreCell& pc,
     const TrimDirs& td, const EdgeHeights& eh) const {
     const int deg = (int)c.poly.size();
@@ -172,19 +196,19 @@ void TerrainTessellator::registerEdgeSide(EdgeRegistry& reg, size_t cid,
 {
     const int deg = (int)c.poly.size();
     const int j = (iEdge + 1) % deg;
-    const int iPrev = (iEdge + deg - 1) % deg;                 // ← новое
+    const int iPrev = (iEdge + deg - 1) % deg;
 
     const int dv_i = c.poly[iEdge];
     const int dv_j = c.poly[j];
     const EdgeKey key{ std::min(dv_i, dv_j), std::max(dv_i, dv_j) };
-    const bool canon = (dv_i <= dv_j);                          // ← новое
+    const bool canon = (dv_i <= dv_j);
 
     EdgeSide S;
     S.cellId = int(cid);
     S.hCell = c.height;
     S.Hedge = eh.edgeH[iEdge];
-    S.Hleft = eh.edgeH[iPrev];                               // ← новое
-    S.Hright = eh.edgeH[iEdge];                               // ← новое
+    S.Hleft = eh.edgeH[iPrev];
+    S.Hright = eh.edgeH[iEdge];
     S.apexL = eh.apexH[iEdge];
     S.apexR = eh.apexH[j];
     S.sideL = td.sideL[iEdge];
@@ -195,7 +219,7 @@ void TerrainTessellator::registerEdgeSide(EdgeRegistry& reg, size_t cid,
     S.apexDirR = td.apexU[j];
     S.centroid = c.centroid;
 
-    if (!canon) {                                               // ← новое (нормализация L/R)
+    if (!canon) {
         std::swap(S.apexL, S.apexR);
         std::swap(S.prevU_L, S.currU_R);
         std::swap(S.apexDirL, S.apexDirR);
@@ -205,8 +229,8 @@ void TerrainTessellator::registerEdgeSide(EdgeRegistry& reg, size_t cid,
 
     S.P_edgeL = liftUnit(S.sideL, S.Hedge);
     S.P_edgeR = liftUnit(S.sideR, S.Hedge);
-    S.P_apexL = liftUnit(S.apexDirL, S.apexL);  // всегда RAW
-    S.P_apexR = liftUnit(S.apexDirR, S.apexR);  // всегда RAWы
+    S.P_apexL = liftUnit(S.apexDirL, S.apexL);
+    S.P_apexR = liftUnit(S.apexDirR, S.apexR);
 
     auto& rec = reg[key];
     if (!rec.A) rec.A = S;
@@ -225,6 +249,7 @@ void TerrainTessellator::finalizeCliffs(const EdgeRegistry& reg,
         if (t.isNull()) t = (hi.P_edgeL + hi.P_edgeR + lo.P_edgeL + lo.P_edgeR);
         return t;
         };
+
     auto diff = [&](const QVector3D& a, const QVector3D& b) {
         return (a - b).lengthSquared() > (epsApex * epsApex);
         };
@@ -281,7 +306,8 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
     const auto& cells = model.cells();
     const auto& dual = model.dualVerts();
 
-    MeshBuilder mb{ M.pos, M.col, M.idx };
+    // Инициализация MeshBuilder с поддержкой нормалей
+    MeshBuilder mb{ M.pos, M.col, M.norm, M.idx };
     mb.owner = &M.triOwner;
     EdgeRegistry reg;
 

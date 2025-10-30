@@ -12,7 +12,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     auto* tb = addToolBar("Controls");
     levelSpin_ = new QSpinBox(tb);
-    levelSpin_->setRange(0, 7); // conservative upper bound; can raise
+    levelSpin_->setRange(0, 7);
     levelSpin_->setValue(2);
     tb->addWidget(new QLabel(" Subdivision L: "));
     tb->addWidget(levelSpin_);

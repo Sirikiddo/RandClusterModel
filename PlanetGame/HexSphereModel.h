@@ -46,14 +46,12 @@ struct Cell {
     bool isPentagon = false;     // degree==5
     std::vector<int> poly;       // indices into dualVerts (centers of triangles), CCW around cell
     std::vector<int> neighbors;  // neighbor cell ids CCW (same length as poly)
-    int height = 0;                 // дискретная высота
-    Biome biome = Biome::Grass;     // тип биома
+    int height = 0;                 // РґРёСЃРєСЂРµС‚РЅР°СЏ РІС‹СЃРѕС‚Р°
+    Biome biome = Biome::Grass;     // С‚РёРї Р±РёРѕРјР°
     QVector3D centroid;          // normalized average of poly vertices
     float area = 0.0f;           // euclidean triangle-fan area (for info)
     uint32_t stateMask = 0;      // bit 0 => selected
 };
-
-
 
 struct PickTri { // geometry for ray picking
     int cellId;
@@ -71,15 +69,15 @@ public:
 
     int subdivisions() const { return L_; }
     int pentagonCount() const { return pentCount_; }
+    int cellCount() const { return static_cast<int>(cells_.size()); } // Р”РћР‘РђР’Р›Р•РќРћ РёР· РІРµСЂСЃРёРё 1
 
-    // Удобные сеттеры
+    // РЈРґРѕР±РЅС‹Рµ СЃРµС‚С‚РµСЂС‹
     void setHeight(int cellId, int h);
     void addHeight(int cellId, int dh);
     void setBiome(int cellId, Biome b);
 
-    // Утилиты
-    static QVector3D biomeColor(Biome b)
-    {
+    // РЈС‚РёР»РёС‚С‹
+    static QVector3D biomeColor(Biome b) {
         switch (b) {
         case Biome::Sea:   return { 0.12f, 0.40f, 0.85f };
         case Biome::Grass: return { 0.20f, 0.75f, 0.30f };
@@ -102,6 +100,5 @@ private:
     std::vector<Cell> cells_;
     std::vector<std::pair<int, int>> wireEdges_;         // unique undirected pairs of dual vertex indices
     std::vector<PickTri> pickTris_;                     // triangles for picking and green fill
-
-    std::vector<std::array<int, 3>> dualOwners_; // для каждой дуальной вершины dv ? {cellA,cellB,cellC}
+    std::vector<std::array<int, 3>> dualOwners_; // РґР»СЏ РєР°Р¶РґРѕР№ РґСѓР°Р»СЊРЅРѕР№ РІРµСЂС€РёРЅС‹ dv ? {cellA,cellB,cellC}
 };

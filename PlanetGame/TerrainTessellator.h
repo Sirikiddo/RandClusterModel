@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "HexSphereModel.h"
 #include <QVector3D>
 #include <vector>
@@ -10,6 +10,7 @@
 struct TerrainMesh {
     std::vector<float>    pos; // xyz...
     std::vector<float>    col; // rgb...
+    std::vector<float>    norm; // нормали: nx,ny,nz... (ДОБАВЛЕНО из версии 2)
     std::vector<uint32_t> idx; // indices
     std::vector<int> triOwner;   // k, владелец треугольника
 };
@@ -76,6 +77,7 @@ public:
     struct MeshBuilder {
         std::vector<float>& pos; 
         std::vector<float>& col; 
+        std::vector<float>& norm; // ДОБАВЛЕНО из версии 2
         std::vector<uint32_t>& idx;
         std::vector<int>* owner = nullptr;
         std::vector<QVector3D> dbgNormals;
@@ -88,7 +90,7 @@ public:
             int cellOwner);
     };
 
-    // ── “мягкие” этапы ───────────────────────────────────────────────────────
+    // ── "мягкие" этапы ───────────────────────────────────────────────────────
     void buildInnerFan(MeshBuilder& mb, const Cell& c, const PreCell& pc) const;
     void buildBlades(MeshBuilder& mb, const Cell& c, const PreCell& pc,
         const TrimDirs& td, const EdgeHeights& eh) const;

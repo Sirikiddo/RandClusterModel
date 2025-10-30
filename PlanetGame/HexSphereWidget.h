@@ -1,27 +1,36 @@
-﻿#pragma once
+#pragma once
 
 #include <QOpenGLWidget>
-#include <QOpenGLFunctions_4_5_Core>
+#include <QOpenGLFunctions_3_3_Core>
 #include <QMatrix4x4>
 #include <QPoint>
 #include <QSet>
 #include <QVector3D>
+#include <QTime>
 #include <optional>
 #include <vector>
+#include <memory>
 
-#include "HexSphereModel.h"   // IcosphereBuilder, IcoMesh, HexSphereModel
+#include "HexSphereModel.h"
 #include "TerrainTessellator.h"
+#include "TerrainGenerator.h"
+#include "SceneGraph.h"
+#include "PathBuilder.h"
 
 class QMouseEvent;
 class QWheelEvent;
 class QKeyEvent;
 
-class HexSphereWidget : public QOpenGLWidget, protected QOpenGLFunctions_4_5_Core
+class HexSphereWidget : public QOpenGLWidget, protected QOpenGLFunctions_3_3_Core
 {
     Q_OBJECT
 public:
     explicit HexSphereWidget(QWidget* parent = nullptr);
     ~HexSphereWidget() override;
+
+    // Новые методы для управления генераторами рельефа
+    void setGenerator(std::unique_ptr<ITerrainGenerator> g) { generator_ = std::move(g); }
+    void setGenParams(const TerrainParams& p) { genParams_ = p; }
 
 public slots:
     void setSubdivisionLevel(int L);
@@ -43,6 +52,14 @@ protected:
     void keyPressEvent(QKeyEvent*) override;
 
 private:
+    // -------- Lighting & Water --------
+    GLuint progWater_ = 0;
+    GLint uMVP_Water_ = -1, uTime_Water_ = -1, uLightDir_Water_ = -1, uViewPos_Water_ = -1;
+    GLuint vboTerrainNorm_ = 0;
+    GLint uModel_ = -1;
+    GLint uLightDir_ = -1;
+    QVector3D lightDir_ = QVector3D(1, 1, 1).normalized();
+
     // -------- Camera --------
     float  distance_ = 2.2f;
     float  yaw_ = 0.0f;    // radians
@@ -54,8 +71,8 @@ private:
     QMatrix4x4 proj_;
 
     // -------- GL state flags --------
-    bool glReady_ = false;   // контекст и ресурсы готовы
-    bool gpuDirty_ = false;  // CPU-данные есть, но ещё не залиты в GPU
+    bool glReady_ = false;
+    bool gpuDirty_ = false;
 
     // -------- GL programs + uniform locations --------
     GLuint progWire_ = 0, progTerrain_ = 0, progSel_ = 0;
@@ -74,29 +91,43 @@ private:
     GLuint vaoSel_ = 0, vboSel_ = 0;
     GLsizei selLineVertexCount_ = 0;
 
-	// path    
+    // path
     GLuint vboPath_ = 0, vaoPath_ = 0;
     GLsizei pathVertexCount_ = 0;
-    float pathBias_ = 0.01f; // чуть над рельефом
+    float pathBias_ = 0.01f;
+
+    // pyramid (объекты сцены)
+    GLuint vaoPyramid_ = 0;
+    GLuint vboPyramid_ = 0;
+    GLsizei pyramidVertexCount_ = 0;
+
+    // water
+    GLuint vaoWater_ = 0, vboWaterPos_ = 0, iboWater_ = 0;
+    GLsizei waterIndexCount_ = 0;
 
     // -------- CPU model --------
     IcosphereBuilder icoBuilder_;
     IcoMesh          ico_;
     HexSphereModel   model_;
-    TerrainMesh terrainCPU_; // последняя CPU-копия для пикинга
+    TerrainMesh terrainCPU_;
+
+    // SceneGraph
+    SceneGraph scene_;
 
     int L_ = 2;
 
     // -------- Selection --------
     QSet<int> selectedCells_;
 
-    // Параметры «планеты»
-    float heightStep_ = 0.06f; // шаг высоты (радиальный)
-    bool  smoothOneStep_ = true; // сглаживать при |Δ|==1
-    float outlineBias_ = 0.004f; // выдавливание рамки наружу
-    float stripInset_ = 0.25f; // доля отступа полосы внутрь от ребра
+    // -------- Параметры «планеты» --------
+    float heightStep_ = 0.06f;
+    bool  smoothOneStep_ = true;
+    float outlineBias_ = 0.004f;
+    float stripInset_ = 0.25f;
 
-    // alias биома, чтобы в .h и .cpp писать Biome::Sea/Grass/Rock
+    // -------- Генераторы рельефа --------
+    std::unique_ptr<ITerrainGenerator> generator_;
+    TerrainParams genParams_;
 
 private:
     // Построение CPU-модели и загрузка в GPU
@@ -115,26 +146,20 @@ private:
     void      updateCamera();
     QVector3D rayOrigin() const;
     QVector3D rayDirectionFromScreen(int sx, int sy) const;
-    std::optional<int> pickCellAt(int sx, int sy); // deprecated
+    std::optional<int> pickCellAt(int sx, int sy);
     std::optional<PickHit> pickTerrainAt(int sx, int sy) const;
 
     // GL helpers
     GLuint makeProgram(const char* vs, const char* fs);
 
-    // утилита: безопасно установить матрицу uMVP
-    inline bool setMVP(GLuint prog, GLint& cachedLoc, const QMatrix4x4& mvp) {
-        if (!prog || !glIsProgram(prog)) return false;
-        glUseProgram(prog);
-        if (cachedLoc < 0) {
-            cachedLoc = glGetUniformLocation(prog, "uMVP");
-        }
-        if (cachedLoc >= 0) {
-            glUniformMatrix4fv(cachedLoc, 1, GL_FALSE, mvp.constData());
-            return true;
-        }
-        else {
-            qWarning("uMVP location is -1 for program %u", prog);
-            return false;
-        }
+    // SceneGraph & Water
+    void initPyramidGeometry();
+    void createWaterGeometry();
+
+    // Автоматический расчет heightStep
+    float autoHeightStep() const {
+        const float baseStep = 0.05f;
+        const float reductionFactor = 0.4f;
+        return baseStep / (1.0f + L_ * reductionFactor);
     }
 };

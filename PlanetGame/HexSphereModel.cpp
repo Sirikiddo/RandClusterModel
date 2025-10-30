@@ -88,7 +88,7 @@ void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
     dualOwners_.resize(ico.F.size());
     for (int f = 0; f < (int)ico.F.size(); ++f) {
         const auto& t = ico.F[f];
-        dualOwners_[f] = { t.a, t.b, t.c }; // эти индексы и есть id клеток
+        dualOwners_[f] = { t.a, t.b, t.c }; // СЌС‚Рё РёРЅРґРµРєСЃС‹ Рё РµСЃС‚СЊ id РєР»РµС‚РѕРє
     }
 
     // 2) Build cells: one per primal vertex
@@ -122,13 +122,7 @@ void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
         // Neighbors in CCW order: for each consecutive pair of faces around v, find the opposite vertex
         cell.neighbors.reserve(cell.poly.size());
         auto faceHasV = [&](const Tri& t, int vid) { return t.a == vid || t.b == vid || t.c == vid; };
-        auto otherVertex = [&](const Tri& t, int vA, int vB)->int {
-            // Given face t containing v, and the edge (v, x), return x that is shared with the next face.
-            // We'll compute neighbors via face pairs: for consecutive faces f_i, f_{i+1}, the edge opposite is (other_i) == (other_{i+1})
-            (void)vA; (void)vB; return -1; };
-        // Instead of overcomplicating, compute neighbors from edges incident to v:
-        // For each consecutive pair of faces, they share an edge (v, w). Extract w.
-        auto vertexOppositeV = [&](const Tri& t, int vIdxA, int vIdxB) { (void)vIdxB; return -1; };
+        
         for (size_t i = 0; i < cell.poly.size(); ++i) {
             int f0 = cell.poly[i];
             int f1 = cell.poly[(i + 1) % cell.poly.size()];
@@ -192,7 +186,7 @@ void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
 
 void HexSphereModel::setHeight(int cellId, int h) {
     if (cellId < 0 || cellId >= static_cast<int>(cells_.size()))
-        return; // защита от некорректного индекса
+        return; // Р·Р°С‰РёС‚Р° РѕС‚ РЅРµРєРѕСЂСЂРµРєС‚РЅРѕРіРѕ РёРЅРґРµРєСЃР°
     cells_[cellId].height = h;
 }
 

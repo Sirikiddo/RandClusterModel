@@ -1,11 +1,10 @@
-﻿#pragma once
+#pragma once
 #include <vector>
 #include <queue>
 #include <limits>
 #include <functional>
 #include <QVector3D>
-
-#include "HexSphereModel.h" // Cell, HexSphereModel
+#include "HexSphereModel.h"
 
 class PathBuilder {
 public:

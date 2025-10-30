@@ -20,7 +20,7 @@ std::vector<int> PathBuilder::astar(int startId, int goalId) const {
     auto gc = [&](int id) { return model_.cells()[(size_t)id].centroid.normalized(); };
     auto h = [&](int a, int b) {
         float d = std::clamp(QVector3D::dotProduct(gc(a), gc(b)), -1.0f, 1.0f);
-        return std::acos(d); // great-circle (радианы)
+        return std::acos(d); // great-circle (СЂР°РґРёР°РЅС‹)
         };
 
     constexpr float INF = std::numeric_limits<float>::infinity();
@@ -93,7 +93,7 @@ std::vector<QVector3D> PathBuilder::polylineOnSphere(const std::vector<int>& pat
             out.push_back(slerp(A, B, t).normalized() * R);
         }
     }
-    // добавить конечную точку точно
+    // РґРѕР±Р°РІРёС‚СЊ РєРѕРЅРµС‡РЅСѓСЋ С‚РѕС‡РєСѓ С‚РѕС‡РЅРѕ
     {
         const auto& cEnd = model_.cells()[(size_t)path.back()];
         float R = 1.0f + cEnd.height * heightStep + bias;
