@@ -37,6 +37,16 @@ public slots:
     void resetView();
     void clearSelection();
 
+public slots:
+    void setTerrainParams(const TerrainParams& p) { genParams_ = p; }
+    void setGeneratorByIndex(int idx); // 0 NoOp, 1 Sine, 2 Perlin
+    void regenerateTerrain();
+
+    // визуальные настройки
+    void setSmoothOneStep(bool on) { smoothOneStep_ = on; }
+    void setStripInset(float v) { stripInset_ = std::clamp(v, 0.f, 0.49f); }
+    void setOutlineBias(float v) { outlineBias_ = std::max(0.f, v); }
+
 signals:
     void hudTextChanged(const QString&);
 

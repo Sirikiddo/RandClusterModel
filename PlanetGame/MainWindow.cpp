@@ -1,10 +1,14 @@
 #include "MainWindow.h"
 #include "HexSphereWidget.h"
+#include "PlanetSettingsPanel.h"
+#include "TerrainGenerator.h"
 #include <QSpinBox>
 #include <QToolBar>
 #include <QLabel>
 #include <QAction>
 #include <QStatusBar>
+#include <QDockWidget>
+#include <QMenuBar>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     glw_ = new HexSphereWidget(this);
@@ -29,4 +33,33 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(glw_, &HexSphereWidget::hudTextChanged, infoLbl_, &QLabel::setText);
 
     glw_->setSubdivisionLevel(levelSpin_->value());
+
+    auto* dock = new QDockWidget("Planet Settings", this);
+    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    auto* panel = new PlanetSettingsPanel(dock);
+    dock->setWidget(panel);
+    addDockWidget(Qt::RightDockWidgetArea, dock);
+
+    auto* viewMenu = menuBar()->addMenu("&View");
+    auto* showDockAct = dock->toggleViewAction();
+    showDockAct->setText("Planet Settings");
+    viewMenu->addAction(showDockAct);
+
+    // коннекты: панель -> виджет
+    connect(panel, &PlanetSettingsPanel::generatorChanged,
+        glw_, &HexSphereWidget::setGeneratorByIndex);
+
+    connect(panel, &PlanetSettingsPanel::paramsChanged,
+        glw_, &HexSphereWidget::setTerrainParams);
+
+    // визуал
+    connect(panel, &PlanetSettingsPanel::visualizeChanged,
+        this, [this](bool smooth, double inset, double outline) {
+            glw_->setSmoothOneStep(smooth);
+            glw_->setStripInset(float(inset));
+            glw_->setOutlineBias(float(outline));
+        });
+
+    connect(panel, &PlanetSettingsPanel::requestRegenerate,
+        glw_, &HexSphereWidget::regenerateTerrain); 
 }

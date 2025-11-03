@@ -1,4 +1,5 @@
 #include "HexSphereWidget.h"
+#include "TerrainGenerator.h"
 #include "PathBuilder.h"
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -8,6 +9,7 @@
 #include <limits>
 #include <string>
 #include <cmath>
+#include <QLabel>
 
 // ─── Шейдеры ───────────────────────────────────────────────────────────────────
 static const char* VS_WIRE = R"GLSL(
@@ -135,6 +137,12 @@ void main() {
 // ─── Жизненный цикл ─────────────────────────────────────────────────────────────
 HexSphereWidget::HexSphereWidget(QWidget* parent) : QOpenGLWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
+    auto* hud = new QLabel(this);
+    hud->setAttribute(Qt::WA_TransparentForMouseEvents);
+    hud->setStyleSheet("QLabel { background: rgba(0,0,0,140); color: white; padding: 6px; }");
+    hud->move(10, 10);
+    hud->setText("LMB: select | C: clear path | P: build path | +/-: height | 1–3: biomes | S: smooth | W: move");
+    hud->adjustSize();
 }
 
 HexSphereWidget::~HexSphereWidget() {
@@ -147,6 +155,7 @@ HexSphereWidget::~HexSphereWidget() {
     if (vaoWire_)     this->glDeleteVertexArrays(1, &vaoWire_);
     if (vaoTerrain_)  this->glDeleteVertexArrays(1, &vaoTerrain_);
     if (vaoSel_)      this->glDeleteVertexArrays(1, &vaoSel_);
+    if (vaoPath_)     this->glDeleteVertexArrays(1, &vaoPath_);
     if (vaoWater_)    this->glDeleteVertexArrays(1, &vaoWater_);
     if (vaoPyramid_)  this->glDeleteVertexArrays(1, &vaoPyramid_);
     if (vboPositions_)   this->glDeleteBuffers(1, &vboPositions_);
@@ -280,6 +289,10 @@ void HexSphereWidget::initializeGL() {
 
     glReady_ = true;
     rebuildModel();
+
+    emit hudTextChanged(
+        "Controls: [LMB] select | [C] clear path | [P] path between selected | "
+        "[+/-] height | [1–3] biome | [S] smooth toggle | [W] move entity");
 }
 
 void HexSphereWidget::resizeGL(int w, int h) {
@@ -702,6 +715,7 @@ void HexSphereWidget::keyPressEvent(QKeyEvent* e) {
         smoothOneStep_ = !smoothOneStep_;
         uploadTerrainBuffers();
         update();
+        emit hudTextChanged("Smooth mode: " + QString(smoothOneStep_ ? "ON" : "OFF"));
         return;
     case Qt::Key_P:
         buildAndShowSelectedPath();
@@ -844,4 +858,26 @@ std::optional<HexSphereWidget::PickHit> HexSphereWidget::pickTerrainAt(int sx, i
     }
     if (bestOwner >= 0) return PickHit{ bestOwner, bestPos, bestT };
     return std::nullopt;
+}
+
+void HexSphereWidget::setGeneratorByIndex(int idx) {
+    switch (idx) {
+    case 0: setGenerator(std::make_unique<NoOpTerrainGenerator>()); break;
+    case 1: setGenerator(std::make_unique<SineTerrainGenerator>()); break;
+    default: setGenerator(std::make_unique<PerlinTerrainGenerator>()); break;
+    }
+}
+
+void HexSphereWidget::regenerateTerrain() {
+    if (generator_) {
+        generator_->generate(model_, genParams_);
+    }
+    if (glReady_) {
+        uploadTerrainBuffers();
+        uploadSelectionOutlineBuffers();
+        update();
+    }
+    else {
+        gpuDirty_ = true;
+    }
 }

@@ -289,7 +289,7 @@ void TerrainTessellator::finalizeCliffs(const EdgeRegistry& reg,
 
             if (diff(A.P_apexR, B.P_apexR))
             {
-                const bool aHigher = (A.apexL > B.apexL);
+                const bool aHigher = (A.apexR > B.apexR);
                 mb.triToward(aHigher ? A.P_apexR : B.P_apexR,
                     aHigher ? A.P_edgeR : B.P_edgeR,
                     aHigher ? B.P_apexR : A.P_apexR,
