@@ -33,3 +33,9 @@ class PerlinTerrainGenerator final : public ITerrainGenerator {
 public:
     void generate(HexSphereModel& model, const TerrainParams& p) override;
 };
+
+// Климатическая генерация биомов
+class ClimateBiomeTerrainGenerator final : public ITerrainGenerator {
+public:
+    void generate(HexSphereModel& model, const TerrainParams& p) override;
+};

@@ -38,7 +38,16 @@ private:
     static std::pair<std::vector<QVector3D>, std::vector<Tri>> baseIcosahedron();
 };
 
-enum class Biome : uint8_t { Sea = 0, Grass = 1, Rock = 2 };
+enum class Biome : uint8_t {
+    Sea = 0,
+    Grass = 1,
+    Rock = 2,
+    Snow = 3,
+    Tundra = 4,
+    Desert = 5,
+    Savanna = 6,
+    Jungle = 7
+};
 
 // Dual (hex/pent) sphere data
 struct Cell {
@@ -65,11 +74,12 @@ public:
     const std::vector<QVector3D>& dualVerts() const { return dualVerts_; }
     const std::vector<std::pair<int, int>>& wireEdges() const { return wireEdges_; }
     const std::vector<Cell>& cells() const { return cells_; }
+    std::vector<Cell>& cells() { return cells_; }
     const std::vector<PickTri>& pickTris() const { return pickTris_; }
 
     int subdivisions() const { return L_; }
     int pentagonCount() const { return pentCount_; }
-    int cellCount() const { return static_cast<int>(cells_.size()); } // ДОБАВЛЕНО из версии 1
+    int cellCount() const { return static_cast<int>(cells_.size()); }
 
     // Удобные сеттеры
     void setHeight(int cellId, int h);
@@ -79,9 +89,14 @@ public:
     // Утилиты
     static QVector3D biomeColor(Biome b) {
         switch (b) {
-        case Biome::Sea:   return { 0.12f, 0.40f, 0.85f };
-        case Biome::Grass: return { 0.20f, 0.75f, 0.30f };
-        case Biome::Rock:  return { 0.60f, 0.60f, 0.60f };
+        case Biome::Sea:      return { 0.12f, 0.40f, 0.85f };
+        case Biome::Grass:    return { 0.20f, 0.75f, 0.30f };
+        case Biome::Rock:     return { 0.60f, 0.60f, 0.60f };
+        case Biome::Snow:     return { 0.95f, 0.95f, 0.98f };
+        case Biome::Tundra:   return { 0.70f, 0.75f, 0.65f };
+        case Biome::Desert:   return { 0.90f, 0.85f, 0.55f };
+        case Biome::Savanna:  return { 0.75f, 0.70f, 0.30f };
+        case Biome::Jungle:   return { 0.15f, 0.55f, 0.20f };
         }
         return { 1,1,1 };
     }

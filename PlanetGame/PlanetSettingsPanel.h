@@ -16,7 +16,7 @@ public:
     explicit PlanetSettingsPanel(QWidget* parent = nullptr);
 
 signals:
-    void generatorChanged(int index);                // 0: NoOp, 1: Sine, 2: Perlin
+    void generatorChanged(int index);                // 0: NoOp, 1: Sine, 2: Perlin, 3: Climate
     void paramsChanged(const TerrainParams& p);
     void visualizeChanged(bool smoothOneStep, double stripInset, double outlineBias);
     void requestRegenerate();

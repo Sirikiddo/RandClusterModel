@@ -61,5 +61,5 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         });
 
     connect(panel, &PlanetSettingsPanel::requestRegenerate,
-        glw_, &HexSphereWidget::regenerateTerrain); 
+        glw_, &HexSphereWidget::regenerateTerrain);
 }

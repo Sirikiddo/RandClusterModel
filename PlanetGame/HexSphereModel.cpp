@@ -122,7 +122,7 @@ void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
         // Neighbors in CCW order: for each consecutive pair of faces around v, find the opposite vertex
         cell.neighbors.reserve(cell.poly.size());
         auto faceHasV = [&](const Tri& t, int vid) { return t.a == vid || t.b == vid || t.c == vid; };
-        
+
         for (size_t i = 0; i < cell.poly.size(); ++i) {
             int f0 = cell.poly[i];
             int f1 = cell.poly[(i + 1) % cell.poly.size()];

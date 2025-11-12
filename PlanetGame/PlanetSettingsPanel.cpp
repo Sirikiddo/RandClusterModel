@@ -15,6 +15,7 @@ PlanetSettingsPanel::PlanetSettingsPanel(QWidget* parent) : QWidget(parent) {
     genBox_->addItem("NoOp");
     genBox_->addItem("Sine");
     genBox_->addItem("Perlin");
+    genBox_->addItem("Climate"); // ÄÎÁÀÂËÅÍÎ èç âåðñèè 1
 
     seedBox_ = new QSpinBox(this);
     seedBox_->setRange(0, INT_MAX);

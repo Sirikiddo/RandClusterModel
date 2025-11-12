@@ -36,10 +36,8 @@ public slots:
     void setSubdivisionLevel(int L);
     void resetView();
     void clearSelection();
-
-public slots:
     void setTerrainParams(const TerrainParams& p) { genParams_ = p; }
-    void setGeneratorByIndex(int idx); // 0 NoOp, 1 Sine, 2 Perlin
+    void setGeneratorByIndex(int idx); // 0 NoOp, 1 Sine, 2 Perlin, 3 Climate
     void regenerateTerrain();
 
     // визуальные настройки

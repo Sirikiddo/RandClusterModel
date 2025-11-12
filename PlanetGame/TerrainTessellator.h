@@ -75,8 +75,8 @@ public:
         const std::vector<Cell>& cells) const;
 
     struct MeshBuilder {
-        std::vector<float>& pos; 
-        std::vector<float>& col; 
+        std::vector<float>& pos;
+        std::vector<float>& col;
         std::vector<float>& norm; // ДОБАВЛЕНО из версии 2
         std::vector<uint32_t>& idx;
         std::vector<int>* owner = nullptr;

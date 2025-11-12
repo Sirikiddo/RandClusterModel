@@ -134,7 +134,7 @@ void TerrainTessellator::MeshBuilder::triToward(QVector3D A, QVector3D B, QVecto
                            color.x(),color.y(),color.z(),
                            color.x(),color.y(),color.z() });
 
-    // Нормали (одинаковые для всех вершин треугольника) - ДОБАВЛЕНО из версии 2
+    // Нормали (одинаковые для всех вершин треугольника)
     norm.insert(norm.end(), { n.x(),n.y(),n.z(), n.x(),n.y(),n.z(), n.x(),n.y(),n.z() });
 
     // Индексы

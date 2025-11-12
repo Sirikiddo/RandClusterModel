@@ -1,5 +1,4 @@
 #include "HexSphereWidget.h"
-#include "TerrainGenerator.h"
 #include "PathBuilder.h"
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -141,13 +140,12 @@ HexSphereWidget::HexSphereWidget(QWidget* parent) : QOpenGLWidget(parent) {
     hud->setAttribute(Qt::WA_TransparentForMouseEvents);
     hud->setStyleSheet("QLabel { background: rgba(0,0,0,140); color: white; padding: 6px; }");
     hud->move(10, 10);
-    hud->setText("LMB: select | C: clear path | P: build path | +/-: height | 1–3: biomes | S: smooth | W: move");
+    hud->setText("LMB: select | C: clear path | P: build path | +/-: height | 1-8: biomes | S: smooth | W: move");
     hud->adjustSize();
 }
 
 HexSphereWidget::~HexSphereWidget() {
     makeCurrent();
-    // ... (очистка ресурсов как в версии 2)
     if (progWire_)    this->glDeleteProgram(progWire_);
     if (progTerrain_) this->glDeleteProgram(progTerrain_);
     if (progSel_)     this->glDeleteProgram(progSel_);
@@ -155,7 +153,6 @@ HexSphereWidget::~HexSphereWidget() {
     if (vaoWire_)     this->glDeleteVertexArrays(1, &vaoWire_);
     if (vaoTerrain_)  this->glDeleteVertexArrays(1, &vaoTerrain_);
     if (vaoSel_)      this->glDeleteVertexArrays(1, &vaoSel_);
-    if (vaoPath_)     this->glDeleteVertexArrays(1, &vaoPath_);
     if (vaoWater_)    this->glDeleteVertexArrays(1, &vaoWater_);
     if (vaoPyramid_)  this->glDeleteVertexArrays(1, &vaoPyramid_);
     if (vboPositions_)   this->glDeleteBuffers(1, &vboPositions_);
@@ -212,9 +209,9 @@ void HexSphereWidget::initializeGL() {
     uViewPos_Water_ = this->glGetUniformLocation(progWater_, "uViewPos");
     this->glUseProgram(0);
 
-    // Инициализация генератора рельефа по умолчанию
-    setGenerator(std::make_unique<PerlinTerrainGenerator>());
-    setGenParams(TerrainParams{ /*seed=*/0u, /*seaLevel=*/0, /*scale=*/3.0f });
+    // Инициализация генератора рельефа по умолчанию - CLIMATE
+    setGenerator(std::make_unique<ClimateBiomeTerrainGenerator>());
+    setGenParams(TerrainParams{ /*seed=*/12345u, /*seaLevel=*/3, /*scale=*/3.0f });
 
     // Создаем VAO/VBO
     this->glGenBuffers(1, &vboPositions_);
@@ -292,7 +289,7 @@ void HexSphereWidget::initializeGL() {
 
     emit hudTextChanged(
         "Controls: [LMB] select | [C] clear path | [P] path between selected | "
-        "[+/-] height | [1–3] biome | [S] smooth toggle | [W] move entity");
+        "[+/-] height | [1-8] biomes | [S] smooth toggle | [W] move entity");
 }
 
 void HexSphereWidget::resizeGL(int w, int h) {
@@ -353,7 +350,7 @@ void HexSphereWidget::paintGL() {
         this->glDrawArrays(GL_TRIANGLES, 0, pyramidVertexCount_);
     }
 
-    // Рендеринг выделения, путей и wireframe (код из версий 1 и 2)
+    // Рендеринг выделения, путей и wireframe
     if (selLineVertexCount_ > 0 && progSel_) {
         this->glUseProgram(progSel_);
         this->glUniformMatrix4fv(uMVP_Sel_, 1, GL_FALSE, mvp.constData());
@@ -379,7 +376,7 @@ void HexSphereWidget::rebuildModel() {
     ico_ = icoBuilder_.build(L_);
     model_.rebuildFromIcosphere(ico_);
 
-    // ГЕНЕРАЦИЯ РЕЛЬЕФА - ключевое улучшение из версии 1
+    // ГЕНЕРАЦИЯ РЕЛЬЕФА
     if (generator_) {
         generator_->generate(model_, genParams_);
     }
@@ -417,7 +414,7 @@ void HexSphereWidget::uploadTerrainBuffers() {
     TerrainTessellator tt;
     tt.R = 1.0f;
 
-    // Адаптивный heightStep в зависимости от уровня детализации (из версии 1)
+    // Адаптивный heightStep в зависимости от уровня детализации
     heightStep_ = autoHeightStep();
     tt.heightStep = heightStep_;
 
@@ -447,7 +444,7 @@ void HexSphereWidget::uploadTerrainBuffers() {
     this->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainCol_);
     this->glBufferData(GL_ARRAY_BUFFER, vbCol, terrainCPU_.col.empty() ? nullptr : terrainCPU_.col.data(), GL_DYNAMIC_DRAW);
 
-    // Нормали (ДОБАВЛЕНО из версии 2 для освещения)
+    // Нормали
     this->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainNorm_);
     this->glBufferData(GL_ARRAY_BUFFER, vbNorm, terrainCPU_.norm.empty() ? nullptr : terrainCPU_.norm.data(), GL_DYNAMIC_DRAW);
 
@@ -458,7 +455,7 @@ void HexSphereWidget::uploadTerrainBuffers() {
     this->glBindBuffer(GL_ARRAY_BUFFER, 0);
     terrainIndexCount_ = GLsizei(terrainCPU_.idx.size());
 
-    // Создаем геометрию воды (из версии 2)
+    // Создаем геометрию воды
     createWaterGeometry();
 
     doneCurrent();
@@ -761,6 +758,21 @@ void HexSphereWidget::keyPressEvent(QKeyEvent* e) {
     case Qt::Key_3:
         apply([&](int cid) { model_.setBiome(cid, Biome::Rock);  });
         break;
+    case Qt::Key_4:
+        apply([&](int cid) { model_.setBiome(cid, Biome::Snow);  });
+        break;
+    case Qt::Key_5:
+        apply([&](int cid) { model_.setBiome(cid, Biome::Tundra); });
+        break;
+    case Qt::Key_6:
+        apply([&](int cid) { model_.setBiome(cid, Biome::Desert); });
+        break;
+    case Qt::Key_7:
+        apply([&](int cid) { model_.setBiome(cid, Biome::Savanna); });
+        break;
+    case Qt::Key_8:
+        apply([&](int cid) { model_.setBiome(cid, Biome::Jungle); });
+        break;
     default: return;
     }
     uploadTerrainBuffers();
@@ -788,6 +800,30 @@ void HexSphereWidget::resetView() {
 
 void HexSphereWidget::clearSelection() {
     selectedCells_.clear();
+    if (glReady_) {
+        uploadTerrainBuffers();
+        uploadSelectionOutlineBuffers();
+        update();
+    }
+    else {
+        gpuDirty_ = true;
+    }
+}
+
+void HexSphereWidget::setGeneratorByIndex(int idx) {
+    switch (idx) {
+    case 0: setGenerator(std::make_unique<NoOpTerrainGenerator>()); break;
+    case 1: setGenerator(std::make_unique<SineTerrainGenerator>()); break;
+    case 2: setGenerator(std::make_unique<PerlinTerrainGenerator>()); break;
+    case 3: setGenerator(std::make_unique<ClimateBiomeTerrainGenerator>()); break;
+    default: setGenerator(std::make_unique<ClimateBiomeTerrainGenerator>()); break;
+    }
+}
+
+void HexSphereWidget::regenerateTerrain() {
+    if (generator_) {
+        generator_->generate(model_, genParams_);
+    }
     if (glReady_) {
         uploadTerrainBuffers();
         uploadSelectionOutlineBuffers();
@@ -858,26 +894,4 @@ std::optional<HexSphereWidget::PickHit> HexSphereWidget::pickTerrainAt(int sx, i
     }
     if (bestOwner >= 0) return PickHit{ bestOwner, bestPos, bestT };
     return std::nullopt;
-}
-
-void HexSphereWidget::setGeneratorByIndex(int idx) {
-    switch (idx) {
-    case 0: setGenerator(std::make_unique<NoOpTerrainGenerator>()); break;
-    case 1: setGenerator(std::make_unique<SineTerrainGenerator>()); break;
-    default: setGenerator(std::make_unique<PerlinTerrainGenerator>()); break;
-    }
-}
-
-void HexSphereWidget::regenerateTerrain() {
-    if (generator_) {
-        generator_->generate(model_, genParams_);
-    }
-    if (glReady_) {
-        uploadTerrainBuffers();
-        uploadSelectionOutlineBuffers();
-        update();
-    }
-    else {
-        gpuDirty_ = true;
-    }
 }
