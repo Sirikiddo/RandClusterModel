@@ -2,6 +2,7 @@
 #include "PathBuilder.h"
 #include <QMouseEvent>
 #include <QWheelEvent>
+#include <QTimer>
 #include <QVector2D>
 #include <QOpenGLContext>
 #include <algorithm>
@@ -9,6 +10,8 @@
 #include <string>
 #include <cmath>
 #include <QLabel>
+#include <iostream>
+#include <QDebug>
 
 // ─── Шейдеры ───────────────────────────────────────────────────────────────────
 static const char* VS_WIRE = R"GLSL(
@@ -21,7 +24,9 @@ void main(){ gl_Position = uMVP * vec4(aPos,1.0); }
 static const char* FS_WIRE = R"GLSL(
 #version 330 core
 out vec4 FragColor;
-void main(){ FragColor = vec4(1.0,0.0,0.0,1.0); }
+void main(){ 
+    FragColor = vec4(1.0, 0.0, 0.0, 1.0); // Красный обратно
+}
 )GLSL";
 
 static const char* VS_TERRAIN = R"GLSL(
@@ -133,28 +138,96 @@ void main() {
 }
 )GLSL";
 
+// ─── Models Shader ─────────────────────────────────────────────────────────────
+static const char* VS_MODEL = R"GLSL(
+#version 330 core
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNormal;
+layout(location=2) in vec2 aUV;
+
+uniform mat4 uMVP;
+uniform mat4 uModel;
+
+out vec3 vNormal;
+out vec3 vWorldPos;
+out vec2 vUV;
+
+void main() {
+    vec4 worldPos = uModel * vec4(aPos, 1.0);
+    vWorldPos = worldPos.xyz;
+    vNormal = mat3(uModel) * aNormal;
+    vUV = aUV;
+    gl_Position = uMVP * vec4(aPos, 1.0);
+}
+)GLSL";
+
+static const char* FS_MODEL = R"GLSL(
+#version 330 core
+in vec3 vNormal;
+in vec3 vWorldPos;
+in vec2 vUV;
+
+out vec4 FragColor;
+
+uniform vec3 uLightDir;
+uniform vec3 uViewPos;
+uniform vec3 uColor;
+uniform bool uUseTexture = false;
+
+void main() {
+    // Простая затенённая визуализация
+    vec3 N = normalize(vNormal);
+    vec3 L = normalize(uLightDir);
+    
+    float diff = max(dot(N, L), 0.0);
+    vec3 ambient = 0.3 * uColor;
+    vec3 diffuse = 0.7 * diff * uColor;
+    
+    FragColor = vec4(ambient + diffuse, 1.0);
+}
+)GLSL";
+
 // ─── Жизненный цикл ─────────────────────────────────────────────────────────────
 HexSphereWidget::HexSphereWidget(QWidget* parent) : QOpenGLWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
+
+    // HUD с подсказками
     auto* hud = new QLabel(this);
     hud->setAttribute(Qt::WA_TransparentForMouseEvents);
     hud->setStyleSheet("QLabel { background: rgba(0,0,0,140); color: white; padding: 6px; }");
     hud->move(10, 10);
     hud->setText("LMB: select | C: clear path | P: build path | +/-: height | 1-8: biomes | S: smooth | W: move");
     hud->adjustSize();
+
+    // Таймер для анимации воды
+    waterTimer_ = new QTimer(this);
+    connect(waterTimer_, &QTimer::timeout, this, [this]() {
+        waterTime_ += 0.016f; // примерно 60 FPS
+        update();
+        });
 }
 
 HexSphereWidget::~HexSphereWidget() {
     makeCurrent();
+
+    // Очищаем ModelHandler ДО удаления других ресурсов
+    if (QOpenGLContext::currentContext()) {
+        treeModel_.clearGPUResources();
+    }
+
     if (progWire_)    this->glDeleteProgram(progWire_);
     if (progTerrain_) this->glDeleteProgram(progTerrain_);
     if (progSel_)     this->glDeleteProgram(progSel_);
     if (progWater_)   this->glDeleteProgram(progWater_);
+    if (progModel_)   this->glDeleteProgram(progModel_);
+    if (progModelTextured_) this->glDeleteProgram(progModelTextured_);
+
     if (vaoWire_)     this->glDeleteVertexArrays(1, &vaoWire_);
     if (vaoTerrain_)  this->glDeleteVertexArrays(1, &vaoTerrain_);
     if (vaoSel_)      this->glDeleteVertexArrays(1, &vaoSel_);
     if (vaoWater_)    this->glDeleteVertexArrays(1, &vaoWater_);
     if (vaoPyramid_)  this->glDeleteVertexArrays(1, &vaoPyramid_);
+
     if (vboPositions_)   this->glDeleteBuffers(1, &vboPositions_);
     if (vboTerrainPos_)  this->glDeleteBuffers(1, &vboTerrainPos_);
     if (vboTerrainCol_)  this->glDeleteBuffers(1, &vboTerrainCol_);
@@ -165,6 +238,10 @@ HexSphereWidget::~HexSphereWidget() {
     if (vboPyramid_)     this->glDeleteBuffers(1, &vboPyramid_);
     if (vboWaterPos_)    this->glDeleteBuffers(1, &vboWaterPos_);
     if (iboWater_)       this->glDeleteBuffers(1, &iboWater_);
+
+    if (waterTimer_) {
+        waterTimer_->stop();
+    }
     doneCurrent();
 }
 
@@ -172,13 +249,43 @@ GLuint HexSphereWidget::makeProgram(const char* vs, const char* fs) {
     GLuint v = this->glCreateShader(GL_VERTEX_SHADER);
     this->glShaderSource(v, 1, &vs, nullptr);
     this->glCompileShader(v);
+
+    // Проверка компиляции вершинного шейдера
+    GLint success;
+    this->glGetShaderiv(v, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        this->glGetShaderInfoLog(v, 512, nullptr, infoLog);
+        qDebug() << "Vertex shader compilation failed:" << infoLog;
+    }
+
     GLuint f = this->glCreateShader(GL_FRAGMENT_SHADER);
     this->glShaderSource(f, 1, &fs, nullptr);
     this->glCompileShader(f);
+
+    // Проверка компиляции фрагментного шейдера
+    this->glGetShaderiv(f, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        this->glGetShaderInfoLog(f, 512, nullptr, infoLog);
+        qDebug() << "Fragment shader compilation failed:" << infoLog;
+    }
+
     GLuint p = this->glCreateProgram();
-    this->glAttachShader(p, v); this->glAttachShader(p, f);
+    this->glAttachShader(p, v);
+    this->glAttachShader(p, f);
     this->glLinkProgram(p);
-    this->glDeleteShader(v); this->glDeleteShader(f);
+
+    // Проверка линковки программы
+    this->glGetProgramiv(p, GL_LINK_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        this->glGetProgramInfoLog(p, 512, nullptr, infoLog);
+        qDebug() << "Shader program linking failed:" << infoLog;
+    }
+
+    this->glDeleteShader(v);
+    this->glDeleteShader(f);
     return p;
 }
 
@@ -194,20 +301,37 @@ void HexSphereWidget::initializeGL() {
     progTerrain_ = makeProgram(VS_TERRAIN, FS_TERRAIN);
     progSel_ = makeProgram(VS_WIRE, FS_SEL);
     progWater_ = makeProgram(VS_WATER, FS_WATER);
+    progModel_ = makeProgram(VS_MODEL, FS_MODEL);
 
     // Получаем uniform locations
-    this->glUseProgram(progWire_);    uMVP_Wire_ = this->glGetUniformLocation(progWire_, "uMVP");
+    this->glUseProgram(progWire_);
+    uMVP_Wire_ = this->glGetUniformLocation(progWire_, "uMVP");
+
     this->glUseProgram(progTerrain_);
     uMVP_Terrain_ = this->glGetUniformLocation(progTerrain_, "uMVP");
     uModel_ = this->glGetUniformLocation(progTerrain_, "uModel");
     uLightDir_ = this->glGetUniformLocation(progTerrain_, "uLightDir");
-    this->glUseProgram(progSel_);     uMVP_Sel_ = this->glGetUniformLocation(progSel_, "uMVP");
+
+    this->glUseProgram(progSel_);
+    uMVP_Sel_ = this->glGetUniformLocation(progSel_, "uMVP");
+
     this->glUseProgram(progWater_);
     uMVP_Water_ = this->glGetUniformLocation(progWater_, "uMVP");
     uTime_Water_ = this->glGetUniformLocation(progWater_, "uTime");
     uLightDir_Water_ = this->glGetUniformLocation(progWater_, "uLightDir");
     uViewPos_Water_ = this->glGetUniformLocation(progWater_, "uViewPos");
+
+    this->glUseProgram(progModel_);
+    uMVP_Model_ = this->glGetUniformLocation(progModel_, "uMVP");
+    uModel_Model_ = this->glGetUniformLocation(progModel_, "uModel");
+    uLightDir_Model_ = this->glGetUniformLocation(progModel_, "uLightDir");
+    uViewPos_Model_ = this->glGetUniformLocation(progModel_, "uViewPos");
+    uColor_Model_ = this->glGetUniformLocation(progModel_, "uColor");
+    uUseTexture_ = this->glGetUniformLocation(progModel_, "uUseTexture");
+
     this->glUseProgram(0);
+    waterTimer_->start(16);
+    qDebug() << "Water timer started";
 
     // Инициализация генератора рельефа по умолчанию - CLIMATE
     setGenerator(std::make_unique<ClimateBiomeTerrainGenerator>());
@@ -284,6 +408,17 @@ void HexSphereWidget::initializeGL() {
     scene_.addEntity(pyramid);
     initPyramidGeometry();
 
+    // Загружаем модель дерева
+    if (!treeModel_.loadFromFile("./tree.obj")) {
+        qDebug() << "Failed to load tree model";
+    }
+    else {
+        treeModel_.uploadToGPU();
+        qDebug() << "Tree model loaded successfully. Has UVs:" << treeModel_.hasUVs()
+            << "Has normals:" << treeModel_.hasNormals()
+            << "Is initialized:" << treeModel_.isInitialized();
+    }
+
     glReady_ = true;
     rebuildModel();
 
@@ -306,6 +441,7 @@ void HexSphereWidget::paintGL() {
     this->glClearColor(0.05f, 0.06f, 0.08f, 1.0f);
     this->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    QVector3D cameraPos = rayOrigin();
     updateCamera();
     const QMatrix4x4 mvp = proj_ * view_;
 
@@ -325,11 +461,9 @@ void HexSphereWidget::paintGL() {
     if (waterIndexCount_ > 0 && progWater_) {
         this->glUseProgram(progWater_);
         this->glUniformMatrix4fv(uMVP_Water_, 1, GL_FALSE, mvp.constData());
-        this->glUniform1f(uTime_Water_, float(QTime::currentTime().msecsSinceStartOfDay()) * 0.001f);
-        QVector3D lightDir = QVector3D(0.5f, 1.0f, 0.3f).normalized();
-        this->glUniform3f(uLightDir_Water_, lightDir.x(), lightDir.y(), lightDir.z());
-        QVector3D eye = (view_.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
-        this->glUniform3f(uViewPos_Water_, eye.x(), eye.y(), eye.z());
+        this->glUniform1f(uTime_Water_, waterTime_);
+        this->glUniform3f(uLightDir_Water_, lightDir_.x(), lightDir_.y(), lightDir_.z());
+        this->glUniform3f(uViewPos_Water_, cameraPos.x(), cameraPos.y(), cameraPos.z());
         this->glEnable(GL_BLEND);
         this->glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         this->glBindVertexArray(vaoWater_);
@@ -343,14 +477,29 @@ void HexSphereWidget::paintGL() {
         QMatrix4x4 model;
         model.translate(e.position);
         model.scale(0.05f);
+
+        // Если объект выделен, увеличиваем его немного
+        if (e.selected) {
+            model.scale(1.2f);
+        }
+
         const QMatrix4x4 mvp = proj_ * view_ * model;
-        this->glUseProgram(progWire_);
-        this->glUniformMatrix4fv(uMVP_Wire_, 1, GL_FALSE, mvp.constData());
+
+        // Используем разные шейдеры для выделенных объектов
+        if (e.selected) {
+            this->glUseProgram(progSel_); // желтый цвет для выделения
+            this->glUniformMatrix4fv(uMVP_Sel_, 1, GL_FALSE, mvp.constData());
+        }
+        else {
+            this->glUseProgram(progWire_);
+            this->glUniformMatrix4fv(uMVP_Wire_, 1, GL_FALSE, mvp.constData());
+        }
+
         this->glBindVertexArray(vaoPyramid_);
         this->glDrawArrays(GL_TRIANGLES, 0, pyramidVertexCount_);
     }
 
-    // Рендеринг выделения, путей и wireframe
+    // Рендеринг выделения, путей и wireframe (код из версий 1 и 2)
     if (selLineVertexCount_ > 0 && progSel_) {
         this->glUseProgram(progSel_);
         this->glUniformMatrix4fv(uMVP_Sel_, 1, GL_FALSE, mvp.constData());
@@ -369,6 +518,78 @@ void HexSphereWidget::paintGL() {
         this->glBindVertexArray(vaoPath_);
         this->glDrawArrays(GL_LINE_STRIP, 0, pathVertexCount_);
     }
+
+    // Рендеринг деревьев на травяных ячейках
+    if (treeModel_.isInitialized() && progModel_ != 0 && !treeModel_.isEmpty()) {
+        this->glUseProgram(progModel_);
+
+        QVector3D globalLightDir = QVector3D(0.5f, 1.0f, 0.3f).normalized();
+        QVector3D eye = (view_.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
+
+        this->glUniform3f(uLightDir_Model_, globalLightDir.x(), globalLightDir.y(), globalLightDir.z());
+        this->glUniform3f(uViewPos_Model_, eye.x(), eye.y(), eye.z());
+        this->glUniform3f(uColor_Model_, 0.15f, 0.5f, 0.1f); // Зелёный цвет для деревьев
+        this->glUniform1i(uUseTexture_, treeModel_.hasUVs() ? 1 : 0);
+
+        const auto& cells = model_.cells();
+        int treesRendered = 0;
+        const int maxTrees = 25; // Ограничим количество для производительности
+
+        for (size_t i = 0; i < cells.size() && treesRendered < maxTrees; ++i) {
+            if (cells[i].biome == Biome::Grass && (i % 3 == 0)) { // Каждое третье дерево на траве
+                QVector3D treePos = getSurfacePoint((int)i);
+
+                QMatrix4x4 model;
+                model.translate(treePos);
+                orientToSurfaceNormal(model, treePos.normalized());
+                model.scale(0.05f + 0.02f * (i % 5)); // Немного варьируем размер
+
+                QMatrix4x4 mvp = proj_ * view_ * model;
+
+                this->glUniformMatrix4fv(uMVP_Model_, 1, GL_FALSE, mvp.constData());
+                this->glUniformMatrix4fv(uModel_Model_, 1, GL_FALSE, model.constData());
+
+                treeModel_.draw(progModel_, mvp, model, view_);
+                treesRendered++;
+            }
+        }
+    }
+}
+
+void HexSphereWidget::orientToSurfaceNormal(QMatrix4x4& matrix, const QVector3D& normal) {
+    QVector3D up = normal.normalized();
+    QVector3D forward = QVector3D(0, 0, 1);
+
+    if (qAbs(QVector3D::dotProduct(up, forward)) > 0.99f) {
+        forward = QVector3D(1, 0, 0);
+    }
+
+    QVector3D right = QVector3D::crossProduct(forward, up).normalized();
+    forward = QVector3D::crossProduct(up, right).normalized();
+
+    // Случайное вращение вокруг вертикальной оси для разнообразия
+    float randomAngle = (float)(qHash(reinterpret_cast<const char*>(&normal), 0) % 360);
+    QMatrix4x4 randomRot;
+    randomRot.rotate(randomAngle, up);
+    forward = randomRot.map(forward);
+    right = randomRot.map(right);
+
+    QMatrix4x4 rotation;
+    rotation.setColumn(0, QVector4D(right, 0.0f));
+    rotation.setColumn(1, QVector4D(up, 0.0f));
+    rotation.setColumn(2, QVector4D(forward, 0.0f));
+    rotation.setColumn(3, QVector4D(0.0f, 0.0f, 0.0f, 1.0f));
+
+    matrix = matrix * rotation;
+}
+
+QVector3D HexSphereWidget::getSurfacePoint(int cellId) const {
+    const auto& cells = model_.cells();
+    if (cellId < 0 || cellId >= (int)cells.size())
+        return QVector3D(0, 0, 1.0f);
+
+    const Cell& cell = cells[(size_t)cellId];
+    return cell.centroid.normalized() * (1.0f + cell.height * heightStep_);
 }
 
 // ─── Build/Upload ─────────────────────────────────────────────────────────────
@@ -376,7 +597,7 @@ void HexSphereWidget::rebuildModel() {
     ico_ = icoBuilder_.build(L_);
     model_.rebuildFromIcosphere(ico_);
 
-    // ГЕНЕРАЦИЯ РЕЛЬЕФА
+    // ГЕНЕРАЦИЯ РЕЛЬЕФА - ключевое улучшение из версии 1
     if (generator_) {
         generator_->generate(model_, genParams_);
     }
@@ -414,7 +635,7 @@ void HexSphereWidget::uploadTerrainBuffers() {
     TerrainTessellator tt;
     tt.R = 1.0f;
 
-    // Адаптивный heightStep в зависимости от уровня детализации
+    // Адаптивный heightStep в зависимости от уровня детализации (из версии 1)
     heightStep_ = autoHeightStep();
     tt.heightStep = heightStep_;
 
@@ -444,7 +665,7 @@ void HexSphereWidget::uploadTerrainBuffers() {
     this->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainCol_);
     this->glBufferData(GL_ARRAY_BUFFER, vbCol, terrainCPU_.col.empty() ? nullptr : terrainCPU_.col.data(), GL_DYNAMIC_DRAW);
 
-    // Нормали
+    // Нормали (ДОБАВЛЕНО из версии 2 для освещения)
     this->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainNorm_);
     this->glBufferData(GL_ARRAY_BUFFER, vbNorm, terrainCPU_.norm.empty() ? nullptr : terrainCPU_.norm.data(), GL_DYNAMIC_DRAW);
 
@@ -455,7 +676,7 @@ void HexSphereWidget::uploadTerrainBuffers() {
     this->glBindBuffer(GL_ARRAY_BUFFER, 0);
     terrainIndexCount_ = GLsizei(terrainCPU_.idx.size());
 
-    // Создаем геометрию воды
+    // Создаем геометрию воды (из версии 2)
     createWaterGeometry();
 
     doneCurrent();
@@ -638,12 +859,16 @@ void HexSphereWidget::clearPath() { pathVertexCount_ = 0; update(); }
 // ─── Камера/Инпут ─────────────────────────────────────────────────────────────
 void HexSphereWidget::updateCamera() {
     view_.setToIdentity();
-    QMatrix4x4 rot; rot.setToIdentity();
-    rot.rotate(qRadiansToDegrees(pitch_), 1, 0, 0);
-    rot.rotate(qRadiansToDegrees(yaw_), 0, 1, 0);
-    const QVector3D eye = rot.map(QVector3D(0, 0, distance_));
-    const QVector3D up = rot.map(QVector3D(0, 1, 0));
-    view_.lookAt(eye, QVector3D(0, 0, 0), up);
+
+    // Статичная камера смотрит на центр
+    const QVector3D eye = QVector3D(0, 0, distance_);
+    const QVector3D center = QVector3D(0, 0, 0);
+    const QVector3D up = QVector3D(0, 1, 0);
+
+    view_.lookAt(eye, center, up);
+
+    // Вращение применяется ко всей сцене (планете) - сохранено из HexSphereWidget.cpp
+    view_.rotate(sphereRotation_);
 }
 
 QVector3D HexSphereWidget::rayOrigin() const {
@@ -668,14 +893,42 @@ QVector3D HexSphereWidget::rayDirectionFromScreen(int sx, int sy) const {
 void HexSphereWidget::mousePressEvent(QMouseEvent* e) {
     setFocus(Qt::MouseFocusReason);
     lastPos_ = e->pos();
-    if (e->button() == Qt::RightButton) { rotating_ = true; }
+
+    if (e->button() == Qt::RightButton) {
+        rotating_ = true;
+    }
     else if (e->button() == Qt::LeftButton) {
         if (!glReady_) return;
-        if (auto hit = pickTerrainAt(e->pos().x(), e->pos().y())) {
-            int cid = hit->cellId;
-            if (selectedCells_.contains(cid)) selectedCells_.remove(cid);
-            else selectedCells_.insert(cid);
-            uploadSelectionOutlineBuffers();
+
+        auto hit = pickSceneAt(e->pos().x(), e->pos().y());
+        if (hit) {
+            if (hit->isEntity) {
+                // Клик по объекту - выделяем его
+                selectEntity(hit->entityId);
+                qDebug() << "Selected entity:" << hit->entityId;
+            }
+            else if (selectedEntityId_ != -1) {
+                // Клик по ландшафту при выделенном объекте - перемещаем объект
+                moveSelectedEntityToCell(hit->cellId);
+                // Снимаем выделение после перемещения (опционально)
+                deselectEntity();
+            }
+            else {
+                // Клик по ландшафту без выделенного объекта - работа с ячейками
+                int cid = hit->cellId;
+                if (selectedCells_.contains(cid)) {
+                    selectedCells_.remove(cid);
+                }
+                else {
+                    selectedCells_.insert(cid);
+                }
+                uploadSelectionOutlineBuffers();
+            }
+            update();
+        }
+        else {
+            // Клик в пустоту - снимаем все выделения
+            deselectEntity();
             update();
         }
     }
@@ -683,15 +936,33 @@ void HexSphereWidget::mousePressEvent(QMouseEvent* e) {
 
 void HexSphereWidget::mouseMoveEvent(QMouseEvent* e) {
     if (!rotating_) return;
-    const QPoint d = e->pos() - lastPos_;
-    lastPos_ = e->pos();
-    const float s = 0.005f;
-    yaw_ += d.x() * s;  pitch_ += d.y() * s;  pitch_ = std::clamp(pitch_, -1.5f, 1.5f);
+
+    const QPoint currentPos = e->pos();
+    const QPoint delta = currentPos - lastPos_;
+    lastPos_ = currentPos;
+
+    if (delta.manhattanLength() == 0) return;
+
+    // ИЗМЕНЕНИЕ: поменяли знаки на противоположные
+    const float sensitivity = 0.002f;
+
+    // Вращение вокруг осей X и Y в зависимости от движения мыши
+    QQuaternion rotationX = QQuaternion::fromAxisAndAngle(QVector3D(0, 1, 0), delta.x() * sensitivity * 180.0f);  // убрали минус
+    QQuaternion rotationY = QQuaternion::fromAxisAndAngle(QVector3D(1, 0, 0), delta.y() * sensitivity * 180.0f);  // убрали минус
+
+    // Комбинируем вращения
+    QQuaternion rotation = rotationY * rotationX;
+
+    // Применяем вращение к текущей ориентации планеты
+    sphereRotation_ = rotation * sphereRotation_;
+
     update();
 }
 
 void HexSphereWidget::mouseReleaseEvent(QMouseEvent* e) {
-    if (e->button() == Qt::RightButton) rotating_ = false;
+    if (e->button() == Qt::RightButton) {
+        rotating_ = false;
+    }
 }
 
 void HexSphereWidget::wheelEvent(QWheelEvent* e) {
@@ -732,7 +1003,20 @@ void HexSphereWidget::keyPressEvent(QKeyEvent* e) {
         ent.position = cells[(size_t)next].centroid.normalized();
         update();
     }
-    return;
+    case Qt::Key_Escape:
+        // ESC - снять выделение
+        deselectEntity();
+        update();
+        return;
+    case Qt::Key_Delete:
+        // Delete - удалить выделенный объект
+        if (selectedEntityId_ != -1) {
+            scene_.removeEntity(selectedEntityId_);
+            selectedEntityId_ = -1;
+            update();
+        }
+        return;
+        return;
     default: break;
     }
 
@@ -793,8 +1077,7 @@ void HexSphereWidget::setSubdivisionLevel(int L) {
 
 void HexSphereWidget::resetView() {
     distance_ = 2.2f;
-    yaw_ = 0.0f;
-    pitch_ = 0.3f;
+    sphereRotation_ = QQuaternion(); // сбрасываем вращение
     update();
 }
 
@@ -892,6 +1175,110 @@ std::optional<HexSphereWidget::PickHit> HexSphereWidget::pickTerrainAt(int sx, i
             bestT = tt; bestOwner = O[t]; bestPos = ro + rd * tt;
         }
     }
-    if (bestOwner >= 0) return PickHit{ bestOwner, bestPos, bestT };
+    if (bestOwner >= 0) {
+        // ИСПРАВЛЕНО: создаем PickHit с правильными параметрами
+        return PickHit{ bestOwner, -1, bestPos, bestT, false };
+    }
     return std::nullopt;
+}
+
+std::optional<HexSphereWidget::PickHit> HexSphereWidget::pickEntityAt(int sx, int sy) const {
+    const QVector3D ro = rayOrigin();
+    const QVector3D rd = rayDirectionFromScreen(sx, sy);
+
+    float bestT = std::numeric_limits<float>::infinity();
+    int bestEntityId = -1;
+    QVector3D bestPos;
+
+    // Проверяем все объекты сцены (пока только пирамидки)
+    for (const auto& entity : scene_.entities()) {
+        // Простая проверка пересечения с bounding sphere объекта
+        float radius = 0.1f; // примерный радиус пирамидки
+        QVector3D center = entity.position;
+
+        // Проверка пересечения луча со сферой
+        QVector3D oc = ro - center;
+        float a = QVector3D::dotProduct(rd, rd);
+        float b = 2.0f * QVector3D::dotProduct(oc, rd);
+        float c = QVector3D::dotProduct(oc, oc) - radius * radius;
+        float discriminant = b * b - 4 * a * c;
+
+        if (discriminant > 0) {
+            float t = (-b - std::sqrt(discriminant)) / (2.0f * a);
+            if (t > 0 && t < bestT) {
+                bestT = t;
+                bestEntityId = entity.id;
+                bestPos = ro + rd * t;
+            }
+        }
+    }
+
+    if (bestEntityId >= 0) {
+        // ИСПРАВЛЕНО: создаем PickHit с правильными параметрами
+        return PickHit{ -1, bestEntityId, bestPos, bestT, true };
+    }
+    return std::nullopt;
+}
+
+std::optional<HexSphereWidget::PickHit> HexSphereWidget::pickSceneAt(int sx, int sy) const {
+    // Сначала проверяем объекты
+    auto entityHit = pickEntityAt(sx, sy);
+    if (entityHit) {
+        return entityHit;
+    }
+
+    // Если не попали в объект, проверяем ландшафт
+    auto terrainHit = pickTerrainAt(sx, sy);
+    if (terrainHit) {
+        return terrainHit;
+    }
+
+    return std::nullopt;
+}
+
+void HexSphereWidget::selectEntity(int entityId) {
+    // Снимаем выделение с предыдущего объекта
+    deselectEntity();
+
+    // Устанавливаем выделение новому объекту
+    selectedEntityId_ = entityId;
+    auto entityOpt = scene_.getEntity(entityId);
+    if (entityOpt) {
+        SceneEntity& entity = entityOpt->get();
+        entity.selected = true;
+    }
+
+    // Обновляем отрисовку
+    update();
+}
+
+void HexSphereWidget::deselectEntity() {
+    if (selectedEntityId_ != -1) {
+        auto entityOpt = scene_.getEntity(selectedEntityId_);
+        if (entityOpt) {
+            SceneEntity& entity = entityOpt->get();
+            entity.selected = false;
+        }
+        selectedEntityId_ = -1;
+    }
+}
+
+void HexSphereWidget::moveSelectedEntityToCell(int cellId) {
+    if (selectedEntityId_ == -1) return;
+
+    auto entityOpt = scene_.getEntity(selectedEntityId_);
+    if (!entityOpt) return;
+
+    SceneEntity& entity = entityOpt->get();
+
+    // Обновляем позицию и привязку к ячейке
+    if (cellId >= 0 && cellId < model_.cellCount()) {
+        const auto& cell = model_.cells()[cellId];
+        entity.currentCell = cellId;
+        entity.position = cell.centroid.normalized() * 1.02f; // немного выше поверхности
+
+        qDebug() << "Moved entity" << selectedEntityId_ << "to cell" << cellId;
+    }
+
+    update();
 }

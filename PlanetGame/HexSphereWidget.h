@@ -1,3 +1,4 @@
+// HexSphereWidget.h - исправленная объединенная версия
 #pragma once
 
 #include <QOpenGLWidget>
@@ -7,6 +8,8 @@
 #include <QSet>
 #include <QVector3D>
 #include <QTime>
+#include <QQuaternion>
+#include <QTimer>
 #include <optional>
 #include <vector>
 #include <memory>
@@ -16,6 +19,7 @@
 #include "TerrainGenerator.h"
 #include "SceneGraph.h"
 #include "PathBuilder.h"
+#include "ModelHandler.h"
 
 class QMouseEvent;
 class QWheelEvent;
@@ -60,6 +64,14 @@ protected:
     void keyPressEvent(QKeyEvent*) override;
 
 private:
+    // -------- Water & Environment --------
+    GLuint envCubemap_ = 0;
+    GLint uEnvMap_ = -1;
+    void generateEnvCubemap();
+
+    QTimer* waterTimer_ = nullptr;
+    float waterTime_ = 0.0f; // накапливаемое время для анимации
+
     // -------- Lighting & Water --------
     GLuint progWater_ = 0;
     GLint uMVP_Water_ = -1, uTime_Water_ = -1, uLightDir_Water_ = -1, uViewPos_Water_ = -1;
@@ -70,10 +82,11 @@ private:
 
     // -------- Camera --------
     float  distance_ = 2.2f;
-    float  yaw_ = 0.0f;    // radians
-    float  pitch_ = 0.3f;  // radians
+    float  yaw_ = 0.0f;    // radians (сохранено для совместимости)
+    float  pitch_ = 0.3f;  // radians (сохранено для совместимости)
     QPoint lastPos_;
     bool   rotating_ = false;
+    QQuaternion sphereRotation_;  // текущее вращение планеты
 
     QMatrix4x4 view_;
     QMatrix4x4 proj_;
@@ -113,6 +126,17 @@ private:
     GLuint vaoWater_ = 0, vboWaterPos_ = 0, iboWater_ = 0;
     GLsizei waterIndexCount_ = 0;
 
+    // -------- 3D Models --------
+    ModelHandler treeModel_;
+    GLuint progModel_ = 0;
+    GLuint progModelTextured_ = 0;
+    GLint uMVP_Model_ = -1;
+    GLint uModel_Model_ = -1;
+    GLint uLightDir_Model_ = -1;
+    GLint uViewPos_Model_ = -1;
+    GLint uColor_Model_ = -1;
+    GLint uUseTexture_ = -1;
+
     // -------- CPU model --------
     IcosphereBuilder icoBuilder_;
     IcoMesh          ico_;
@@ -126,6 +150,7 @@ private:
 
     // -------- Selection --------
     QSet<int> selectedCells_;
+    int selectedEntityId_ = -1; // Для управления выделением объектов
 
     // -------- Параметры «планеты» --------
     float heightStep_ = 0.06f;
@@ -149,13 +174,21 @@ private:
     void clearPath();
 
     // Камера/пикинг
-    struct PickHit { int cellId; QVector3D pos; float t; };
+    struct PickHit {
+        int cellId;
+        int entityId; // ID объекта сцены (-1 если не объект)
+        QVector3D pos;
+        float t;
+        bool isEntity; // true если попали в объект, false если в ландшафт
+    };
 
     void      updateCamera();
     QVector3D rayOrigin() const;
     QVector3D rayDirectionFromScreen(int sx, int sy) const;
     std::optional<int> pickCellAt(int sx, int sy);
     std::optional<PickHit> pickTerrainAt(int sx, int sy) const;
+    std::optional<PickHit> pickEntityAt(int sx, int sy) const;
+    std::optional<PickHit> pickSceneAt(int sx, int sy) const; // объединяет ландшафт и объекты
 
     // GL helpers
     GLuint makeProgram(const char* vs, const char* fs);
@@ -163,6 +196,15 @@ private:
     // SceneGraph & Water
     void initPyramidGeometry();
     void createWaterGeometry();
+
+    // 3D Models helpers
+    void orientToSurfaceNormal(QMatrix4x4& matrix, const QVector3D& normal);
+    QVector3D getSurfacePoint(int cellId) const;
+
+    // Управление выделением объектов
+    void selectEntity(int entityId);
+    void deselectEntity();
+    void moveSelectedEntityToCell(int cellId);
 
     // Автоматический расчет heightStep
     float autoHeightStep() const {
