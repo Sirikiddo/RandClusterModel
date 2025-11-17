@@ -10,8 +10,6 @@
 #include <string>
 #include <cmath>
 #include <QLabel>
-#include <iostream>
-#include <QDebug>
 
 // ─── Шейдеры ───────────────────────────────────────────────────────────────────
 static const char* VS_WIRE = R"GLSL(
@@ -24,9 +22,7 @@ void main(){ gl_Position = uMVP * vec4(aPos,1.0); }
 static const char* FS_WIRE = R"GLSL(
 #version 330 core
 out vec4 FragColor;
-void main(){ 
-    FragColor = vec4(1.0, 0.0, 0.0, 1.0); // Красный обратно
-}
+void main(){ FragColor = vec4(1.0,0.0,0.0,1.0); }
 )GLSL";
 
 static const char* VS_TERRAIN = R"GLSL(
@@ -94,51 +90,145 @@ void main(){ FragColor = vec4(1.0,1.0,0.2,1.0); }
 static const char* VS_WATER = R"GLSL(
 #version 330 core
 layout(location=0) in vec3 aPos;
+layout(location=1) in float aIsEdge; // 0.0 - центр, 1.0 - край
+
 uniform mat4 uMVP;
+uniform mat4 uModel;
 uniform float uTime;
-out vec3 vPos;
+
+out vec3 vWorldPos;
+out vec3 vNormal;
+out vec2 vTexCoord;
+
+// Шум для более сложных волн
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
 void main() {
-    vPos = aPos;
-    // слегка "дышит" по синусу
-    float wave = sin(aPos.x*4.0 + uTime*1.2) * 0.02
-               + sin(aPos.z*3.0 + uTime*0.7) * 0.02;
-    vec3 displaced = aPos + normalize(aPos) * wave;
+    // Генерация текстурных координат из позиции
+    vTexCoord = aPos.xz * 2.0;
+    
+    // СИЛЬНЫЕ волны в центре - УВЕЛИЧИВАЕМ ЕЩЕ!
+    float wave1 = sin(aPos.x * 3.5 + uTime * 2.2) * 0.06;  // УВЕЛИЧЕНО с 0.04
+    float wave2 = sin(aPos.z * 2.8 + uTime * 1.9) * 0.05;  // УВЕЛИЧЕНО с 0.03
+    float noiseWave = noise(vec2(aPos.x * 2.5 + uTime * 1.3, aPos.z * 2.5)) * 0.04; // УВЕЛИЧЕНО с 0.025
+    float noiseWave2 = noise(vec2(aPos.x * 5.0 - uTime * 1.1, aPos.z * 5.0)) * 0.03; // УВЕЛИЧЕНО с 0.02
+    
+    // Комбинируем СИЛЬНЫЕ волны
+    float totalWave = max(wave1 + wave2 + noiseWave + noiseWave2, 0.0);
+    
+    // ПРИКРЕПЛЯЕМ КРАЯ: если это край ячейки (aIsEdge > 0.5), то волны минимальны
+    // Но в центре даем полную силу волн
+    float edgeFactor = 1.0 - aIsEdge; // 1.0 в центре, 0.0 на краях
+    totalWave *= edgeFactor; // В центре - полные волны, на краях - почти нет
+    
+    // Смещение - уровень моря + СИЛЬНЫЕ волны
+    vec3 displaced = vec3(aPos.x, aPos.y + totalWave, aPos.z);
+    vWorldPos = displaced;
+    
+    // Вычисление нормали для СИЛЬНЫХ волн
+    float h = 0.01;
+    float dx = noise(vec2((aPos.x + h) * 2.5 + uTime * 1.3, aPos.z * 2.5)) - 
+               noise(vec2((aPos.x - h) * 2.5 + uTime * 1.3, aPos.z * 2.5));
+    float dz = noise(vec2(aPos.x * 2.5 + uTime * 1.3, (aPos.z + h) * 2.5)) - 
+               noise(vec2(aPos.x * 2.5 + uTime * 1.3, (aPos.z - h) * 2.5));
+    
+    // Усиливаем нормали в центре, уменьшаем на краях
+    dx *= edgeFactor * 3.5; // УСИЛЕНО с 2.5
+    dz *= edgeFactor * 3.5; // УСИЛЕНО с 2.5
+    
+    vNormal = normalize(vec3(-dx * 2.5, 2.0, -dz * 2.5)); // УСИЛЕНО
+    
     gl_Position = uMVP * vec4(displaced, 1.0);
 }
 )GLSL";
 
 static const char* FS_WATER = R"GLSL(
 #version 330 core
-in vec3 vPos;
+in vec3 vWorldPos;
+in vec3 vNormal;
+in vec2 vTexCoord;
+
 out vec4 FragColor;
+
+uniform float uTime;
 uniform vec3 uLightDir;
 uniform vec3 uViewPos;
-uniform float uTime;
+uniform samplerCube uEnvMap;
+
+// Шумовые функции
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+               mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+float fresnel(vec3 normal, vec3 viewDir) {
+    return pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0);
+}
 
 void main() {
-    // нормаль как слегка колеблющаяся по шуму (приближённо)
-    vec3 N = normalize(vPos + vec3(
-        0.05*sin(vPos.z*6.0 + uTime*1.0),
-        0.05*sin(vPos.x*6.0 + uTime*0.8),
-        0.05*sin(vPos.y*6.0 + uTime*1.3)
-    ));
-    vec3 L = normalize(-uLightDir);
-    vec3 V = normalize(uViewPos - vPos);
-    vec3 R = reflect(-L, N);
-
-    float diff = max(dot(N,L),0.0);
-    float spec = pow(max(dot(V,R),0.0), 64.0);
-
-    vec3 base = vec3(0.0,0.3,0.6);
-    vec3 ambient = 0.3 * base;
-    vec3 diffuse = 0.5 * diff * base;
-    vec3 specular = 0.8 * spec * vec3(1.0);
-
-    FragColor = vec4(ambient + diffuse + specular, 0.8);
+    vec3 viewDir = normalize(uViewPos - vWorldPos);
+    vec3 normal = normalize(vNormal);
+    
+    // ЕДИНЫЙ СИНИЙ ЦВЕТ ВОДЫ
+    vec3 waterColor = vec3(0.0, 0.15, 0.5);
+    
+    // ОТРАЖЕНИЯ - УСИЛИВАЕМ для ОЧЕНЬ больших волн
+    vec3 reflectDir = reflect(-viewDir, normal);
+    vec3 reflection = texture(uEnvMap, reflectDir).rgb;
+    
+    // Френель - УСИЛИВАЕМ отражения
+    float fresnelFactor = fresnel(normal, viewDir);
+    
+    // Освещение - УСИЛИВАЕМ для ЯРКИХ волн
+    vec3 lightDir = normalize(-uLightDir);
+    float diff = max(dot(normal, lightDir), 0.0);
+    vec3 diffuse = diff * waterColor * 0.8; // УВЕЛИЧЕНО с 0.6
+    
+    // Спекулярные блики - ДЕЛАЕМ ОЧЕНЬ ЯРКИМИ для больших волн
+    vec3 halfDir = normalize(lightDir + viewDir);
+    float spec = pow(max(dot(normal, halfDir), 0.0), 48.0); // Меньшая степень = больше бликов
+    vec3 specular = spec * vec3(1.3, 1.3, 1.6) * 1.2; // УСИЛЕНО
+    
+    // Комбинируем цвет с ОЧЕНЬ УСИЛЕННЫМИ эффектами
+    vec3 base = waterColor + diffuse;
+    vec3 finalColor = mix(base, reflection, fresnelFactor * 0.95); // БОЛЬШЕ отражений
+    
+    // Добавляем ОЧЕНЬ ЯРКИЕ блики
+    finalColor += specular;
+    
+    // ЗАМЕТНАЯ рябь для цвета
+    float colorNoise = noise(vTexCoord * 2.5 + uTime * 0.6) * 0.3 + 0.7;
+    finalColor *= colorNoise;
+    
+    // Прозрачность
+    float alpha = 0.9 + fresnelFactor * 0.08;
+    
+    FragColor = vec4(finalColor, alpha);
 }
 )GLSL";
 
-// ─── Models Shader ─────────────────────────────────────────────────────────────
 static const char* VS_MODEL = R"GLSL(
 #version 330 core
 layout(location=0) in vec3 aPos;
@@ -210,7 +300,6 @@ HexSphereWidget::HexSphereWidget(QWidget* parent) : QOpenGLWidget(parent) {
 HexSphereWidget::~HexSphereWidget() {
     makeCurrent();
 
-    // Очищаем ModelHandler ДО удаления других ресурсов
     if (QOpenGLContext::currentContext()) {
         treeModel_.clearGPUResources();
     }
@@ -220,7 +309,6 @@ HexSphereWidget::~HexSphereWidget() {
     if (progSel_)     this->glDeleteProgram(progSel_);
     if (progWater_)   this->glDeleteProgram(progWater_);
     if (progModel_)   this->glDeleteProgram(progModel_);
-    if (progModelTextured_) this->glDeleteProgram(progModelTextured_);
 
     if (vaoWire_)     this->glDeleteVertexArrays(1, &vaoWire_);
     if (vaoTerrain_)  this->glDeleteVertexArrays(1, &vaoTerrain_);
@@ -238,7 +326,6 @@ HexSphereWidget::~HexSphereWidget() {
     if (vboPyramid_)     this->glDeleteBuffers(1, &vboPyramid_);
     if (vboWaterPos_)    this->glDeleteBuffers(1, &vboWaterPos_);
     if (iboWater_)       this->glDeleteBuffers(1, &iboWater_);
-
     if (waterTimer_) {
         waterTimer_->stop();
     }
@@ -304,23 +391,23 @@ void HexSphereWidget::initializeGL() {
     progModel_ = makeProgram(VS_MODEL, FS_MODEL);
 
     // Получаем uniform locations
-    this->glUseProgram(progWire_);
-    uMVP_Wire_ = this->glGetUniformLocation(progWire_, "uMVP");
-
+    this->glUseProgram(progWire_);    uMVP_Wire_ = this->glGetUniformLocation(progWire_, "uMVP");
     this->glUseProgram(progTerrain_);
     uMVP_Terrain_ = this->glGetUniformLocation(progTerrain_, "uMVP");
     uModel_ = this->glGetUniformLocation(progTerrain_, "uModel");
     uLightDir_ = this->glGetUniformLocation(progTerrain_, "uLightDir");
-
-    this->glUseProgram(progSel_);
-    uMVP_Sel_ = this->glGetUniformLocation(progSel_, "uMVP");
-
+    this->glUseProgram(progSel_);     uMVP_Sel_ = this->glGetUniformLocation(progSel_, "uMVP");
+    // water
     this->glUseProgram(progWater_);
     uMVP_Water_ = this->glGetUniformLocation(progWater_, "uMVP");
     uTime_Water_ = this->glGetUniformLocation(progWater_, "uTime");
     uLightDir_Water_ = this->glGetUniformLocation(progWater_, "uLightDir");
     uViewPos_Water_ = this->glGetUniformLocation(progWater_, "uViewPos");
-
+    uEnvMap_ = this->glGetUniformLocation(progWater_, "uEnvMap");
+    generateEnvCubemap();
+    this->glUseProgram(0);
+    waterTimer_->start(16);
+    qDebug() << "Water timer started";
     this->glUseProgram(progModel_);
     uMVP_Model_ = this->glGetUniformLocation(progModel_, "uMVP");
     uModel_Model_ = this->glGetUniformLocation(progModel_, "uModel");
@@ -330,8 +417,6 @@ void HexSphereWidget::initializeGL() {
     uUseTexture_ = this->glGetUniformLocation(progModel_, "uUseTexture");
 
     this->glUseProgram(0);
-    waterTimer_->start(16);
-    qDebug() << "Water timer started";
 
     // Инициализация генератора рельефа по умолчанию - CLIMATE
     setGenerator(std::make_unique<ClimateBiomeTerrainGenerator>());
@@ -457,19 +542,44 @@ void HexSphereWidget::paintGL() {
         this->glBindVertexArray(0);
     }
 
-    // Рендеринг воды
+    // рендеринг воды
     if (waterIndexCount_ > 0 && progWater_) {
         this->glUseProgram(progWater_);
+
+        // Устанавливаем uniform-переменные
         this->glUniformMatrix4fv(uMVP_Water_, 1, GL_FALSE, mvp.constData());
+
+        // передаём время для анимации
         this->glUniform1f(uTime_Water_, waterTime_);
+
+        // Передаем параметры освещения и камеры
         this->glUniform3f(uLightDir_Water_, lightDir_.x(), lightDir_.y(), lightDir_.z());
         this->glUniform3f(uViewPos_Water_, cameraPos.x(), cameraPos.y(), cameraPos.z());
+
+        // Активируем кубическую карту (если используешь расширенную версию)
+        if (uEnvMap_ != -1 && envCubemap_ != 0) {
+            this->glActiveTexture(GL_TEXTURE0);
+            this->glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap_);
+            this->glUniform1i(uEnvMap_, 0);
+        }
+
+        // Включаем blending для прозрачности
         this->glEnable(GL_BLEND);
         this->glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        // Отключаем запись в буфер глубины для воды
+        this->glDepthMask(GL_FALSE);
+
+        // Рендерим всю воду одним вызовом
         this->glBindVertexArray(vaoWater_);
         this->glDrawElements(GL_TRIANGLES, waterIndexCount_, GL_UNSIGNED_INT, nullptr);
         this->glBindVertexArray(0);
+
+        // Восстанавливаем настройки
+        this->glDepthMask(GL_TRUE);
         this->glDisable(GL_BLEND);
+
+        // qDebug() << "Water rendered:" << waterIndexCount_ << "indices, time:" << currentTime;
     }
 
     // Рендеринг объектов сцены (пирамиды)
@@ -519,7 +629,13 @@ void HexSphereWidget::paintGL() {
         this->glDrawArrays(GL_LINE_STRIP, 0, pathVertexCount_);
     }
 
-    // Рендеринг деревьев на травяных ячейках
+    if (uEnvMap_ != -1 && envCubemap_ != 0) {
+        this->glActiveTexture(GL_TEXTURE0);
+        this->glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap_);
+        this->glUniform1i(uEnvMap_, 0);
+    }
+
+    // Рендеринг деревьев
     if (treeModel_.isInitialized() && progModel_ != 0 && !treeModel_.isEmpty()) {
         this->glUseProgram(progModel_);
 
@@ -567,12 +683,15 @@ void HexSphereWidget::orientToSurfaceNormal(QMatrix4x4& matrix, const QVector3D&
     QVector3D right = QVector3D::crossProduct(forward, up).normalized();
     forward = QVector3D::crossProduct(up, right).normalized();
 
-    // Случайное вращение вокруг вертикальной оси для разнообразия
-    float randomAngle = (float)(qHash(reinterpret_cast<const char*>(&normal), 0) % 360);
-    QMatrix4x4 randomRot;
-    randomRot.rotate(randomAngle, up);
-    forward = randomRot.map(forward);
-    right = randomRot.map(right);
+    // ВМЕСТО случайного вращения используем детерминированное на основе позиции дерева
+    // Это обеспечит одинаковую ориентацию при каждом рендеринге
+    QVector3D treePos = matrix.column(3).toVector3D(); // получаем позицию дерева из матрицы
+    float deterministicAngle = (treePos.x() * 100.0f + treePos.y() * 200.0f + treePos.z() * 300.0f);
+
+    QMatrix4x4 fixedRot;
+    fixedRot.rotate(deterministicAngle, up);
+    forward = fixedRot.map(forward);
+    right = fixedRot.map(right);
 
     QMatrix4x4 rotation;
     rotation.setColumn(0, QVector4D(right, 0.0f));
@@ -793,29 +912,35 @@ void HexSphereWidget::createWaterGeometry() {
     const auto& dual = model_.dualVerts();
 
     std::vector<float> waterPos;
+    std::vector<float> waterEdgeFlags;
     std::vector<uint32_t> waterIndices;
 
-    // Собираем вершины и индексы только для водных ячеек
-    for (const auto& cell : cells) {
-        if (cell.biome != Biome::Sea) continue;
+    // ВЫСОТА ДНА для всех морских ячеек - УБИРАЕМ ДНО!
+    const float SEA_LEVEL = 1.0f;
 
+    // Создаем воду ТОЛЬКО ДЛЯ ПОВЕРХНОСТИ (без дна)
+    for (size_t cellIdx = 0; cellIdx < cells.size(); ++cellIdx) {
+        const auto& cell = cells[cellIdx];
+        if (cell.biome != Biome::Sea) continue;
         if (cell.poly.size() < 3) continue;
 
-        // Центр ячейки (немного выше для избежания z-fighting)
-        QVector3D center = cell.centroid.normalized() * (1.0f + cell.height * heightStep_ + 0.001f);
+        // Центр ячейки на уровне моря - ЭТО НЕ КРАЙ (flag = 0.0)
         int centerIndex = waterPos.size() / 3;
+        QVector3D center = cell.centroid.normalized() * SEA_LEVEL;
         waterPos.insert(waterPos.end(), { center.x(), center.y(), center.z() });
+        waterEdgeFlags.push_back(0.0f); // Центр - не край
 
-        // Вершины полигона (также приподнятые)
+        // Вершины по краям ячейки - ЭТО КРАЯ (flag = 1.0)
         std::vector<int> vertexIndices;
         for (int dv : cell.poly) {
             const QVector3D& vert = dual[size_t(dv)];
-            QVector3D waterVert = vert.normalized() * (1.0f + cell.height * heightStep_ + 0.001f);
+            QVector3D waterVert = vert.normalized() * SEA_LEVEL;
             vertexIndices.push_back(waterPos.size() / 3);
             waterPos.insert(waterPos.end(), { waterVert.x(), waterVert.y(), waterVert.z() });
+            waterEdgeFlags.push_back(1.0f); // Край ячейки
         }
 
-        // Создаем треугольники веером от центра
+        // Создаем треугольники веером от центра - ТОЛЬКО ПОВЕРХНОСТЬ
         int numVertices = vertexIndices.size();
         for (int i = 0; i < numVertices; ++i) {
             waterIndices.push_back(centerIndex);
@@ -824,11 +949,20 @@ void HexSphereWidget::createWaterGeometry() {
         }
     }
 
-    // Загружаем данные в буферы воды
+    // Загружаем данные в буферы
     this->glBindBuffer(GL_ARRAY_BUFFER, vboWaterPos_);
     this->glBufferData(GL_ARRAY_BUFFER,
         waterPos.size() * sizeof(float),
         waterPos.empty() ? nullptr : waterPos.data(),
+        GL_STATIC_DRAW);
+
+    // Создаем отдельный буфер для флагов краев
+    GLuint vboWaterEdgeFlags;
+    this->glGenBuffers(1, &vboWaterEdgeFlags);
+    this->glBindBuffer(GL_ARRAY_BUFFER, vboWaterEdgeFlags);
+    this->glBufferData(GL_ARRAY_BUFFER,
+        waterEdgeFlags.size() * sizeof(float),
+        waterEdgeFlags.empty() ? nullptr : waterEdgeFlags.data(),
         GL_STATIC_DRAW);
 
     this->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboWater_);
@@ -837,7 +971,23 @@ void HexSphereWidget::createWaterGeometry() {
         waterIndices.empty() ? nullptr : waterIndices.data(),
         GL_STATIC_DRAW);
 
+    // Обновляем VAO для воды с новым атрибутом
+    this->glBindVertexArray(vaoWater_);
+    this->glBindBuffer(GL_ARRAY_BUFFER, vboWaterPos_);
+    this->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    this->glEnableVertexAttribArray(0);
+
+    this->glBindBuffer(GL_ARRAY_BUFFER, vboWaterEdgeFlags);
+    this->glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
+    this->glEnableVertexAttribArray(1);
+
+    this->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboWater_);
+    this->glBindVertexArray(0);
+
     waterIndexCount_ = static_cast<GLsizei>(waterIndices.size());
+
+    qDebug() << "=== TRANSPARENT WATER SURFACE (NO BOTTOM) ===";
+    qDebug() << "Water surface triangles:" << waterIndexCount_ / 3;
 }
 
 // ─── Пути и навигация ────────────────────────────────────────────────────────
@@ -867,7 +1017,7 @@ void HexSphereWidget::updateCamera() {
 
     view_.lookAt(eye, center, up);
 
-    // Вращение применяется ко всей сцене (планете) - сохранено из HexSphereWidget.cpp
+    // Вращение применяется ко всей сцене (планете)
     view_.rotate(sphereRotation_);
 }
 
@@ -1281,4 +1431,34 @@ void HexSphereWidget::moveSelectedEntityToCell(int cellId) {
     }
 
     update();
+}
+
+void HexSphereWidget::generateEnvCubemap() {
+    if (envCubemap_) return;
+
+    this->glGenTextures(1, &envCubemap_);
+    this->glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap_);
+
+    // Создаем простую кубическую карту (можно загрузить реальные текстуры)
+    const int size = 512;
+    for (unsigned int i = 0; i < 6; ++i) {
+        std::vector<unsigned char> data(size * size * 3);
+        for (int y = 0; y < size; ++y) {
+            for (int x = 0; x < size; ++x) {
+                int idx = (y * size + x) * 3;
+                // Простой градиент неба
+                data[idx] = 100 + (y * 155 / size);     // R
+                data[idx + 1] = 150 + (y * 105 / size); // G  
+                data[idx + 2] = 255;                    // B
+            }
+        }
+        this->glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB,
+            size, size, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data());
+    }
+
+    this->glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    this->glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    this->glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    this->glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    this->glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 }
