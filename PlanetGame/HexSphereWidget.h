@@ -20,6 +20,7 @@
 #include "SceneGraph.h"
 #include "PathBuilder.h"
 #include "ModelHandler.h"
+#include "PerformanceStats.h"
 
 class QMouseEvent;
 class QWheelEvent;
@@ -64,6 +65,18 @@ protected:
     void keyPressEvent(QKeyEvent*) override;
 
 private:
+    // Статистика производительности
+    PerformanceStats stats_;
+
+    // Флаги оптимизации
+    bool useStaticBuffers_ = true;
+    GLenum terrainBufferUsage_ = GL_STATIC_DRAW;
+    GLenum wireBufferUsage_ = GL_STATIC_DRAW;
+
+    // Методы оптимизации
+    void updateBufferUsageStrategy();
+    void optimizeTerrainBuffers();
+
     // -------- Water & Environment --------
     GLuint envCubemap_ = 0;
     GLint uEnvMap_ = -1;

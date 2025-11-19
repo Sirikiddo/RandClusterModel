@@ -10,6 +10,7 @@
 #include <string>
 #include <cmath>
 #include <QLabel>
+#include <functional>
 
 // ─── Шейдеры ───────────────────────────────────────────────────────────────────
 static const char* VS_WIRE = R"GLSL(
@@ -90,7 +91,6 @@ void main(){ FragColor = vec4(1.0,1.0,0.2,1.0); }
 static const char* VS_WATER = R"GLSL(
 #version 330 core
 layout(location=0) in vec3 aPos;
-layout(location=1) in float aIsEdge; // 0.0 - центр, 1.0 - край
 
 uniform mat4 uMVP;
 uniform mat4 uModel;
@@ -122,41 +122,36 @@ void main() {
     // Генерация текстурных координат из позиции
     vTexCoord = aPos.xz * 2.0;
     
-    // СИЛЬНЫЕ волны в центре - УВЕЛИЧИВАЕМ ЕЩЕ!
-    float wave1 = sin(aPos.x * 3.5 + uTime * 2.2) * 0.06;  // УВЕЛИЧЕНО с 0.04
-    float wave2 = sin(aPos.z * 2.8 + uTime * 1.9) * 0.05;  // УВЕЛИЧЕНО с 0.03
-    float noiseWave = noise(vec2(aPos.x * 2.5 + uTime * 1.3, aPos.z * 2.5)) * 0.04; // УВЕЛИЧЕНО с 0.025
-    float noiseWave2 = noise(vec2(aPos.x * 5.0 - uTime * 1.1, aPos.z * 5.0)) * 0.03; // УВЕЛИЧЕНО с 0.02
+    // Многослойный шум для сложных волн
+    float wave1 = sin(aPos.x * 4.0 + uTime * 1.5) * 0.02;
+    float wave2 = sin(aPos.z * 3.0 + uTime * 1.2) * 0.015;
     
-    // Комбинируем СИЛЬНЫЕ волны
-    float totalWave = max(wave1 + wave2 + noiseWave + noiseWave2, 0.0);
+    // Добавляем шум Перлина для более естественных волн
+    float noiseWave = noise(vec2(aPos.x * 3.0 + uTime * 0.8, aPos.z * 3.0)) * 0.01;
+    float noiseWave2 = noise(vec2(aPos.x * 6.0 - uTime * 0.6, aPos.z * 6.0)) * 0.005;
     
-    // ПРИКРЕПЛЯЕМ КРАЯ: если это край ячейки (aIsEdge > 0.5), то волны минимальны
-    // Но в центре даем полную силу волн
-    float edgeFactor = 1.0 - aIsEdge; // 1.0 в центре, 0.0 на краях
-    totalWave *= edgeFactor; // В центре - полные волны, на краях - почти нет
+    // Комбинируем все волны
+    float totalWave = wave1 + wave2 + noiseWave + noiseWave2;
     
-    // Смещение - уровень моря + СИЛЬНЫЕ волны
-    vec3 displaced = vec3(aPos.x, aPos.y + totalWave, aPos.z);
+    // Смещение по нормали (вверх)
+    vec3 displaced = aPos + vec3(0.0, totalWave, 0.0);
     vWorldPos = displaced;
     
-    // Вычисление нормали для СИЛЬНЫХ волн
+    // Вычисление нормали для волн
     float h = 0.01;
-    float dx = noise(vec2((aPos.x + h) * 2.5 + uTime * 1.3, aPos.z * 2.5)) - 
-               noise(vec2((aPos.x - h) * 2.5 + uTime * 1.3, aPos.z * 2.5));
-    float dz = noise(vec2(aPos.x * 2.5 + uTime * 1.3, (aPos.z + h) * 2.5)) - 
-               noise(vec2(aPos.x * 2.5 + uTime * 1.3, (aPos.z - h) * 2.5));
+    float dx = noise(vec2((aPos.x + h) * 3.0 + uTime * 0.8, aPos.z * 3.0)) - 
+               noise(vec2((aPos.x - h) * 3.0 + uTime * 0.8, aPos.z * 3.0));
+    float dz = noise(vec2(aPos.x * 3.0 + uTime * 0.8, (aPos.z + h) * 3.0)) - 
+               noise(vec2(aPos.x * 3.0 + uTime * 0.8, (aPos.z - h) * 3.0));
     
-    // Усиливаем нормали в центре, уменьшаем на краях
-    dx *= edgeFactor * 3.5; // УСИЛЕНО с 2.5
-    dz *= edgeFactor * 3.5; // УСИЛЕНО с 2.5
-    
-    vNormal = normalize(vec3(-dx * 2.5, 2.0, -dz * 2.5)); // УСИЛЕНО
+    vNormal = normalize(vec3(-dx * 2.0, 1.0, -dz * 2.0));
     
     gl_Position = uMVP * vec4(displaced, 1.0);
 }
 )GLSL";
 
+// ─── Water Fragment Shader (ИСПРАВЛЕННЫЙ) ───────────────────────────────────
+// ─── Water Fragment Shader (ИСПРАВЛЕННЫЙ ЦВЕТ) ───────────────────────────────────
 static const char* FS_WATER = R"GLSL(
 #version 330 core
 in vec3 vWorldPos;
@@ -183,47 +178,92 @@ float noise(vec2 p) {
                mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
 }
 
+float fbm(vec2 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    float frequency = 1.0;
+    
+    for (int i = 0; i < 4; i++) {
+        value += amplitude * noise(p * frequency);
+        amplitude *= 0.5;
+        frequency *= 2.0;
+    }
+    return value;
+}
+
 float fresnel(vec3 normal, vec3 viewDir) {
-    return pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0);
+    return pow(1.0 - max(dot(normal, viewDir), 0.0), 4.0);
 }
 
 void main() {
     vec3 viewDir = normalize(uViewPos - vWorldPos);
     vec3 normal = normalize(vNormal);
     
-    // ЕДИНЫЙ СИНИЙ ЦВЕТ ВОДЫ
-    vec3 waterColor = vec3(0.0, 0.15, 0.5);
+    // КРАСИВЫЙ СИНИЙ ЦВЕТ ВОДЫ С ПЕРЕЛИВАНИЕМ
+    float depth = max(0.0, 1.0 - length(vWorldPos) * 0.8);
     
-    // ОТРАЖЕНИЯ - УСИЛИВАЕМ для ОЧЕНЬ больших волн
+    // Основные цвета воды - глубокий синий с изумрудными оттенками
+    vec3 shallowColor = vec3(0.1, 0.4, 0.8);   // Бирюзово-синий для мелководья
+    vec3 deepColor = vec3(0.0, 0.15, 0.4);     // Глубокий синий
+    
+    // Добавляем легкие переливания цвета на основе шума
+    float colorVariation = fbm(vTexCoord * 0.5 + uTime * 0.1) * 0.2 - 0.1;
+    shallowColor.r += colorVariation * 0.1;
+    shallowColor.g += colorVariation * 0.2;
+    
+    vec3 waterColor = mix(deepColor, shallowColor, depth);
+    
+    // ОТРАЖЕНИЯ С ФРЕНЕЛЕМ
     vec3 reflectDir = reflect(-viewDir, normal);
     vec3 reflection = texture(uEnvMap, reflectDir).rgb;
     
-    // Френель - УСИЛИВАЕМ отражения
+    // Уменьшаем яркость отражений, чтобы не было белого
+    reflection *= 0.6;
+    
+    // Улучшенный френель
     float fresnelFactor = fresnel(normal, viewDir);
     
-    // Освещение - УСИЛИВАЕМ для ЯРКИХ волн
+    // ОСВЕЩЕНИЕ - уменьшаем интенсивность чтобы не было белого
     vec3 lightDir = normalize(-uLightDir);
     float diff = max(dot(normal, lightDir), 0.0);
-    vec3 diffuse = diff * waterColor * 0.8; // УВЕЛИЧЕНО с 0.6
     
-    // Спекулярные блики - ДЕЛАЕМ ОЧЕНЬ ЯРКИМИ для больших волн
+    // Диффузное освещение с СИНИМ оттенком
+    vec3 diffuse = diff * waterColor * 0.4; // Уменьшено с 0.6
+    
+    // СПЕКУЛЯРНЫЕ БЛИКИ - СИНИЕ вместо белых
     vec3 halfDir = normalize(lightDir + viewDir);
-    float spec = pow(max(dot(normal, halfDir), 0.0), 48.0); // Меньшая степень = больше бликов
-    vec3 specular = spec * vec3(1.3, 1.3, 1.6) * 1.2; // УСИЛЕНО
+    float spec = pow(max(dot(normal, halfDir), 0.0), 128.0); // Более резкие блики
     
-    // Комбинируем цвет с ОЧЕНЬ УСИЛЕННЫМИ эффектами
-    vec3 base = waterColor + diffuse;
-    vec3 finalColor = mix(base, reflection, fresnelFactor * 0.95); // БОЛЬШЕ отражений
+    // СИНИЕ блики вместо белых
+    vec3 specularColor = vec3(0.3, 0.5, 1.0); // Голубовато-синий
+    vec3 specular = spec * specularColor * 0.6; // Уменьшена интенсивность
     
-    // Добавляем ОЧЕНЬ ЯРКИЕ блики
+    // ПОДПОВЕРХНОСТНОЕ РАССЕЯНИЕ - СИНЕЕ
+    vec3 subsurface = vec3(0.0, 0.15, 0.3) * (1.0 - diff) * 0.2;
+    
+    // КОМБИНИРОВАНИЕ - сохраняем синий цвет
+    vec3 baseColor = waterColor + diffuse + subsurface;
+    
+    // Смешиваем с отражениями по френелю (меньше отражений)
+    vec3 finalColor = mix(baseColor, reflection, fresnelFactor * 0.4); // Уменьшено с 0.7
+    
+    // Добавляем синие блики
     finalColor += specular;
     
-    // ЗАМЕТНАЯ рябь для цвета
-    float colorNoise = noise(vTexCoord * 2.5 + uTime * 0.6) * 0.3 + 0.7;
-    finalColor *= colorNoise;
+    // ЛЕГКАЯ ТЕКСТУРА ПОВЕРХНОСТИ для переливов
+    float surfaceNoise = fbm(vTexCoord * 2.0 + uTime * 0.2) * 0.15 + 0.85;
+    finalColor *= surfaceNoise;
     
-    // Прозрачность
-    float alpha = 0.9 + fresnelFactor * 0.08;
+    // Добавляем легкие цветовые вариации для красоты
+    float hueShift = sin(uTime * 0.5 + vTexCoord.x * 3.0) * 0.05;
+    finalColor.g += hueShift * 0.1;
+    finalColor.b += hueShift * 0.05;
+    
+    // ПРОЗРАЧНОСТЬ С ГЛУБИНОЙ
+    float alpha = 0.8 + depth * 0.15 + fresnelFactor * 0.05;
+    
+    // Гарантируем, что цвет остается в синих тонах
+    finalColor = clamp(finalColor, 0.0, 1.0);
     
     FragColor = vec4(finalColor, alpha);
 }
@@ -382,7 +422,7 @@ void HexSphereWidget::initializeGL() {
     this->glEnable(GL_CULL_FACE);
     this->glCullFace(GL_BACK);
     this->glFrontFace(GL_CCW);
-
+    updateBufferUsageStrategy();
     // Компилируем шейдеры
     progWire_ = makeProgram(VS_WIRE, FS_WIRE);
     progTerrain_ = makeProgram(VS_TERRAIN, FS_TERRAIN);
@@ -488,7 +528,7 @@ void HexSphereWidget::initializeGL() {
     pyramid.name = "Explorer";
     pyramid.meshId = "pyramid";
     pyramid.currentCell = 0;
-    pyramid.position = QVector3D(0, 0, 1);
+    pyramid.position = getSurfacePoint(0); // Используем правильную начальную позицию
     pyramid.selected = true;
     scene_.addEntity(pyramid);
     initPyramidGeometry();
@@ -526,6 +566,7 @@ void HexSphereWidget::paintGL() {
     this->glClearColor(0.05f, 0.06f, 0.08f, 1.0f);
     this->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    stats_.startGPUTimer();
     QVector3D cameraPos = rayOrigin();
     updateCamera();
     const QMatrix4x4 mvp = proj_ * view_;
@@ -583,10 +624,19 @@ void HexSphereWidget::paintGL() {
     }
 
     // Рендеринг объектов сцены (пирамиды)
+    // Рендеринг объектов сцены (пирамиды)
     for (const auto& e : scene_.entities()) {
+        // Получаем позицию на поверхности с правильной высотой
+        QVector3D surfacePos = getSurfacePoint(e.currentCell);
+
         QMatrix4x4 model;
-        model.translate(e.position);
-        model.scale(0.05f);
+        model.translate(surfacePos); // Используем surfacePos вместо e.position
+
+        // Применяем ориентацию к нормали поверхности
+        QVector3D surfaceNormal = surfacePos.normalized();
+        orientToSurfaceNormal(model, surfaceNormal);
+
+        model.scale(0.08f); // Увеличенный размер
 
         // Если объект выделен, увеличиваем его немного
         if (e.selected) {
@@ -670,29 +720,38 @@ void HexSphereWidget::paintGL() {
             }
         }
     }
+
+    // Завершаем замер времени рендеринга
+    stats_.stopGPUTimer();
+
+    // Обновляем счетчик кадров
+    stats_.frameRendered();
+
+    // Выводим статистику в debug
+    static int frameCounter = 0;
+    if (frameCounter++ % 60 == 0) { // Каждые ~60 кадров
+        qDebug() << stats_.getStatsString();
+
+        // Детальная статистика при высоких нагрузках
+        if (L_ >= 4) {
+            qDebug() << stats_.getDetailedStats();
+        }
+    }
 }
 
 void HexSphereWidget::orientToSurfaceNormal(QMatrix4x4& matrix, const QVector3D& normal) {
     QVector3D up = normal.normalized();
-    QVector3D forward = QVector3D(0, 0, 1);
 
-    if (qAbs(QVector3D::dotProduct(up, forward)) > 0.99f) {
-        forward = QVector3D(1, 0, 0);
-    }
+    // Выбираем произвольный вектор, не параллельный нормали
+    QVector3D forward = (qAbs(QVector3D::dotProduct(up, QVector3D(0, 0, 1))) > 0.99f)
+        ? QVector3D(1, 0, 0)
+        : QVector3D(0, 0, 1);
 
+    // Создаем ортонормированный базис
     QVector3D right = QVector3D::crossProduct(forward, up).normalized();
     forward = QVector3D::crossProduct(up, right).normalized();
 
-    // ВМЕСТО случайного вращения используем детерминированное на основе позиции дерева
-    // Это обеспечит одинаковую ориентацию при каждом рендеринге
-    QVector3D treePos = matrix.column(3).toVector3D(); // получаем позицию дерева из матрицы
-    float deterministicAngle = (treePos.x() * 100.0f + treePos.y() * 200.0f + treePos.z() * 300.0f);
-
-    QMatrix4x4 fixedRot;
-    fixedRot.rotate(deterministicAngle, up);
-    forward = fixedRot.map(forward);
-    right = fixedRot.map(right);
-
+    // Создаем матрицу вращения
     QMatrix4x4 rotation;
     rotation.setColumn(0, QVector4D(right, 0.0f));
     rotation.setColumn(1, QVector4D(up, 0.0f));
@@ -708,15 +767,24 @@ QVector3D HexSphereWidget::getSurfacePoint(int cellId) const {
         return QVector3D(0, 0, 1.0f);
 
     const Cell& cell = cells[(size_t)cellId];
-    return cell.centroid.normalized() * (1.0f + cell.height * heightStep_);
+
+    // Учитываем высоту ячейки и добавляем небольшой отступ
+    float surfaceHeight = 1.0f + cell.height * heightStep_;
+
+    // ДОБАВЛЯЕМ дополнительный отступ для объектов, чтобы они не проваливались
+    float objectOffset = 0.03f; // Отступ над поверхностью
+
+    return cell.centroid.normalized() * (surfaceHeight + objectOffset);
 }
 
 // ─── Build/Upload ─────────────────────────────────────────────────────────────
 void HexSphereWidget::rebuildModel() {
+    // Обновляем стратегию буферов перед перестройкой
+    updateBufferUsageStrategy();
+
     ico_ = icoBuilder_.build(L_);
     model_.rebuildFromIcosphere(ico_);
 
-    // ГЕНЕРАЦИЯ РЕЛЬЕФА - ключевое улучшение из версии 1
     if (generator_) {
         generator_->generate(model_, genParams_);
     }
@@ -735,15 +803,28 @@ void HexSphereWidget::rebuildModel() {
 void HexSphereWidget::uploadWireBuffers() {
     if (!glReady_) { gpuDirty_ = true; return; }
     makeCurrent();
+
     const auto& V = model_.dualVerts();
-    std::vector<float> lineVerts; lineVerts.reserve(model_.wireEdges().size() * 6);
+    std::vector<float> lineVerts;
+    lineVerts.reserve(model_.wireEdges().size() * 6);
+
     for (auto [a, b] : model_.wireEdges()) {
-        const auto& pa = V[size_t(a)]; const auto& pb = V[size_t(b)];
+        const auto& pa = V[size_t(a)];
+        const auto& pb = V[size_t(b)];
         lineVerts.insert(lineVerts.end(), { pa.x(),pa.y(),pa.z(), pb.x(),pb.y(),pb.z() });
     }
+
     this->glBindBuffer(GL_ARRAY_BUFFER, vboPositions_);
-    this->glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(lineVerts.size() * sizeof(float)), lineVerts.data(), GL_STATIC_DRAW);
+    this->glBufferData(GL_ARRAY_BUFFER,
+        GLsizeiptr(lineVerts.size() * sizeof(float)),
+        lineVerts.data(),
+        wireBufferUsage_);
+
     lineVertexCount_ = GLsizei(lineVerts.size() / 3);
+
+    // Обновляем статистику
+    stats_.updateMemoryStats(lineVertexCount_, 0, 0);
+
     doneCurrent();
 }
 
@@ -751,18 +832,16 @@ void HexSphereWidget::uploadTerrainBuffers() {
     if (!glReady_) { gpuDirty_ = true; return; }
     makeCurrent();
 
+    // НАЧАЛО ЗАМЕРА ВРЕМЕНИ
+    stats_.startGPUTimer();
+
     TerrainTessellator tt;
     tt.R = 1.0f;
-
-    // Адаптивный heightStep в зависимости от уровня детализации (из версии 1)
     heightStep_ = autoHeightStep();
     tt.heightStep = heightStep_;
-
     tt.inset = stripInset_;
     tt.smoothMaxDelta = smoothOneStep_ ? 1 : 0;
     tt.outerTrim = 0.15f;
-
-    // Включаем все этапы рендеринга для плавности
     tt.doCaps = true;
     tt.doBlades = true;
     tt.doCornerTris = true;
@@ -776,7 +855,7 @@ void HexSphereWidget::uploadTerrainBuffers() {
     const GLsizeiptr vbNorm = GLsizeiptr(terrainCPU_.norm.size() * sizeof(float));
     const GLsizeiptr ib = GLsizeiptr(terrainCPU_.idx.size() * sizeof(uint32_t));
 
-    // Позиции
+    // Позиции - ВОЗВРАЩАЕМ ОРИГИНАЛЬНУЮ ЛОГИКУ
     this->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
     this->glBufferData(GL_ARRAY_BUFFER, vbPos, terrainCPU_.pos.empty() ? nullptr : terrainCPU_.pos.data(), GL_DYNAMIC_DRAW);
 
@@ -784,7 +863,7 @@ void HexSphereWidget::uploadTerrainBuffers() {
     this->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainCol_);
     this->glBufferData(GL_ARRAY_BUFFER, vbCol, terrainCPU_.col.empty() ? nullptr : terrainCPU_.col.data(), GL_DYNAMIC_DRAW);
 
-    // Нормали (ДОБАВЛЕНО из версии 2 для освещения)
+    // Нормали
     this->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainNorm_);
     this->glBufferData(GL_ARRAY_BUFFER, vbNorm, terrainCPU_.norm.empty() ? nullptr : terrainCPU_.norm.data(), GL_DYNAMIC_DRAW);
 
@@ -795,7 +874,17 @@ void HexSphereWidget::uploadTerrainBuffers() {
     this->glBindBuffer(GL_ARRAY_BUFFER, 0);
     terrainIndexCount_ = GLsizei(terrainCPU_.idx.size());
 
-    // Создаем геометрию воды (из версии 2)
+    // ОБНОВЛЯЕМ СТАТИСТИКУ
+    stats_.updateMemoryStats(
+        GLsizei(terrainCPU_.pos.size() / 3),
+        terrainIndexCount_,
+        terrainIndexCount_ / 3
+    );
+
+    // КОНЕЦ ЗАМЕРА ВРЕМЕНИ
+    stats_.stopGPUTimer();
+
+    // Создаем геометрию воды
     createWaterGeometry();
 
     doneCurrent();
@@ -918,6 +1007,55 @@ void HexSphereWidget::createWaterGeometry() {
     // ВЫСОТА ДНА для всех морских ячеек - УБИРАЕМ ДНО!
     const float SEA_LEVEL = 1.0f;
 
+    // Уровень детализации воды - подразделяем ячейки для плавных волн
+    const unsigned int WATER_SUBDIVISIONS = 3;
+
+    // Объявляем лямбду заранее и используем std::function для рекурсии
+    std::function<void(const QVector3D&, const QVector3D&, const QVector3D&,
+        float, float, float, unsigned int)> subdivideTriangle;
+
+    subdivideTriangle = [&](const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
+        float edge0, float edge1, float edge2, unsigned int level) {
+            if (level <= 0) {
+                // Базовый случай - добавляем треугольник
+                unsigned int i0 = static_cast<unsigned int>(waterPos.size() / 3);
+                waterPos.insert(waterPos.end(), { v0.x(), v0.y(), v0.z() });
+                waterEdgeFlags.push_back(edge0);
+
+                unsigned int i1 = static_cast<unsigned int>(waterPos.size() / 3);
+                waterPos.insert(waterPos.end(), { v1.x(), v1.y(), v1.z() });
+                waterEdgeFlags.push_back(edge1);
+
+                unsigned int i2 = static_cast<unsigned int>(waterPos.size() / 3);
+                waterPos.insert(waterPos.end(), { v2.x(), v2.y(), v2.z() });
+                waterEdgeFlags.push_back(edge2);
+
+                waterIndices.insert(waterIndices.end(), { i0, i1, i2 });
+                return;
+            }
+
+            // Рекурсивное подразделение
+            QVector3D mid01 = (v0 + v1) * 0.5f;
+            QVector3D mid12 = (v1 + v2) * 0.5f;
+            QVector3D mid20 = (v2 + v0) * 0.5f;
+
+            // Нормализуем средние точки к сфере
+            mid01 = mid01.normalized() * SEA_LEVEL;
+            mid12 = mid12.normalized() * SEA_LEVEL;
+            mid20 = mid20.normalized() * SEA_LEVEL;
+
+            // Средние значения флагов краев
+            float edge_mid01 = (edge0 + edge1) * 0.5f;
+            float edge_mid12 = (edge1 + edge2) * 0.5f;
+            float edge_mid20 = (edge2 + edge0) * 0.5f;
+
+            // Рекурсивно подразделяем 4 новых треугольника
+            subdivideTriangle(v0, mid01, mid20, edge0, edge_mid01, edge_mid20, level - 1);
+            subdivideTriangle(mid01, v1, mid12, edge_mid01, edge1, edge_mid12, level - 1);
+            subdivideTriangle(mid20, mid12, v2, edge_mid20, edge_mid12, edge2, level - 1);
+            subdivideTriangle(mid01, mid12, mid20, edge_mid01, edge_mid12, edge_mid20, level - 1);
+        };
+
     // Создаем воду ТОЛЬКО ДЛЯ ПОВЕРХНОСТИ (без дна)
     for (size_t cellIdx = 0; cellIdx < cells.size(); ++cellIdx) {
         const auto& cell = cells[cellIdx];
@@ -925,27 +1063,34 @@ void HexSphereWidget::createWaterGeometry() {
         if (cell.poly.size() < 3) continue;
 
         // Центр ячейки на уровне моря - ЭТО НЕ КРАЙ (flag = 0.0)
-        int centerIndex = waterPos.size() / 3;
         QVector3D center = cell.centroid.normalized() * SEA_LEVEL;
-        waterPos.insert(waterPos.end(), { center.x(), center.y(), center.z() });
-        waterEdgeFlags.push_back(0.0f); // Центр - не край
 
         // Вершины по краям ячейки - ЭТО КРАЯ (flag = 1.0)
-        std::vector<int> vertexIndices;
+        std::vector<QVector3D> vertices;
+        std::vector<float> vertexEdgeFlags;
+
         for (int dv : cell.poly) {
-            const QVector3D& vert = dual[size_t(dv)];
+            const QVector3D& vert = dual[static_cast<size_t>(dv)];
             QVector3D waterVert = vert.normalized() * SEA_LEVEL;
-            vertexIndices.push_back(waterPos.size() / 3);
-            waterPos.insert(waterPos.end(), { waterVert.x(), waterVert.y(), waterVert.z() });
-            waterEdgeFlags.push_back(1.0f); // Край ячейки
+            vertices.push_back(waterVert);
+            vertexEdgeFlags.push_back(1.0f); // Край ячейки
         }
 
-        // Создаем треугольники веером от центра - ТОЛЬКО ПОВЕРХНОСТЬ
-        int numVertices = vertexIndices.size();
-        for (int i = 0; i < numVertices; ++i) {
-            waterIndices.push_back(centerIndex);
-            waterIndices.push_back(vertexIndices[i]);
-            waterIndices.push_back(vertexIndices[(i + 1) % numVertices]);
+        // Создаем треугольники веером от центра с ПОДРАЗДЕЛЕНИЕМ
+        size_t numVertices = vertices.size();
+        for (size_t i = 0; i < numVertices; ++i) {
+            size_t next_i = (i + 1) % numVertices;
+
+            // Подразделяем каждый треугольник для плавных волн
+            subdivideTriangle(
+                center,                    // центр - не край (0.0)
+                vertices[i],               // вершина - край (1.0)  
+                vertices[next_i],          // следующая вершина - край (1.0)
+                0.0f,                      // центр - не край
+                vertexEdgeFlags[i],        // вершина - край
+                vertexEdgeFlags[next_i],   // следующая вершина - край
+                WATER_SUBDIVISIONS
+            );
         }
     }
 
@@ -986,8 +1131,10 @@ void HexSphereWidget::createWaterGeometry() {
 
     waterIndexCount_ = static_cast<GLsizei>(waterIndices.size());
 
-    qDebug() << "=== TRANSPARENT WATER SURFACE (NO BOTTOM) ===";
-    qDebug() << "Water surface triangles:" << waterIndexCount_ / 3;
+    qDebug() << "=== IMPROVED WATER GEOMETRY ===";
+    qDebug() << "Water vertices:" << waterPos.size() / 3;
+    qDebug() << "Water triangles:" << waterIndexCount_ / 3;
+    qDebug() << "Subdivision level:" << WATER_SUBDIVISIONS;
 }
 
 // ─── Пути и навигация ────────────────────────────────────────────────────────
@@ -1150,8 +1297,12 @@ void HexSphereWidget::keyPressEvent(QKeyEvent* e) {
         int next = c.neighbors[0]; // просто первый сосед
         if (next < 0) return;
         ent.currentCell = next;
-        ent.position = cells[(size_t)next].centroid.normalized();
+
+        // ИСПРАВЛЕНО: используем getSurfacePoint для правильного позиционирования
+        ent.position = getSurfacePoint(next);
+
         update();
+        break; // ДОБАВЬ break чтобы не проваливаться в следующий case!
     }
     case Qt::Key_Escape:
         // ESC - снять выделение
@@ -1218,7 +1369,11 @@ void HexSphereWidget::keyPressEvent(QKeyEvent* e) {
 void HexSphereWidget::setSubdivisionLevel(int L) {
     if (L != L_) {
         L_ = L;
-        // Автоматически пересчитываем шаг высоты для нового уровня
+        stats_.setSubdivisionLevel(L); // Обновляем уровень в статистике
+
+        // Обновляем стратегию использования буферов
+        updateBufferUsageStrategy();
+
         heightStep_ = autoHeightStep();
         rebuildModel();
         update();
@@ -1340,11 +1495,14 @@ std::optional<HexSphereWidget::PickHit> HexSphereWidget::pickEntityAt(int sx, in
     int bestEntityId = -1;
     QVector3D bestPos;
 
-    // Проверяем все объекты сцены (пока только пирамидки)
+    // Проверяем все объекты сцены
     for (const auto& entity : scene_.entities()) {
+        // ИСПРАВЛЕНО: используем getSurfacePoint для правильной позиции
+        QVector3D surfacePos = getSurfacePoint(entity.currentCell);
+
         // Простая проверка пересечения с bounding sphere объекта
-        float radius = 0.1f; // примерный радиус пирамидки
-        QVector3D center = entity.position;
+        float radius = 0.08f; // Увеличили радиус для большей пирамиды
+        QVector3D center = surfacePos;
 
         // Проверка пересечения луча со сферой
         QVector3D oc = ro - center;
@@ -1364,7 +1522,6 @@ std::optional<HexSphereWidget::PickHit> HexSphereWidget::pickEntityAt(int sx, in
     }
 
     if (bestEntityId >= 0) {
-        // ИСПРАВЛЕНО: создаем PickHit с правильными параметрами
         return PickHit{ -1, bestEntityId, bestPos, bestT, true };
     }
     return std::nullopt;
@@ -1425,9 +1582,12 @@ void HexSphereWidget::moveSelectedEntityToCell(int cellId) {
     if (cellId >= 0 && cellId < model_.cellCount()) {
         const auto& cell = model_.cells()[cellId];
         entity.currentCell = cellId;
-        entity.position = cell.centroid.normalized() * 1.02f; // немного выше поверхности
 
-        qDebug() << "Moved entity" << selectedEntityId_ << "to cell" << cellId;
+        // ИСПРАВЛЕНО: используем getSurfacePoint для правильного позиционирования
+        entity.position = getSurfacePoint(cellId);
+
+        qDebug() << "Moved entity" << selectedEntityId_ << "to cell" << cellId
+            << "at height:" << cell.height;
     }
 
     update();
@@ -1461,4 +1621,54 @@ void HexSphereWidget::generateEnvCubemap() {
     this->glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     this->glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     this->glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+}
+
+void HexSphereWidget::updateBufferUsageStrategy() {
+    // Для высоких уровней детализации используем динамические буферы
+    if (L_ >= 4) {
+        terrainBufferUsage_ = GL_DYNAMIC_DRAW;
+        wireBufferUsage_ = GL_DYNAMIC_DRAW;
+        useStaticBuffers_ = false;
+    }
+    else {
+        terrainBufferUsage_ = GL_STATIC_DRAW;
+        wireBufferUsage_ = GL_STATIC_DRAW;
+        useStaticBuffers_ = true;
+    }
+
+    qDebug() << "Buffer strategy:" << (useStaticBuffers_ ? "STATIC" : "DYNAMIC")
+        << "for L =" << L_;
+}
+
+void HexSphereWidget::optimizeTerrainBuffers() {
+    if (!glReady_) return;
+
+    makeCurrent();
+
+    // Оптимизация: переиспользование буферов вместо пересоздания
+    if (useStaticBuffers_) {
+        // Статические буферы - полная перезапись
+        this->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
+        this->glBufferData(GL_ARRAY_BUFFER,
+            terrainCPU_.pos.size() * sizeof(float),
+            terrainCPU_.pos.data(),
+            terrainBufferUsage_);
+
+        this->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainCol_);
+        this->glBufferData(GL_ARRAY_BUFFER,
+            terrainCPU_.col.size() * sizeof(float),
+            terrainCPU_.col.data(),
+            terrainBufferUsage_);
+    }
+    else {
+        // Динамические буферы - обновление существующих данных
+        // Используем glBufferSubData для частичного обновления когда возможно
+        this->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
+        this->glBufferData(GL_ARRAY_BUFFER,
+            terrainCPU_.pos.size() * sizeof(float),
+            terrainCPU_.pos.data(),
+            terrainBufferUsage_);
+    }
+
+    doneCurrent();
 }
