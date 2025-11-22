@@ -21,7 +21,7 @@
 #include "PathBuilder.h"
 #include "ModelHandler.h"
 #include "PerformanceStats.h"
-#include "../scene/Transform.h"
+#include "scene/Transform.h"
 
 class QMouseEvent;
 class QWheelEvent;
