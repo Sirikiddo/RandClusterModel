@@ -52,6 +52,9 @@
     <ClCompile Include="ClimateBiomeGenerator.cpp">
       <Filter>Planet\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="converters\DataAdapters.cpp">
+      <Filter>Planet\converters\Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="HexSphereModel.cpp">
       <Filter>Planet\Source Files</Filter>
     </ClCompile>
@@ -79,6 +82,14 @@
     <ClCompile Include="SceneGraph.cpp">
       <Filter>Planet\Source Files</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="scene\Entity.cpp">
+      <Filter>Planet\scene\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="scene\SceneGraph.cpp">
+      <Filter>Planet\scene\Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="TerrainGenerator.cpp">
       <Filter>Planet\Source Files</Filter>
     </ClCompile>
@@ -87,19 +98,6 @@
     </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Planet\Source Files</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="converters\DataAdapters.cpp">
-      <Filter>Planet\converters\Source Files</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="scene\Entity.cpp">
-      <Filter>Planet\scene\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="scene\SceneGraph.cpp">
-      <Filter>Planet\scene\Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -147,8 +145,6 @@
     <ClInclude Include="TerrainTessellator.h">
       <Filter>Planet\Header Files</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="converters\DataAdapters.h">
       <Filter>Planet\converters\Header Files</Filter>
     </ClInclude>
