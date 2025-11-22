@@ -52,6 +52,9 @@
     <ClCompile Include="ClimateBiomeGenerator.cpp">
       <Filter>Planet\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="converters\DataAdapters.cpp">
+      <Filter>Planet\converters\Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="HexSphereModel.cpp">
       <Filter>Planet\Source Files</Filter>
     </ClCompile>
@@ -79,6 +82,14 @@
     <ClCompile Include="SceneGraph.cpp">
       <Filter>Planet\Source Files</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="scene\Entity.cpp">
+      <Filter>Planet\scene\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="scene\SceneGraph.cpp">
+      <Filter>Planet\scene\Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="TerrainGenerator.cpp">
       <Filter>Planet\Source Files</Filter>
     </ClCompile>
@@ -90,11 +101,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="converters\DataAdapters.cpp">
-      <Filter>Planet\converters\Source Files</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
     <ClCompile Include="scene\Entity.cpp">
       <Filter>Planet\scene\Source Files</Filter>
     </ClCompile>
@@ -103,7 +109,15 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
+    <QtMoc Include="MainWindow.h">
+      <Filter>Planet\Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="HexSphereWidget.h">
+      <Filter>Planet\Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="PlanetSettingsPanel.h">
+      <Filter>Planet\Header Files</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ClimateBiomeGenerator.h">
@@ -130,6 +144,9 @@
     <ClInclude Include="SceneGraph.h">
       <Filter>Planet\Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SceneGraph.h">
+      <Filter>Planet\Header Files</Filter>
+    </ClInclude>
     <QtMoc Include="MainWindow.h">
       <Filter>Planet\Header Files</Filter>
     </QtMoc>
@@ -145,8 +162,6 @@
     <ClInclude Include="TerrainTessellator.h">
       <Filter>Planet\Header Files</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="converters\DataAdapters.h">
       <Filter>Planet\converters\Header Files</Filter>
     </ClInclude>
