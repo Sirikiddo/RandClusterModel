@@ -1,35 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Planet">
-      <UniqueIdentifier>{2b1e7165-7ca9-4c75-aef9-731be2de76bd}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Planet\\Source Files">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>qml;cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
-    </Filter>
-    <Filter Include="Planet\\Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
-    </Filter>
-    <Filter Include="Planet\\converters">
-      <UniqueIdentifier>{e1b085e4-2509-4801-8ffb-ac27c721a967}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Planet\\converters\\Source Files">
-      <UniqueIdentifier>{4a1a0d47-26c7-4de6-8929-7656927a99c9}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Planet\\converters\\Header Files">
-      <UniqueIdentifier>{db357cfd-5af5-4af5-bf2b-2656a9e6bd63}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Planet\\scene">
-      <UniqueIdentifier>{a7b1d244-6afe-4c78-9bb5-7ec7fab0df2d}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Planet\\scene\\Source Files">
-      <UniqueIdentifier>{d43a2cbe-6b84-4b68-996c-c9cff07c3557}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Planet\\scene\\Header Files">
-      <UniqueIdentifier>{dc6213b8-c823-46c6-93b0-c3d3a3fbf75b}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Resource Files">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>qrc;rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
@@ -42,6 +13,21 @@
       <UniqueIdentifier>{639EADAA-A684-42e4-A9AD-28FC9BCB8F7C}</UniqueIdentifier>
       <Extensions>ts</Extensions>
     </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{0604cdd4-764e-447e-9dd3-1b948e92f0f7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Headers">
+      <UniqueIdentifier>{e519f0d8-cf8b-4688-88b7-cb2a229656bd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="converters">
+      <UniqueIdentifier>{99bd33bc-903b-468c-91e6-ce15f19cd9e9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="scene">
+      <UniqueIdentifier>{4f6fe7fd-5d6b-44ac-bd33-3b2397333bc8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests">
+      <UniqueIdentifier>{66922ee6-bff0-415e-996a-f4b02002e8e4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="Planet.qrc">
@@ -49,66 +35,71 @@
     </QtRcc>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ClimateBiomeGenerator.cpp">
-      <Filter>Planet\Source Files</Filter>
+    <ClCompile Include="scene\Entity.cpp">
+      <Filter>Planet\scene\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="converters\DataAdapters.cpp">
-      <Filter>Planet\converters\Source Files</Filter>
+    <ClCompile Include="scene\SceneGraph.cpp">
+      <Filter>Planet\scene\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ClimateBiomeGenerator.cpp">
+      <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="HexSphereModel.cpp">
-      <Filter>Planet\Source Files</Filter>
+      <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="HexSphereWidget.cpp">
-      <Filter>Planet\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="MainWindow.cpp">
-      <Filter>Planet\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ModelHandler.cpp">
-      <Filter>Planet\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="PathBuilder.cpp">
-      <Filter>Planet\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="PerformanceStats.cpp">
-      <Filter>Planet\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="PerlinNoise.cpp">
-      <Filter>Planet\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="PlanetSettingsPanel.cpp">
-      <Filter>Planet\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="SceneGraph.cpp">
-      <Filter>Planet\Source Files</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="scene\Entity.cpp">
-      <Filter>Planet\scene\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="scene\SceneGraph.cpp">
-      <Filter>Planet\scene\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="TerrainGenerator.cpp">
-      <Filter>Planet\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="TerrainTessellator.cpp">
-      <Filter>Planet\Source Files</Filter>
+      <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp">
-      <Filter>Planet\Source Files</Filter>
+      <Filter>Source</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
+    <ClCompile Include="MainWindow.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="model_cache_test.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="ModelHandler.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="PathBuilder.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="PerformanceStats.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="PerlinNoise.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="PlanetSettingsPanel.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="SceneGraph.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="TerrainGenerator.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="TerrainTessellator.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="converters\DataAdapters.cpp">
+      <Filter>converters</Filter>
+    </ClCompile>
     <ClCompile Include="scene\Entity.cpp">
-      <Filter>Planet\scene\Source Files</Filter>
+      <Filter>scene</Filter>
     </ClCompile>
     <ClCompile Include="scene\SceneGraph.cpp">
-      <Filter>Planet\scene\Source Files</Filter>
+      <Filter>scene</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\scene_integration.cpp">
+      <Filter>tests</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="SceneGraph.h">
+      <Filter>Planet\Header Files</Filter>
+    </ClInclude>
     <QtMoc Include="MainWindow.h">
       <Filter>Planet\Header Files</Filter>
     </QtMoc>
@@ -118,66 +109,65 @@
     <QtMoc Include="PlanetSettingsPanel.h">
       <Filter>Planet\Header Files</Filter>
     </QtMoc>
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="ClimateBiomeGenerator.h">
-      <Filter>Planet\Header Files</Filter>
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="DebugModel.h">
+      <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="HexSphereModel.h">
-      <Filter>Planet\Header Files</Filter>
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="HexSphereWidget.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="MainWindow.h">
+      <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="ModelHandler.h">
-      <Filter>Planet\Header Files</Filter>
+      <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="PathBuilder.h">
-      <Filter>Planet\Header Files</Filter>
+      <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="PerformanceStats.h">
-      <Filter>Planet\Header Files</Filter>
+      <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="PerlinNoise.h">
-      <Filter>Planet\Header Files</Filter>
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="PlanetSettingsPanel.h">
+      <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="SceneEntity.h">
-      <Filter>Planet\Header Files</Filter>
+      <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="SceneGraph.h">
-      <Filter>Planet\Header Files</Filter>
+      <Filter>Headers</Filter>
     </ClInclude>
-    <ClInclude Include="SceneGraph.h">
-      <Filter>Planet\Header Files</Filter>
+    <ClInclude Include="simple3d_parser.hpp">
+      <Filter>Headers</Filter>
     </ClInclude>
-    <QtMoc Include="MainWindow.h">
-      <Filter>Planet\Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="HexSphereWidget.h">
-      <Filter>Planet\Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="PlanetSettingsPanel.h">
-      <Filter>Planet\Header Files</Filter>
-    </QtMoc>
     <ClInclude Include="TerrainGenerator.h">
-      <Filter>Planet\Header Files</Filter>
+      <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="TerrainTessellator.h">
-      <Filter>Planet\Header Files</Filter>
+      <Filter>Headers</Filter>
     </ClInclude>
-    <ClInclude Include="converters\DataAdapters.h">
-      <Filter>Planet\converters\Header Files</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="scene\Entity.h">
-      <Filter>Planet\scene\Header Files</Filter>
+      <Filter>scene</Filter>
     </ClInclude>
     <ClInclude Include="scene\Interaction.h">
-      <Filter>Planet\scene\Header Files</Filter>
+      <Filter>scene</Filter>
     </ClInclude>
     <ClInclude Include="scene\SceneGraph.h">
-      <Filter>Planet\scene\Header Files</Filter>
+      <Filter>scene</Filter>
     </ClInclude>
     <ClInclude Include="scene\Transform.h">
-      <Filter>Planet\scene\Header Files</Filter>
+      <Filter>scene</Filter>
+    </ClInclude>
+    <ClInclude Include="converters\DataAdapters.h">
+      <Filter>converters</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

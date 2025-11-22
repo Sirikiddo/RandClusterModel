@@ -111,48 +111,49 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="ClimateBiomeGenerator.cpp" />
-    <ClCompile Include="scene\Entity.cpp" />
-    <ClCompile Include="ModelHandler.cpp" />
-    <ClCompile Include="PathBuilder.cpp" />
-    <ClCompile Include="PerformanceStats.cpp" />
-    <ClCompile Include="PerlinNoise.cpp" />
-    <ClCompile Include="PlanetSettingsPanel.cpp" />
-    <ClCompile Include="scene\SceneGraph.cpp" />
-    <ClCompile Include="SceneGraph.cpp" />
-    <ClCompile Include="TerrainGenerator.cpp" />
-    <ClCompile Include="TerrainTessellator.cpp" />
-    <ClCompile Include="converters\DataAdapters.cpp" />
     <QtRcc Include="Planet.qrc" />
-    <ClCompile Include="HexSphereModel.cpp" />
-    <ClCompile Include="HexSphereWidget.cpp" />
-    <ClCompile Include="MainWindow.cpp" />
-    <ClCompile Include="main.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <QtMoc Include="MainWindow.h" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ClimateBiomeGenerator.h" />
-    <ClInclude Include="scene\Entity.h" />
+    <ClInclude Include="converters\DataAdapters.h" />
+    <ClInclude Include="DebugModel.h" />
     <ClInclude Include="HexSphereModel.h" />
+    <ClInclude Include="HexSphereWidget.h" />
+    <ClInclude Include="MainWindow.h" />
     <ClInclude Include="ModelHandler.h" />
     <ClInclude Include="PathBuilder.h" />
     <ClInclude Include="PerformanceStats.h" />
     <ClInclude Include="PerlinNoise.h" />
+    <ClInclude Include="PlanetSettingsPanel.h" />
+    <ClInclude Include="SceneEntity.h" />
+    <ClInclude Include="SceneGraph.h" />
+    <ClInclude Include="scene\Entity.h" />
     <ClInclude Include="scene\Interaction.h" />
     <ClInclude Include="scene\SceneGraph.h" />
     <ClInclude Include="scene\Transform.h" />
-    <QtMoc Include="PlanetSettingsPanel.h" />
-    <ClInclude Include="SceneEntity.h" />
-    <ClInclude Include="SceneGraph.h" />
+    <ClInclude Include="simple3d_parser.hpp" />
     <ClInclude Include="TerrainGenerator.h" />
     <ClInclude Include="TerrainTessellator.h" />
-    <ClInclude Include="converters\DataAdapters.h" />
-    <QtMoc Include="HexSphereWidget.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ClimateBiomeGenerator.cpp" />
+    <ClCompile Include="converters\DataAdapters.cpp" />
+    <ClCompile Include="HexSphereModel.cpp" />
+    <ClCompile Include="HexSphereWidget.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="MainWindow.cpp" />
+    <ClCompile Include="ModelHandler.cpp" />
+    <ClCompile Include="model_cache_test.cpp" />
+    <ClCompile Include="PathBuilder.cpp" />
+    <ClCompile Include="PerformanceStats.cpp" />
+    <ClCompile Include="PerlinNoise.cpp" />
+    <ClCompile Include="PlanetSettingsPanel.cpp" />
+    <ClCompile Include="SceneGraph.cpp" />
+    <ClCompile Include="scene\Entity.cpp" />
+    <ClCompile Include="scene\SceneGraph.cpp" />
+    <ClCompile Include="TerrainGenerator.cpp" />
+    <ClCompile Include="TerrainTessellator.cpp" />
+    <ClCompile Include="tests\scene_integration.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
