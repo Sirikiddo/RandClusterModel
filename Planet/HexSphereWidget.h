@@ -140,7 +140,7 @@ private:
     GLsizei waterIndexCount_ = 0;
 
     // -------- 3D Models --------
-    ModelHandler treeModel_;
+    std::shared_ptr<ModelHandler> treeModel_;
     GLuint progModel_ = 0;
     GLuint progModelTextured_ = 0;
     GLint uMVP_Model_ = -1;

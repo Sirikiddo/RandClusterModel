@@ -1,4 +1,4 @@
-﻿#include "ModelHandler.h"
+#include "ModelHandler.h"
 #include <QFileInfo>
 #include <QFile>
 #include <QDebug>
@@ -8,22 +8,70 @@
 // ====== ПЕРЕХОД НА ПАРСЕР ЧЕРЕЗ POС ПОТОК ======
 #include <sstream>
 
+std::map<QString, std::weak_ptr<ModelHandler>> ModelHandler::cache_;
+std::mutex ModelHandler::cacheMutex_;
+
 ModelHandler::~ModelHandler() {
     clearGPUResources();
 }
 
-bool ModelHandler::loadFromFile(const QString& path) {
-    qDebug() << "Loading model:" << path;
+std::shared_ptr<ModelHandler> ModelHandler::loadShared(const QString& path) {
+    const QString normalized = ModelHandler::canonicalPath(path);
 
+    std::lock_guard<std::mutex> lock(cacheMutex_);
+    auto it = cache_.find(normalized);
+    if (it != cache_.end()) {
+        if (auto cached = it->second.lock()) {
+            qDebug() << "Reusing cached model for" << normalized;
+            return cached;
+        }
+    }
+
+    auto handler = std::shared_ptr<ModelHandler>(new ModelHandler());
+    if (!handler->loadFromFile(normalized)) {
+        return nullptr;
+    }
+
+    cache_[normalized] = handler;
+    return handler;
+}
+
+void ModelHandler::clearCache() {
+    std::lock_guard<std::mutex> lock(cacheMutex_);
+    cache_.clear();
+}
+
+QString ModelHandler::canonicalPath(const QString& path) {
     QFileInfo fi(path);
+    if (fi.exists()) {
+        return fi.absoluteFilePath();
+    }
+    return path;
+}
+
+bool ModelHandler::loadFromFile(const QString& path) {
+    const QString normalized = canonicalPath(path);
+
+    if (path_ == normalized && !mesh_.positions.empty()) {
+        qDebug() << "Model already loaded, reusing in-memory mesh for" << normalized;
+        return true;
+    }
+
+    if (!path_.isEmpty() && path_ != normalized) {
+        clear();
+    }
+
+    qDebug() << "Loading model:" << normalized;
+
+    QFileInfo fi(normalized);
     QString ext = fi.suffix().toLower();
 
     // ---------------------------
     // 1. ЧИТАЕМ ФАЙЛ ЧЕРЕЗ Qt
     // ---------------------------
-    QFile file(path);
+    QFile file(normalized);
     if (!file.open(QIODevice::ReadOnly)) {
-        qDebug() << "Cannot open file:" << path;
+        qDebug() << "Cannot open file:" << normalized;
         return false;
     }
 
@@ -52,7 +100,13 @@ bool ModelHandler::loadFromFile(const QString& path) {
     }
 
     if (result) {
+        path_ = normalized;
         hasUVs_ = !mesh_.texcoords.empty();
+    }
+    else {
+        mesh_.clear();
+        path_.clear();
+        hasUVs_ = false;
     }
 
     return result;
@@ -171,6 +225,7 @@ void ModelHandler::draw(GLuint shader,
 
 void ModelHandler::clear() {
     mesh_.clear();
+    path_.clear();
     indexCount_ = 0;
     hasUVs_ = false;
     clearGPUResources();
