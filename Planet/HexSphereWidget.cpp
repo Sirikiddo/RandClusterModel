@@ -341,8 +341,8 @@ HexSphereWidget::HexSphereWidget(QWidget* parent) : QOpenGLWidget(parent) {
 HexSphereWidget::~HexSphereWidget() {
     makeCurrent();
 
-    if (QOpenGLContext::currentContext()) {
-        treeModel_.clearGPUResources();
+    if (QOpenGLContext::currentContext() && treeModel_.use_count() == 1) {
+        treeModel_->clearGPUResources();
     }
 
     if (progWire_)    this->glDeleteProgram(progWire_);
@@ -537,14 +537,15 @@ void HexSphereWidget::initializeGL() {
     // Загружаем модель дерева
     QString modelPath = "Planet/tree.obj";
 
-    if (!treeModel_.loadFromFile(modelPath)) {
+    treeModel_ = ModelHandler::loadShared(modelPath);
+    if (!treeModel_) {
         qDebug() << "Failed to load tree model";
     }
     else {
-        treeModel_.uploadToGPU();
-        qDebug() << "Tree model loaded successfully. Has UVs:" << treeModel_.hasUVs()
-            << "Has normals:" << treeModel_.hasNormals()
-            << "Is initialized:" << treeModel_.isInitialized();
+        treeModel_->uploadToGPU();
+        qDebug() << "Tree model loaded successfully. Has UVs:" << treeModel_->hasUVs()
+            << "Has normals:" << treeModel_->hasNormals()
+            << "Is initialized:" << treeModel_->isInitialized();
     }
 
     glReady_ = true;
@@ -689,7 +690,7 @@ void HexSphereWidget::paintGL() {
     }
 
     // Рендеринг деревьев
-    if (treeModel_.isInitialized() && progModel_ != 0 && !treeModel_.isEmpty()) {
+    if (treeModel_ && treeModel_->isInitialized() && progModel_ != 0 && !treeModel_->isEmpty()) {
         this->glUseProgram(progModel_);
 
         QVector3D globalLightDir = QVector3D(0.5f, 1.0f, 0.3f).normalized();
@@ -698,7 +699,7 @@ void HexSphereWidget::paintGL() {
         this->glUniform3f(uLightDir_Model_, globalLightDir.x(), globalLightDir.y(), globalLightDir.z());
         this->glUniform3f(uViewPos_Model_, eye.x(), eye.y(), eye.z());
         this->glUniform3f(uColor_Model_, 0.15f, 0.5f, 0.1f); // Зелёный цвет для деревьев
-        this->glUniform1i(uUseTexture_, treeModel_.hasUVs() ? 1 : 0);
+        this->glUniform1i(uUseTexture_, treeModel_->hasUVs() ? 1 : 0);
 
         const auto& cells = model_.cells();
         int treesRendered = 0;
@@ -718,7 +719,7 @@ void HexSphereWidget::paintGL() {
                 this->glUniformMatrix4fv(uMVP_Model_, 1, GL_FALSE, mvp.constData());
                 this->glUniformMatrix4fv(uModel_Model_, 1, GL_FALSE, model.constData());
 
-                treeModel_.draw(progModel_, mvp, model, view_);
+                treeModel_->draw(progModel_, mvp, model, view_);
                 treesRendered++;
             }
         }
