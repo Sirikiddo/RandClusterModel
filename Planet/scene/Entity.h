@@ -22,6 +22,10 @@ public:
 class Entity : public IEntity {
 public:
     Entity(const QString& name = QString(), const QString& meshId = QString("pyramid"));
+    Entity(const Entity& other);
+    Entity& operator=(const Entity& other);
+    Entity(Entity&&) noexcept = default;
+    Entity& operator=(Entity&&) noexcept = default;
 
     int id() const override { return id_; }
     void setId(int id) override { id_ = id; }

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -27,10 +27,10 @@
     <Filter Include="Header Files\\scene">
       <UniqueIdentifier>{dc6213b8-c823-46c6-93b0-c3d3a3fbf75b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\\src\\converters">
+    <Filter Include="Source Files\\converters">
       <UniqueIdentifier>{4a1a0d47-26c7-4de6-8929-7656927a99c9}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\\src\\converters">
+    <Filter Include="Header Files\\converters">
       <UniqueIdentifier>{db357cfd-5af5-4af5-bf2b-2656a9e6bd63}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -70,14 +70,14 @@
     <ClCompile Include="PlanetSettingsPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\scene\Entity.cpp">
+    <ClCompile Include="scene\Entity.cpp">
       <Filter>Source Files\scene</Filter>
     </ClCompile>
-    <ClCompile Include="..\scene\SceneGraph.cpp">
+    <ClCompile Include="scene\SceneGraph.cpp">
       <Filter>Source Files\scene</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\converters\DataAdapters.cpp">
-      <Filter>Source Files\src\converters</Filter>
+    <ClCompile Include="converters\DataAdapters.cpp">
+      <Filter>Source Files\converters</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -116,20 +116,20 @@
     <ClInclude Include="TerrainGenerator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\scene\Entity.h">
+    <ClInclude Include="scene\Entity.h">
       <Filter>Header Files\scene</Filter>
     </ClInclude>
-    <ClInclude Include="..\scene\Interaction.h">
+    <ClInclude Include="scene\Interaction.h">
       <Filter>Header Files\scene</Filter>
     </ClInclude>
-    <ClInclude Include="..\scene\SceneGraph.h">
+    <ClInclude Include="scene\SceneGraph.h">
       <Filter>Header Files\scene</Filter>
     </ClInclude>
-    <ClInclude Include="..\scene\Transform.h">
+    <ClInclude Include="scene\Transform.h">
       <Filter>Header Files\scene</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\converters\DataAdapters.h">
-      <Filter>Header Files\src\converters</Filter>
+    <ClInclude Include="converters\DataAdapters.h">
+      <Filter>Header Files\converters</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
