@@ -2,7 +2,9 @@
 #include "HexSphereModel.h"
 #include "ClimateBiomeGenerator.h"
 #include "PerlinNoise.h"
+#include "converters/DataAdapters.h"
 #include <cmath>
+#include <QString>
 
 void NoOpTerrainGenerator::generate(HexSphereModel& model, const TerrainParams& p) {
     (void)model; (void)p;
@@ -20,13 +22,15 @@ void SineTerrainGenerator::generate(HexSphereModel& model, const TerrainParams& 
         float lat = std::asin(c.y());
         float h = std::sin(lat * frequency) * 0.7f + std::sin(lat * frequency * 2.3f) * 0.3f;
         h = h * amplitude;
-        int height = static_cast<int>(std::round(h));
+        converters::HeightSample sample{ h };
+        int height = converters::HeightmapAdapter::toDiscreteHeight(sample, amplitude, static_cast<float>(p.seaLevel));
         model.setHeight(cid, height);
 
-        if (h < p.seaLevel - 0.5f) {
+        const QString material = converters::MaterialAdapter::pickMaterial(static_cast<float>(height), static_cast<float>(p.seaLevel));
+        if (material == "water") {
             model.setBiome(cid, Biome::Sea);
         }
-        else if (h < p.seaLevel + 1.0f) {
+        else if (material == "sand" || material == "grass") {
             model.setBiome(cid, Biome::Grass);
         }
         else {
@@ -61,13 +65,15 @@ void PerlinTerrainGenerator::generate(HexSphereModel& model, const TerrainParams
 
         h /= maxAmplitude;
         float heightValue = h * 3.0f;
-        int discreteHeight = static_cast<int>(std::round(heightValue));
+        converters::HeightSample sample{ heightValue };
+        int discreteHeight = converters::HeightmapAdapter::toDiscreteHeight(sample, 1.0f, static_cast<float>(params.seaLevel));
         model.setHeight(cid, discreteHeight);
 
-        if (heightValue < params.seaLevel - 0.5f) {
+        const QString material = converters::MaterialAdapter::pickMaterial(static_cast<float>(discreteHeight), static_cast<float>(params.seaLevel));
+        if (material == "water") {
             model.setBiome(cid, Biome::Sea);
         }
-        else if (heightValue < params.seaLevel + 1.0f) {
+        else if (material == "sand" || material == "grass") {
             model.setBiome(cid, Biome::Grass);
         }
         else {

@@ -21,6 +21,7 @@
 #include "PathBuilder.h"
 #include "ModelHandler.h"
 #include "PerformanceStats.h"
+#include "scene/Transform.h"
 
 class QMouseEvent;
 class QWheelEvent;
@@ -158,6 +159,7 @@ private:
 
     // SceneGraph
     SceneGraph scene_;
+    scene::CoordinateFrame globalFrame_{};
 
     int L_ = 2;
 

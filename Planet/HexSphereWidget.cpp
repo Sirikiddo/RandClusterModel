@@ -525,12 +525,12 @@ void HexSphereWidget::initializeGL() {
     this->glBindVertexArray(0);
 
     // Инициализация SceneGraph
-    SceneEntity pyramid;
-    pyramid.name = "Explorer";
-    pyramid.meshId = "pyramid";
-    pyramid.currentCell = 0;
-    pyramid.position = getSurfacePoint(0); // Используем правильную начальную позицию
-    pyramid.selected = true;
+    SceneEntity pyramid("Explorer", "pyramid");
+    pyramid.setCurrentCell(0);
+    QVector3D surfacePosition = getSurfacePoint(0);
+    pyramid.transform().position = scene::localToWorldPoint(pyramid.transform(), globalFrame_, surfacePosition);
+    pyramid.attachCollider(std::make_unique<scene::SphereCollider>(0.08f));
+    pyramid.setSelected(true);
     scene_.addEntity(pyramid);
     initPyramidGeometry();
 
@@ -631,7 +631,7 @@ void HexSphereWidget::paintGL() {
     // Рендеринг объектов сцены (пирамиды)
     for (const auto& e : scene_.entities()) {
         // Получаем позицию на поверхности с правильной высотой
-        QVector3D surfacePos = getSurfacePoint(e.currentCell);
+        QVector3D surfacePos = getSurfacePoint(e->currentCell());
 
         QMatrix4x4 model;
         model.translate(surfacePos); // Используем surfacePos вместо e.position
@@ -643,14 +643,14 @@ void HexSphereWidget::paintGL() {
         model.scale(0.08f); // Увеличенный размер
 
         // Если объект выделен, увеличиваем его немного
-        if (e.selected) {
+        if (e->selected()) {
             model.scale(1.2f);
         }
 
         const QMatrix4x4 mvp = proj_ * view_ * model;
 
         // Используем разные шейдеры для выделенных объектов
-        if (e.selected) {
+        if (e->selected()) {
             this->glUseProgram(progSel_); // желтый цвет для выделения
             this->glUniformMatrix4fv(uMVP_Sel_, 1, GL_FALSE, mvp.constData());
         }
@@ -1295,15 +1295,15 @@ void HexSphereWidget::keyPressEvent(QKeyEvent* e) {
         if (!sel) return;
         SceneEntity& ent = sel->get();
         const auto& cells = model_.cells();
-        if (ent.currentCell < 0 || ent.currentCell >= (int)cells.size()) return;
-        const auto& c = cells[(size_t)ent.currentCell];
+        if (ent.currentCell() < 0 || ent.currentCell() >= (int)cells.size()) return;
+        const auto& c = cells[(size_t)ent.currentCell()];
         if (c.neighbors.empty()) return;
         int next = c.neighbors[0]; // просто первый сосед
         if (next < 0) return;
-        ent.currentCell = next;
+        ent.setCurrentCell(next);
 
         // ИСПРАВЛЕНО: используем getSurfacePoint для правильного позиционирования
-        ent.position = getSurfacePoint(next);
+        ent.transform().position = getSurfacePoint(next);
 
         update();
         break; // ДОБАВЬ break чтобы не проваливаться в следующий case!
@@ -1502,7 +1502,7 @@ std::optional<HexSphereWidget::PickHit> HexSphereWidget::pickEntityAt(int sx, in
     // Проверяем все объекты сцены
     for (const auto& entity : scene_.entities()) {
         // ИСПРАВЛЕНО: используем getSurfacePoint для правильной позиции
-        QVector3D surfacePos = getSurfacePoint(entity.currentCell);
+        QVector3D surfacePos = getSurfacePoint(entity->currentCell());
 
         // Простая проверка пересечения с bounding sphere объекта
         float radius = 0.08f; // Увеличили радиус для большей пирамиды
@@ -1519,7 +1519,7 @@ std::optional<HexSphereWidget::PickHit> HexSphereWidget::pickEntityAt(int sx, in
             float t = (-b - std::sqrt(discriminant)) / (2.0f * a);
             if (t > 0 && t < bestT) {
                 bestT = t;
-                bestEntityId = entity.id;
+                bestEntityId = entity->id();
                 bestPos = ro + rd * t;
             }
         }
@@ -1556,7 +1556,7 @@ void HexSphereWidget::selectEntity(int entityId) {
     auto entityOpt = scene_.getEntity(entityId);
     if (entityOpt) {
         SceneEntity& entity = entityOpt->get();
-        entity.selected = true;
+        entity.setSelected(true);
     }
 
     // Обновляем отрисовку
@@ -1568,7 +1568,7 @@ void HexSphereWidget::deselectEntity() {
         auto entityOpt = scene_.getEntity(selectedEntityId_);
         if (entityOpt) {
             SceneEntity& entity = entityOpt->get();
-            entity.selected = false;
+            entity.setSelected(false);
         }
         selectedEntityId_ = -1;
     }
@@ -1585,10 +1585,10 @@ void HexSphereWidget::moveSelectedEntityToCell(int cellId) {
     // Обновляем позицию и привязку к ячейке
     if (cellId >= 0 && cellId < model_.cellCount()) {
         const auto& cell = model_.cells()[cellId];
-        entity.currentCell = cellId;
+        entity.setCurrentCell(cellId);
 
         // ИСПРАВЛЕНО: используем getSurfacePoint для правильного позиционирования
-        entity.position = getSurfacePoint(cellId);
+        entity.transform().position = getSurfacePoint(cellId);
 
         qDebug() << "Moved entity" << selectedEntityId_ << "to cell" << cellId
             << "at height:" << cell.height;

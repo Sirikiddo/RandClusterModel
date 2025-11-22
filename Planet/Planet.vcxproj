@@ -112,14 +112,17 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="ClimateBiomeGenerator.cpp" />
+    <ClCompile Include="scene\Entity.cpp" />
     <ClCompile Include="ModelHandler.cpp" />
     <ClCompile Include="PathBuilder.cpp" />
     <ClCompile Include="PerformanceStats.cpp" />
     <ClCompile Include="PerlinNoise.cpp" />
     <ClCompile Include="PlanetSettingsPanel.cpp" />
+    <ClCompile Include="scene\SceneGraph.cpp" />
     <ClCompile Include="SceneGraph.cpp" />
     <ClCompile Include="TerrainGenerator.cpp" />
     <ClCompile Include="TerrainTessellator.cpp" />
+    <ClCompile Include="converters\DataAdapters.cpp" />
     <QtRcc Include="Planet.qrc" />
     <ClCompile Include="HexSphereModel.cpp" />
     <ClCompile Include="HexSphereWidget.cpp" />
@@ -134,16 +137,21 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ClimateBiomeGenerator.h" />
+    <ClInclude Include="scene\Entity.h" />
     <ClInclude Include="HexSphereModel.h" />
     <ClInclude Include="ModelHandler.h" />
     <ClInclude Include="PathBuilder.h" />
     <ClInclude Include="PerformanceStats.h" />
     <ClInclude Include="PerlinNoise.h" />
+    <ClInclude Include="scene\Interaction.h" />
+    <ClInclude Include="scene\SceneGraph.h" />
+    <ClInclude Include="scene\Transform.h" />
     <QtMoc Include="PlanetSettingsPanel.h" />
     <ClInclude Include="SceneEntity.h" />
     <ClInclude Include="SceneGraph.h" />
     <ClInclude Include="TerrainGenerator.h" />
     <ClInclude Include="TerrainTessellator.h" />
+    <ClInclude Include="converters\DataAdapters.h" />
     <QtMoc Include="HexSphereWidget.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
