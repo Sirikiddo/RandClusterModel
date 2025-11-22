@@ -52,8 +52,17 @@
     <ClCompile Include="ClimateBiomeGenerator.cpp">
       <Filter>Planet\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="scene\Entity.cpp">
-      <Filter>Planet\scene\Source Files</Filter>
+    <ClCompile Include="converters\DataAdapters.cpp">
+      <Filter>Planet\converters\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HexSphereModel.cpp">
+      <Filter>Planet\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HexSphereWidget.cpp">
+      <Filter>Planet\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MainWindow.cpp">
+      <Filter>Planet\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ModelHandler.cpp">
       <Filter>Planet\Source Files</Filter>
@@ -70,11 +79,16 @@
     <ClCompile Include="PlanetSettingsPanel.cpp">
       <Filter>Planet\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="scene\SceneGraph.cpp">
-      <Filter>Planet\scene\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="SceneGraph.cpp">
       <Filter>Planet\Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="scene\Entity.cpp">
+      <Filter>Planet\scene\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="scene\SceneGraph.cpp">
+      <Filter>Planet\scene\Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TerrainGenerator.cpp">
       <Filter>Planet\Source Files</Filter>
@@ -82,42 +96,32 @@
     <ClCompile Include="TerrainTessellator.cpp">
       <Filter>Planet\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="converters\DataAdapters.cpp">
-      <Filter>Planet\converters\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="HexSphereModel.cpp">
-      <Filter>Planet\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="HexSphereWidget.cpp">
-      <Filter>Planet\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="MainWindow.cpp">
-      <Filter>Planet\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Planet\Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
+    <ClCompile Include="scene\Entity.cpp">
+      <Filter>Planet\scene\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="scene\SceneGraph.cpp">
+      <Filter>Planet\scene\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="MainWindow.h">
       <Filter>Planet\Header Files</Filter>
     </QtMoc>
-    <QtMoc Include="PlanetSettingsPanel.h">
+    <QtMoc Include="HexSphereWidget.h">
       <Filter>Planet\Header Files</Filter>
     </QtMoc>
-    <QtMoc Include="HexSphereWidget.h">
+    <QtMoc Include="PlanetSettingsPanel.h">
       <Filter>Planet\Header Files</Filter>
     </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ClimateBiomeGenerator.h">
       <Filter>Planet\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="scene\Entity.h">
-      <Filter>Planet\scene\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="HexSphereModel.h">
       <Filter>Planet\Header Files</Filter>
@@ -134,21 +138,24 @@
     <ClInclude Include="PerlinNoise.h">
       <Filter>Planet\Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="scene\Interaction.h">
-      <Filter>Planet\scene\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="scene\SceneGraph.h">
-      <Filter>Planet\scene\Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="scene\Transform.h">
-      <Filter>Planet\scene\Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="SceneEntity.h">
       <Filter>Planet\Header Files</Filter>
     </ClInclude>
     <ClInclude Include="SceneGraph.h">
       <Filter>Planet\Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SceneGraph.h">
+      <Filter>Planet\Header Files</Filter>
+    </ClInclude>
+    <QtMoc Include="MainWindow.h">
+      <Filter>Planet\Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="HexSphereWidget.h">
+      <Filter>Planet\Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="PlanetSettingsPanel.h">
+      <Filter>Planet\Header Files</Filter>
+    </QtMoc>
     <ClInclude Include="TerrainGenerator.h">
       <Filter>Planet\Header Files</Filter>
     </ClInclude>
@@ -157,6 +164,20 @@
     </ClInclude>
     <ClInclude Include="converters\DataAdapters.h">
       <Filter>Planet\converters\Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="scene\Entity.h">
+      <Filter>Planet\scene\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="scene\Interaction.h">
+      <Filter>Planet\scene\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="scene\SceneGraph.h">
+      <Filter>Planet\scene\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="scene\Transform.h">
+      <Filter>Planet\scene\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
