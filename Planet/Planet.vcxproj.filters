@@ -101,7 +101,12 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
+    <ClCompile Include="scene\Entity.cpp">
+      <Filter>Planet\scene\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="scene\SceneGraph.cpp">
+      <Filter>Planet\scene\Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="MainWindow.h">
@@ -139,6 +144,18 @@
     <ClInclude Include="SceneGraph.h">
       <Filter>Planet\Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SceneGraph.h">
+      <Filter>Planet\Header Files</Filter>
+    </ClInclude>
+    <QtMoc Include="MainWindow.h">
+      <Filter>Planet\Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="HexSphereWidget.h">
+      <Filter>Planet\Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="PlanetSettingsPanel.h">
+      <Filter>Planet\Header Files</Filter>
+    </QtMoc>
     <ClInclude Include="TerrainGenerator.h">
       <Filter>Planet\Header Files</Filter>
     </ClInclude>
