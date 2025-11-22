@@ -35,12 +35,6 @@
     </QtRcc>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="scene\Entity.cpp">
-      <Filter>Planet\scene\Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="scene\SceneGraph.cpp">
-      <Filter>Planet\scene\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ClimateBiomeGenerator.cpp">
       <Filter>Source</Filter>
     </ClCompile>
@@ -92,23 +86,10 @@
     <ClCompile Include="scene\SceneGraph.cpp">
       <Filter>scene</Filter>
     </ClCompile>
-    <ClCompile Include="tests\scene_integration.cpp">
-      <Filter>tests</Filter>
-    </ClCompile>
+    <ClCompile Include="scene\Entity.cpp" />
+    <ClCompile Include="scene\SceneGraph.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="SceneGraph.h">
-      <Filter>Planet\Header Files</Filter>
-    </ClInclude>
-    <QtMoc Include="MainWindow.h">
-      <Filter>Planet\Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="HexSphereWidget.h">
-      <Filter>Planet\Header Files</Filter>
-    </QtMoc>
-    <QtMoc Include="PlanetSettingsPanel.h">
-      <Filter>Planet\Header Files</Filter>
-    </QtMoc>
     <ClInclude Include="ClimateBiomeGenerator.h">
       <Filter>Headers</Filter>
     </ClInclude>
@@ -169,5 +150,8 @@
     <ClInclude Include="converters\DataAdapters.h">
       <Filter>converters</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="SceneGraph.h" />
   </ItemGroup>
 </Project>
