@@ -1,12 +1,7 @@
 #pragma once
-#include <QString>
-#include <QVector3D>
+#include "../scene/Entity.h"
 
-struct SceneEntity {
-    int id = -1;              // уникальный идентификатор
-    QString name;             // имя объекта
-    QString meshId = "pyramid"; // тип меша для отрисовки
-    QVector3D position;       // мировая позиция
-    int currentCell = -1;     // id ячейки планеты
-    bool selected = false;    // выделен ли объект
-};
+using SceneEntity = scene::Entity;
+using IEntity = scene::IEntity;
+using EntityHandle = scene::EntityHandle;
+
