@@ -82,6 +82,8 @@
     <ClCompile Include="SceneGraph.cpp">
       <Filter>Planet\Source Files</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
     <ClCompile Include="scene\Entity.cpp">
       <Filter>Planet\scene\Source Files</Filter>
     </ClCompile>
@@ -146,6 +148,8 @@
     <ClInclude Include="converters\DataAdapters.h">
       <Filter>Planet\converters\Header Files</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
     <ClInclude Include="scene\Entity.h">
       <Filter>Planet\scene\Header Files</Filter>
     </ClInclude>
