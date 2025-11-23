@@ -1,17 +1,21 @@
 #include "MainWindow.h"
+#include "CameraController.h"
 #include "HexSphereWidget.h"
+#include "InputController.h"
 #include "PlanetSettingsPanel.h"
 #include "TerrainGenerator.h"
-#include <QSpinBox>
-#include <QToolBar>
-#include <QLabel>
 #include <QAction>
-#include <QStatusBar>
 #include <QDockWidget>
+#include <QLabel>
 #include <QMenuBar>
+#include <QSpinBox>
+#include <QStatusBar>
+#include <QToolBar>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
-    glw_ = new HexSphereWidget(this);
+    cameraController_ = std::make_unique<CameraController>();
+    inputController_ = std::make_unique<InputController>(*cameraController_);
+    glw_ = new HexSphereWidget(*cameraController_, *inputController_, this);
     setCentralWidget(glw_);
 
     auto* tb = addToolBar("Controls");
@@ -45,14 +49,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     showDockAct->setText("Planet Settings");
     viewMenu->addAction(showDockAct);
 
-    // коннекты: панель -> виджет
     connect(panel, &PlanetSettingsPanel::generatorChanged,
         glw_, &HexSphereWidget::setGeneratorByIndex);
 
     connect(panel, &PlanetSettingsPanel::paramsChanged,
         glw_, &HexSphereWidget::setTerrainParams);
 
-    // визуал
     connect(panel, &PlanetSettingsPanel::visualizeChanged,
         this, [this](bool smooth, double inset, double outline) {
             glw_->setSmoothOneStep(smooth);

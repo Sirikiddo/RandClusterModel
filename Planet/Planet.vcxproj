@@ -133,6 +133,8 @@
     <ClInclude Include="HexSphereRenderer.h" />
     <ClInclude Include="HexSphereSceneController.h" />
     <ClInclude Include="HexSphereWidget.h" />
+    <ClInclude Include="CameraController.h" />
+    <ClInclude Include="InputController.h" />
     <ClInclude Include="MainWindow.h" />
     <ClInclude Include="ModelHandler.h" />
     <ClInclude Include="EntityRenderer.h" />
@@ -160,6 +162,8 @@
     <ClCompile Include="HexSphereRenderer.cpp" />
     <ClCompile Include="HexSphereSceneController.cpp" />
     <ClCompile Include="HexSphereWidget.cpp" />
+    <ClCompile Include="CameraController.cpp" />
+    <ClCompile Include="InputController.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MainWindow.cpp" />
     <ClCompile Include="ECS\ComponentStorage.cpp" />

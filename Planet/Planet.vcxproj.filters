@@ -59,6 +59,12 @@
     <ClCompile Include="HexSphereWidget.cpp">
       <Filter>Source</Filter>
     </ClCompile>
+    <ClCompile Include="CameraController.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="InputController.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source</Filter>
     </ClCompile>
@@ -131,6 +137,12 @@
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="HexSphereWidget.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="CameraController.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="InputController.h">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="MainWindow.h">
