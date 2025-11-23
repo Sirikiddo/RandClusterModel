@@ -132,6 +132,10 @@
     <ClInclude Include="HexSphereModel.h" />
     <ClInclude Include="HexSphereRenderer.h" />
     <ClInclude Include="HexSphereSceneController.h" />
+    <ClInclude Include="MeshGenerators\SelectionOutlineGenerator.h" />
+    <ClInclude Include="MeshGenerators\TerrainMeshGenerator.h" />
+    <ClInclude Include="MeshGenerators\WaterMeshGenerator.h" />
+    <ClInclude Include="MeshGenerators\WireMeshGenerator.h" />
     <ClInclude Include="HexSphereWidget.h" />
     <ClInclude Include="CameraController.h" />
     <ClInclude Include="InputController.h" />
@@ -161,6 +165,10 @@
     <ClCompile Include="HexSphereModel.cpp" />
     <ClCompile Include="HexSphereRenderer.cpp" />
     <ClCompile Include="HexSphereSceneController.cpp" />
+    <ClCompile Include="MeshGenerators\SelectionOutlineGenerator.cpp" />
+    <ClCompile Include="MeshGenerators\TerrainMeshGenerator.cpp" />
+    <ClCompile Include="MeshGenerators\WaterMeshGenerator.cpp" />
+    <ClCompile Include="MeshGenerators\WireMeshGenerator.cpp" />
     <ClCompile Include="HexSphereWidget.cpp" />
     <ClCompile Include="CameraController.cpp" />
     <ClCompile Include="InputController.cpp" />

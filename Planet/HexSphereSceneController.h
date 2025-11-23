@@ -8,15 +8,9 @@
 
 #include "HexSphereModel.h"
 #include "TerrainGenerator.h"
-#include "TerrainTessellator.h"
 #include "PathBuilder.h"
-
-// Данные для генерации воды перед загрузкой в GPU
-struct WaterGeometryData {
-    std::vector<float> positions;
-    std::vector<float> edgeFlags;
-    std::vector<uint32_t> indices;
-};
+#include "MeshGenerators/WaterMeshGenerator.h"
+#include "MeshGenerators/TerrainMeshGenerator.h"
 
 class HexSphereSceneController {
 public:

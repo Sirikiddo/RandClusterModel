@@ -56,6 +56,18 @@
     <ClCompile Include="HexSphereSceneController.cpp">
       <Filter>Source</Filter>
     </ClCompile>
+    <ClCompile Include="MeshGenerators\SelectionOutlineGenerator.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="MeshGenerators\TerrainMeshGenerator.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="MeshGenerators\WaterMeshGenerator.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="MeshGenerators\WireMeshGenerator.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
     <ClCompile Include="HexSphereWidget.cpp">
       <Filter>Source</Filter>
     </ClCompile>
@@ -134,6 +146,18 @@
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="HexSphereSceneController.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="MeshGenerators\SelectionOutlineGenerator.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="MeshGenerators\TerrainMeshGenerator.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="MeshGenerators\WaterMeshGenerator.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="MeshGenerators\WireMeshGenerator.h">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="HexSphereWidget.h">
