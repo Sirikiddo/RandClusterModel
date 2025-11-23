@@ -12,8 +12,6 @@
 #include "HexSphereSceneController.h"
 #include "ModelHandler.h"
 
-class QOpenGLWidget;
-
 class HexSphereRenderer {
 public:
     explicit HexSphereRenderer(QOpenGLWidget* owner);

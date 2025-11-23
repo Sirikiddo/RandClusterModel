@@ -8,7 +8,6 @@
 #include <cmath>
 #include <limits>
 
-#include "scene/Interaction.h"
 #include "scene/Transform.h"
 
 namespace {
@@ -345,10 +344,9 @@ std::optional<HexSphereWidget::PickHit> HexSphereWidget::pickEntityAt(int sx, in
     QVector3D bestPos;
 
     for (const auto& e : sceneGraph_.entities()) {
-        auto* sphere = dynamic_cast<scene::SphereCollider*>(e->collider());
-        if (!sphere) continue;
+        if (!e->collider()) continue;
         const QVector3D center = e->transform().position;
-        const float radius = sphere->radius();
+        const float radius = e->collider()->radius();
         const QVector3D oc = ro - center;
         const float b = 2.0f * QVector3D::dotProduct(oc, rd);
         const float c = QVector3D::dotProduct(oc, oc) - radius * radius;

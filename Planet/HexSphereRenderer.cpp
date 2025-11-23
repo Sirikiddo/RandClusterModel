@@ -76,6 +76,10 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (iboWater_)       gl_->glDeleteBuffers(1, &iboWater_);
     if (vboWaterEdgeFlags_) gl_->glDeleteBuffers(1, &vboWaterEdgeFlags_);
 
+    if (waterTimer_) {
+        waterTimer_->stop();
+    }
+
     owner_->doneCurrent();
 }
 
