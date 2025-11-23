@@ -4,6 +4,8 @@
 #include <QOpenGLFunctions_3_3_Core>
 #include <QVector3D>
 #include <QOpenGLWidget>
+#include <QtOpenGL>
+#include <GL/gl.h>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -20,7 +22,7 @@ public:
         GLenum terrainUsage = GL_STATIC_DRAW;
         GLenum wireUsage = GL_STATIC_DRAW;
         bool useStaticBuffers = true;
-    };
+    };  
 
     explicit HexSphereRenderer(QOpenGLWidget* owner);
     ~HexSphereRenderer();
