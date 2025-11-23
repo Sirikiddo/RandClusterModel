@@ -103,7 +103,7 @@ void HexSphereWidget::resizeGL(int w, int h) {
 void HexSphereWidget::paintGL() {
 
     updateCamera();
-    renderer_.render(view_, proj_, scene_, sceneGraph_, waterTime_, lightDir_, selectedEntityId_, scene_.heightStep());
+    renderer_.render(view_, proj_, scene_, sceneGraph_, waterTime_, lightDir_, scene_.heightStep());
 
     stats_.frameRendered();
 }

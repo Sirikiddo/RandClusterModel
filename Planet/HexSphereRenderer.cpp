@@ -353,7 +353,7 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
 
 void HexSphereRenderer::render(const QMatrix4x4& view, const QMatrix4x4& proj, const HexSphereSceneController& scene,
                                const scene::SceneGraph& sceneGraph, float waterTime, const QVector3D& lightDir,
-                               int selectedEntityId, float heightStep) {
+                               float heightStep) {
     if (!glReady_) return;
 
     const float dpr = owner_->devicePixelRatioF();

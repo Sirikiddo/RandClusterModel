@@ -2,7 +2,6 @@
 
 #include <QMatrix4x4>
 #include <QOpenGLFunctions_3_3_Core>
-#include <QOpenGLFunctions_3_3_Compatibility>
 #include <QVector3D>
 #include <QOpenGLWidget>
 #include <functional>
@@ -38,7 +37,7 @@ public:
 
     void render(const QMatrix4x4& view, const QMatrix4x4& proj, const HexSphereSceneController& scene,
                 const scene::SceneGraph& sceneGraph, float waterTime, const QVector3D& lightDir,
-                int selectedEntityId, float heightStep);
+                float heightStep);
 
     bool ready() const { return glReady_; }
     GLuint envCubemap() const { return envCubemap_; }
