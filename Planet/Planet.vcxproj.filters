@@ -5,21 +5,34 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>qrc;rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Form Files">
-      <UniqueIdentifier>{99349809-55BA-4b9d-BF79-8FDBB0286EB3}</UniqueIdentifier>
-      <Extensions>ui</Extensions>
+    <Filter Include="core">
+      <UniqueIdentifier>{1C0B8D1F-6F7D-4D65-B7E6-7F1D0D1CFA0A}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Translation Files">
-      <UniqueIdentifier>{639EADAA-A684-42e4-A9AD-28FC9BCB8F7C}</UniqueIdentifier>
-      <Extensions>ts</Extensions>
+    <Filter Include="controllers">
+      <UniqueIdentifier>{4C5AD050-5C91-44F9-9D7B-6B9D2D4D310E}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source">
-      <UniqueIdentifier>{0604cdd4-764e-447e-9dd3-1b948e92f0f7}</UniqueIdentifier>
+    <Filter Include="ui">
+      <UniqueIdentifier>{6D5A7D60-9C7F-4E9E-B2B1-AD5F5E24D8BA}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Headers">
-      <UniqueIdentifier>{e519f0d8-cf8b-4688-88b7-cb2a229656bd}</UniqueIdentifier>
+    <Filter Include="renderers">
+      <UniqueIdentifier>{A2D9F7D2-AD6A-4D1E-9E1F-52176B67DC2B}</UniqueIdentifier>
     </Filter>
-    <Filter Include="converters">
+    <Filter Include="generation">
+      <UniqueIdentifier>{0F9D2056-2406-4B45-9EDE-5A8E2F3B2FBC}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="generation\MeshGenerators">
+      <UniqueIdentifier>{ACF2E18C-1BF3-4D0A-9D89-2DD1D0E80F2B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="model">
+      <UniqueIdentifier>{CB7F9A11-ED4F-4E1C-9A69-9D8C0D6C7E22}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="resources">
+      <UniqueIdentifier>{4B660D4E-5C18-468F-AC33-DC0A5C641125}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tools">
+      <UniqueIdentifier>{A1D8B7BA-57E7-4D5E-B099-1E4A1CDBB361}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tools\converters">
       <UniqueIdentifier>{99bd33bc-903b-468c-91e6-ce15f19cd9e9}</UniqueIdentifier>
     </Filter>
     <Filter Include="ECS">
@@ -28,102 +41,93 @@
     <Filter Include="scene">
       <UniqueIdentifier>{4f6fe7fd-5d6b-44ac-bd33-3b2397333bc8}</UniqueIdentifier>
     </Filter>
-    <Filter Include="tests">
-      <UniqueIdentifier>{66922ee6-bff0-415e-996a-f4b02002e8e4}</UniqueIdentifier>
-    </Filter>
     <Filter Include="docs">
       <UniqueIdentifier>{abf60fe6-6894-4c35-80cc-3ec33692449e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="tests">
+      <UniqueIdentifier>{66922ee6-bff0-415e-996a-f4b02002e8e4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <QtRcc Include="Planet.qrc">
+    <QtRcc Include="resources\Planet.qrc">
       <Filter>Resource Files</Filter>
     </QtRcc>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ClimateBiomeGenerator.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="core\main.cpp">
+      <Filter>core</Filter>
     </ClCompile>
-    <ClCompile Include="HexSphereModel.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="controllers\CameraController.cpp">
+      <Filter>controllers</Filter>
     </ClCompile>
-    <ClCompile Include="HexSphereRenderer.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="controllers\HexSphereSceneController.cpp">
+      <Filter>controllers</Filter>
     </ClCompile>
-    <ClCompile Include="EntityRenderer.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="controllers\InputController.cpp">
+      <Filter>controllers</Filter>
     </ClCompile>
-    <ClCompile Include="HexSphereSceneController.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="controllers\PathBuilder.cpp">
+      <Filter>controllers</Filter>
     </ClCompile>
-    <ClCompile Include="MeshGenerators\SelectionOutlineGenerator.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="generation\ClimateBiomeGenerator.cpp">
+      <Filter>generation</Filter>
     </ClCompile>
-    <ClCompile Include="MeshGenerators\TerrainMeshGenerator.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="generation\PerlinNoise.cpp">
+      <Filter>generation</Filter>
     </ClCompile>
-    <ClCompile Include="MeshGenerators\WaterMeshGenerator.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="generation\TerrainGenerator.cpp">
+      <Filter>generation</Filter>
     </ClCompile>
-    <ClCompile Include="MeshGenerators\WireMeshGenerator.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="generation\MeshGenerators\SelectionOutlineGenerator.cpp">
+      <Filter>generation\MeshGenerators</Filter>
     </ClCompile>
-    <ClCompile Include="HexSphereWidget.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="generation\MeshGenerators\TerrainMeshGenerator.cpp">
+      <Filter>generation\MeshGenerators</Filter>
     </ClCompile>
-    <ClCompile Include="CameraController.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="generation\MeshGenerators\WaterMeshGenerator.cpp">
+      <Filter>generation\MeshGenerators</Filter>
     </ClCompile>
-    <ClCompile Include="InputController.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="generation\MeshGenerators\WireMeshGenerator.cpp">
+      <Filter>generation\MeshGenerators</Filter>
     </ClCompile>
-    <ClCompile Include="main.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="model\HexSphereModel.cpp">
+      <Filter>model</Filter>
     </ClCompile>
-    <ClCompile Include="MainWindow.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="model\ModelHandler.cpp">
+      <Filter>model</Filter>
     </ClCompile>
-    <ClCompile Include="model_cache_test.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="renderers\EntityRenderer.cpp">
+      <Filter>renderers</Filter>
     </ClCompile>
-    <ClCompile Include="ModelHandler.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="renderers\HexSphereRenderer.cpp">
+      <Filter>renderers</Filter>
     </ClCompile>
-    <ClCompile Include="PathBuilder.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="renderers\TerrainRenderer.cpp">
+      <Filter>renderers</Filter>
     </ClCompile>
-    <ClCompile Include="PerformanceStats.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="renderers\TerrainTessellator.cpp">
+      <Filter>renderers</Filter>
     </ClCompile>
-    <ClCompile Include="PerlinNoise.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="renderers\WaterRenderer.cpp">
+      <Filter>renderers</Filter>
     </ClCompile>
-    <ClCompile Include="PlanetSettingsPanel.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="ui\HexSphereWidget.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="ui\MainWindow.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="ui\OverlayRenderer.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="ui\PerformanceStats.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="ui\PlanetSettingsPanel.cpp">
+      <Filter>ui</Filter>
     </ClCompile>
     <ClCompile Include="ECS\ComponentStorage.cpp">
       <Filter>ECS</Filter>
-    </ClCompile>
-    <ClCompile Include="SceneGraph.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="TerrainGenerator.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="TerrainTessellator.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="OverlayRenderer.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="TerrainRenderer.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="WaterRenderer.cpp">
-      <Filter>Source</Filter>
-    </ClCompile>
-    <ClCompile Include="converters\DataAdapters.cpp">
-      <Filter>converters</Filter>
     </ClCompile>
     <ClCompile Include="scene\Entity.cpp">
       <Filter>scene</Filter>
@@ -131,73 +135,94 @@
     <ClCompile Include="scene\SceneGraph.cpp">
       <Filter>scene</Filter>
     </ClCompile>
+    <ClCompile Include="tools\converters\DataAdapters.cpp">
+      <Filter>tools\converters</Filter>
+    </ClCompile>
+    <ClCompile Include="tools\model_cache_test.cpp">
+      <Filter>tools</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ClimateBiomeGenerator.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="controllers\CameraController.h">
+      <Filter>controllers</Filter>
     </ClInclude>
-    <ClInclude Include="DebugModel.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="controllers\HexSphereSceneController.h">
+      <Filter>controllers</Filter>
     </ClInclude>
-    <ClInclude Include="HexSphereModel.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="controllers\InputController.h">
+      <Filter>controllers</Filter>
     </ClInclude>
-    <ClInclude Include="HexSphereRenderer.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="controllers\PathBuilder.h">
+      <Filter>controllers</Filter>
     </ClInclude>
-    <ClInclude Include="HexSphereSceneController.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="generation\ClimateBiomeGenerator.h">
+      <Filter>generation</Filter>
     </ClInclude>
-    <ClInclude Include="MeshGenerators\SelectionOutlineGenerator.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="generation\PerlinNoise.h">
+      <Filter>generation</Filter>
     </ClInclude>
-    <ClInclude Include="MeshGenerators\TerrainMeshGenerator.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="generation\TerrainGenerator.h">
+      <Filter>generation</Filter>
     </ClInclude>
-    <ClInclude Include="MeshGenerators\WaterMeshGenerator.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="generation\MeshGenerators\SelectionOutlineGenerator.h">
+      <Filter>generation\MeshGenerators</Filter>
     </ClInclude>
-    <ClInclude Include="MeshGenerators\WireMeshGenerator.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="generation\MeshGenerators\TerrainMeshGenerator.h">
+      <Filter>generation\MeshGenerators</Filter>
     </ClInclude>
-    <ClInclude Include="HexSphereWidget.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="generation\MeshGenerators\WaterMeshGenerator.h">
+      <Filter>generation\MeshGenerators</Filter>
     </ClInclude>
-    <ClInclude Include="CameraController.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="generation\MeshGenerators\WireMeshGenerator.h">
+      <Filter>generation\MeshGenerators</Filter>
     </ClInclude>
-    <ClInclude Include="InputController.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="model\DebugModel.h">
+      <Filter>model</Filter>
     </ClInclude>
-    <ClInclude Include="MainWindow.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="model\HexSphereModel.h">
+      <Filter>model</Filter>
     </ClInclude>
-    <ClInclude Include="ModelHandler.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="model\ModelHandler.h">
+      <Filter>model</Filter>
     </ClInclude>
-    <ClInclude Include="EntityRenderer.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="model\SceneEntity.h">
+      <Filter>model</Filter>
     </ClInclude>
-    <ClInclude Include="PathBuilder.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="model\SurfacePlacement.h">
+      <Filter>model</Filter>
     </ClInclude>
-    <ClInclude Include="OverlayRenderer.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="model\simple3d_parser.hpp">
+      <Filter>model</Filter>
     </ClInclude>
-    <ClInclude Include="SurfacePlacement.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="renderers\EntityRenderer.h">
+      <Filter>renderers</Filter>
     </ClInclude>
-    <ClInclude Include="PerformanceStats.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="renderers\HexSphereRenderer.h">
+      <Filter>renderers</Filter>
     </ClInclude>
-    <ClInclude Include="PerlinNoise.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="renderers\TerrainRenderer.h">
+      <Filter>renderers</Filter>
     </ClInclude>
-    <ClInclude Include="PlanetSettingsPanel.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="renderers\TerrainTessellator.h">
+      <Filter>renderers</Filter>
     </ClInclude>
-    <ClInclude Include="SceneEntity.h">
-      <Filter>Headers</Filter>
+    <ClInclude Include="renderers\WaterRenderer.h">
+      <Filter>renderers</Filter>
+    </ClInclude>
+    <ClInclude Include="ui\HexSphereWidget.h">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="ui\MainWindow.h">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="ui\OverlayRenderer.h">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="ui\PerformanceStats.h">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="ui\PlanetSettingsPanel.h">
+      <Filter>ui</Filter>
     </ClInclude>
     <ClInclude Include="ECS\Collider.h">
       <Filter>ECS</Filter>
@@ -220,24 +245,6 @@
     <ClInclude Include="ECS\Transform.h">
       <Filter>ECS</Filter>
     </ClInclude>
-    <ClInclude Include="SceneGraph.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="simple3d_parser.hpp">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="TerrainGenerator.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="TerrainTessellator.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="TerrainRenderer.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="WaterRenderer.h">
-      <Filter>Headers</Filter>
-    </ClInclude>
     <ClInclude Include="scene\Entity.h">
       <Filter>scene</Filter>
     </ClInclude>
@@ -250,13 +257,13 @@
     <ClInclude Include="scene\Transform.h">
       <Filter>scene</Filter>
     </ClInclude>
-    <ClInclude Include="converters\DataAdapters.h">
-      <Filter>converters</Filter>
+    <ClInclude Include="tools\converters\DataAdapters.h">
+      <Filter>tools\converters</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="HexSphereWidget_shaders.inc">
-      <Filter>Source</Filter>
+    <None Include="resources\HexSphereWidget_shaders.h">
+      <Filter>resources</Filter>
     </None>
     <None Include="docs\rendering_refactor_task.md">
       <Filter>docs</Filter>
