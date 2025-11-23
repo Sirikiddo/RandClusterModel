@@ -1,41 +1,18 @@
-# RandClusterModel
+# RandClusterModel — разработка Planet
 
-## Planet model loading
+## Работая только в каталоге Planet
+- Все изменения в рамках этого репозитория выполняются в директории `Planet` и её подпапках.
+- Путь содержит исходники, ресурсы, настройки проектов Visual Studio и вспомогательные скрипты для проверки рендеринга и загрузки моделей.
+- Если добавляются новые файлы, размещайте их в подходящих подпапках `Planet`, чтобы структура оставалась логичной (например, шейдеры рядом с `HexSphereWidget`, генераторы террейна рядом с `TerrainGenerator`).
 
-The `Planet/ModelHandler` now exposes a shared-loading path to avoid re-reading mesh
-files and duplicating GPU buffers when the same model is requested multiple times.
-Use `ModelHandler::loadShared()` to obtain a cached handler by absolute file path,
-then call `uploadToGPU()` once per OpenGL context:
+## Архитектура проекта
+- **Главное окно и UI**: `MainWindow` управляет жизненным циклом приложения и подключает панели настроек (`PlanetSettingsPanel`) и виджет рендеринга (`HexSphereWidget`).
+- **Рендеринг и сцена**: `HexSphereWidget` отвечает за OpenGL-контекст и сборку сцены из частей, вынесенных в инклюды (`HexSphereWidget_scene.inc`, `HexSphereWidget_loading.inc`, `HexSphereWidget_window.inc`, `HexSphereWidget_shaders.inc`). Сцена описывается сущностями (`SceneEntity.h`), а измерения производительности собираются в `PerformanceStats`.
+- **Геометрия и модели**: генерация сферы и объектов вынесена в `HexSphereModel`, `TerrainTessellator`, `TerrainGenerator`, `ClimateBiomeGenerator` и `PerlinNoise`. Загрузка внешних моделей и кэширование выполняет `ModelHandler`, а пути и навигацию строит `PathBuilder`. Дополнительные вспомогательные парсеры лежат в `simple3d_parser.hpp` и подпапке `converters`.
+- **Ресурсы и сцены**: готовые сцены и примеры находятся в `scene/`, тестовые модели — `tree.obj`, ресурсы Qt — в `Planet.qrc`, документация — в `docs/`.
+- **Тесты и примеры**: файлы в `tests/` и консольный пример `model_cache_test.cpp` помогают проверять корректность загрузки моделей и кэширования GPU-ресурсов.
 
-```cpp
-auto tree = ModelHandler::loadShared("Planet/tree.obj");
-if (tree) {
-    tree->uploadToGPU();
-    // draw via tree->draw(...)
-}
-```
-
-Repeated calls with the same path return the existing instance, reusing previously
-parsed CPU buffers and GPU allocations instead of cloning them.
-
-## Memory check utility
-
-A lightweight console helper lives in `Planet/model_cache_test.cpp`. It loads the
-same model twice and prints the RSS after each step to validate that cached loads
-avoid additional allocations.
-
-Build example (requires Qt 5/6 development packages and OpenGL headers):
-
-```bash
-mkdir -p build && cd build
-qmake ../Planet/Planet.pro  # or use your existing CMake/qmake setup
-make model_cache_test
-./model_cache_test ../Planet/tree.obj
-```
-
-## Notes
-
-* `ModelHandler::clearCache()` removes all cached instances if you need to force
-  a reload (for example, after assets change on disk).
-* Use `ModelHandler::loadedPath()` to introspect which mesh is currently bound to
-  an instance.
+## Обновление проектов Visual Studio
+- Репозиторий использует файлы `Planet.vcxproj`, `Planet.vcxproj.filters` и `Planet.vcxproj.user` для сборки под Visual Studio.
+- При добавлении, удалении или перемещении исходников/ресурсов обязательно синхронизируйте изменения в `.vcxproj` и соответствующих `.filters`, чтобы IDE подхватывала новые элементы и сохранялась структура папок в обозревателе решений.
+- Шейдеры, инклюды и файлы ресурсов также должны быть перечислены в проекте, иначе они не попадут в сборку и могут отсутствовать при деплое.
