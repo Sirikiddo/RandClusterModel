@@ -18,11 +18,27 @@
 
 class HexSphereRenderer {
 public:
+    struct RenderGraph {
+        const HexSphereSceneController& scene;
+        const scene::SceneGraph& sceneGraph;
+        float heightStep = 0.0f;
+    };
+
+    struct RenderCamera {
+        QMatrix4x4 view;
+        QMatrix4x4 projection;
+    };
+
+    struct SceneLighting {
+        QVector3D direction;
+        float waterTime = 0.0f;
+    };
+
     struct UploadOptions {
         GLenum terrainUsage = GL_STATIC_DRAW;
         GLenum wireUsage = GL_STATIC_DRAW;
         bool useStaticBuffers = true;
-    };  
+    };
 
     explicit HexSphereRenderer(QOpenGLWidget* owner);
     ~HexSphereRenderer();
@@ -37,14 +53,18 @@ public:
     void uploadWater(const WaterGeometryData& data);
     void uploadScene(const HexSphereSceneController& scene, const UploadOptions& options);
 
-    void render(const QMatrix4x4& view, const QMatrix4x4& proj, const HexSphereSceneController& scene,
-                const scene::SceneGraph& sceneGraph, float waterTime, const QVector3D& lightDir,
-                float heightStep);
+    void renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting);
 
     bool ready() const { return glReady_; }
     GLuint envCubemap() const { return envCubemap_; }
 
 private:
+    struct RenderContext;
+    struct TerrainSubsystem;
+    struct WaterSubsystem;
+    struct EntitySubsystem;
+    struct OverlaySubsystem;
+
     GLuint makeProgram(const char* vs, const char* fs);
     void generateEnvCubemap();
     void initPyramidGeometry();
@@ -54,14 +74,6 @@ private:
     void uploadSelectionOutlineInternal(const std::vector<float>& vertices);
     void uploadPathInternal(const std::vector<QVector3D>& points);
     void uploadWaterInternal(const WaterGeometryData& data);
-
-    void renderTerrainPass(const QMatrix4x4& mvp, const QVector3D& lightDir);
-    void renderWaterPass(const QMatrix4x4& mvp, float waterTime, const QVector3D& lightDir, const QVector3D& cameraPos);
-    void renderEntityPass(const QMatrix4x4& view, const QMatrix4x4& proj, const HexSphereSceneController& scene,
-                          const scene::SceneGraph& sceneGraph, float heightStep);
-    void renderOverlayPass(const QMatrix4x4& mvp);
-    void renderTreePass(const QMatrix4x4& view, const QMatrix4x4& proj, const HexSphereSceneController& scene,
-                        float heightStep);
 
     QOpenGLWidget* owner_ = nullptr;
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
@@ -94,4 +106,9 @@ private:
     GLsizei waterIndexCount_ = 0;
 
     std::shared_ptr<ModelHandler> treeModel_;
+
+    std::unique_ptr<TerrainSubsystem> terrainSubsystem_;
+    std::unique_ptr<WaterSubsystem> waterSubsystem_;
+    std::unique_ptr<EntitySubsystem> entitySubsystem_;
+    std::unique_ptr<OverlaySubsystem> overlaySubsystem_;
 };
