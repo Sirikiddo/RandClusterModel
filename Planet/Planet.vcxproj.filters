@@ -41,6 +41,12 @@
     <ClCompile Include="HexSphereModel.cpp">
       <Filter>Source</Filter>
     </ClCompile>
+    <ClCompile Include="HexSphereRenderer.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="HexSphereSceneController.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
     <ClCompile Include="HexSphereWidget.cpp">
       <Filter>Source</Filter>
     </ClCompile>
@@ -86,8 +92,6 @@
     <ClCompile Include="scene\SceneGraph.cpp">
       <Filter>scene</Filter>
     </ClCompile>
-    <ClCompile Include="scene\Entity.cpp" />
-    <ClCompile Include="scene\SceneGraph.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ClimateBiomeGenerator.h">
@@ -97,6 +101,12 @@
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="HexSphereModel.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="HexSphereRenderer.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="HexSphereSceneController.h">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="HexSphereWidget.h">
@@ -152,19 +162,7 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="SceneGraph.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="HexSphereWidget_loading.inc">
-      <Filter>Source</Filter>
-    </None>
-    <None Include="HexSphereWidget_scene.inc">
-      <Filter>Source</Filter>
-    </None>
     <None Include="HexSphereWidget_shaders.inc">
-      <Filter>Source</Filter>
-    </None>
-    <None Include="HexSphereWidget_window.inc">
       <Filter>Source</Filter>
     </None>
   </ItemGroup>
