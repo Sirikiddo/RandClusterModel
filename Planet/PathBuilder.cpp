@@ -1,6 +1,6 @@
 #include "PathBuilder.h"
 
-void PathBuilder::build(PathBuilder::WeightFn w) {
+void PathBuilder::build(PathBuilder::WeightFn w) const {
     const auto& cells = model_.cells();
     const int n = (int)cells.size();
     g_.assign(n, {});
