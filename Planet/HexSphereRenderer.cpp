@@ -231,6 +231,7 @@ void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4&
 void HexSphereRenderer::withContext(const std::function<void()>& task) {
     if (!glReady_) return;
 
+    Q_UNUSED(selectedEntityId);
     owner_->makeCurrent();
     task();
     owner_->doneCurrent();
