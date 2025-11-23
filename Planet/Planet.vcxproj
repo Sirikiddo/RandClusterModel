@@ -123,6 +123,8 @@
     <ClInclude Include="converters\DataAdapters.h" />
     <ClInclude Include="DebugModel.h" />
     <ClInclude Include="HexSphereModel.h" />
+    <ClInclude Include="HexSphereRenderer.h" />
+    <ClInclude Include="HexSphereSceneController.h" />
     <ClInclude Include="HexSphereWidget.h" />
     <ClInclude Include="MainWindow.h" />
     <ClInclude Include="ModelHandler.h" />
@@ -143,6 +145,8 @@
     <ClCompile Include="ClimateBiomeGenerator.cpp" />
     <ClCompile Include="converters\DataAdapters.cpp" />
     <ClCompile Include="HexSphereModel.cpp" />
+    <ClCompile Include="HexSphereRenderer.cpp" />
+    <ClCompile Include="HexSphereSceneController.cpp" />
     <ClCompile Include="HexSphereWidget.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MainWindow.cpp" />
@@ -161,10 +165,7 @@
     <ClCompile Include="TerrainTessellator.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="HexSphereWidget_loading.inc" />
-    <None Include="HexSphereWidget_scene.inc" />
     <None Include="HexSphereWidget_shaders.inc" />
-    <None Include="HexSphereWidget_window.inc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
