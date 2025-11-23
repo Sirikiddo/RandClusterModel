@@ -9,6 +9,7 @@
 #include <limits>
 
 #include "scene/Transform.h"
+#include "SurfacePlacement.h"
 
 namespace {
 bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
@@ -27,17 +28,6 @@ bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
     const float v = QVector3D::dotProduct(d, q) * invDet; if (v < -EPS || u + v > 1.0f + EPS) return false;
     const float tt = QVector3D::dotProduct(e2, q) * invDet; if (tt <= EPS) return false;
     tOut = tt; return true;
-}
-
-QVector3D getSurfacePoint(const HexSphereSceneController& scene, int cellId) {
-    const auto& cells = scene.model().cells();
-    if (cellId < 0 || cellId >= static_cast<int>(cells.size())) {
-        return QVector3D(0, 0, 1.0f);
-    }
-    const Cell& cell = cells[static_cast<size_t>(cellId)];
-    const float surfaceHeight = 1.0f + cell.height * scene.heightStep();
-    constexpr float objectOffset = 0.03f;
-    return cell.centroid.normalized() * (surfaceHeight + objectOffset);
 }
 
 static void printGlInfo(QOpenGLFunctions_3_3_Core* gl) {
@@ -95,7 +85,7 @@ void HexSphereWidget::initializeGL() {
 
     SceneEntity pyramid("Explorer", "pyramid");
     pyramid.setCurrentCell(0);
-    QVector3D surfacePosition = getSurfacePoint(scene_, 0);
+    QVector3D surfacePosition = computeSurfacePoint(scene_, 0);
     pyramid.transform().position = scene::localToWorldPoint(pyramid.transform(), scene::CoordinateFrame{}, surfacePosition);
     pyramid.attachCollider(std::make_unique<scene::SphereCollider>(0.08f));
     pyramid.setSelected(true);
@@ -113,7 +103,7 @@ void HexSphereWidget::resizeGL(int w, int h) {
 void HexSphereWidget::paintGL() {
 
     updateCamera();
-    renderer_.render(view_, proj_, scene_, sceneGraph_, waterTime_, lightDir_, selectedEntityId_, scene_.heightStep());
+    renderer_.render(view_, proj_, scene_, sceneGraph_, waterTime_, lightDir_, scene_.heightStep());
 
     stats_.frameRendered();
 }
@@ -204,7 +194,7 @@ void HexSphereWidget::keyPressEvent(QKeyEvent* e) {
         int next = c.neighbors[0];
         if (next < 0) return;
         ent.setCurrentCell(next);
-        ent.transform().position = getSurfacePoint(scene_, next);
+        ent.transform().position = computeSurfacePoint(scene_, next);
         update();
         break;
     }
@@ -443,7 +433,7 @@ void HexSphereWidget::moveSelectedEntityToCell(int cellId) {
     SceneEntity& entity = entityOpt->get();
     if (cellId >= 0 && cellId < scene_.model().cellCount()) {
         entity.setCurrentCell(cellId);
-        entity.transform().position = getSurfacePoint(scene_, cellId);
+        entity.transform().position = computeSurfacePoint(scene_, cellId);
     }
     update();
 }
@@ -459,13 +449,7 @@ void HexSphereWidget::uploadSelection() {
 }
 
 void HexSphereWidget::uploadBuffers() {
-    renderer_.uploadWire(scene_.buildWireVertices(), wireBufferUsage_);
-    renderer_.uploadTerrain(scene_.terrain(), terrainBufferUsage_);
-    uploadSelection();
-    if (auto path = scene_.buildPathPolyline()) {
-        renderer_.uploadPath(*path);
-    }
-    renderer_.uploadWater(scene_.buildWaterGeometry());
+    renderer_.uploadScene(scene_, uploadOptions_);
 }
 
 void HexSphereWidget::buildAndShowSelectedPath() {
@@ -483,15 +467,15 @@ void HexSphereWidget::clearPath() {
 void HexSphereWidget::updateBufferUsageStrategy() {
     const int L = scene_.subdivisionLevel();
     if (L >= 4) {
-        terrainBufferUsage_ = GL_DYNAMIC_DRAW;
-        wireBufferUsage_ = GL_DYNAMIC_DRAW;
-        useStaticBuffers_ = false;
+        uploadOptions_.terrainUsage = GL_DYNAMIC_DRAW;
+        uploadOptions_.wireUsage = GL_DYNAMIC_DRAW;
+        uploadOptions_.useStaticBuffers = false;
     }
     else {
-        terrainBufferUsage_ = GL_STATIC_DRAW;
-        wireBufferUsage_ = GL_STATIC_DRAW;
-        useStaticBuffers_ = true;
+        uploadOptions_.terrainUsage = GL_STATIC_DRAW;
+        uploadOptions_.wireUsage = GL_STATIC_DRAW;
+        uploadOptions_.useStaticBuffers = true;
     }
-    qDebug() << "Buffer strategy:" << (useStaticBuffers_ ? "STATIC" : "DYNAMIC") << "for L =" << L;
+    qDebug() << "Buffer strategy:" << (uploadOptions_.useStaticBuffers ? "STATIC" : "DYNAMIC") << "for L =" << L;
 }
 

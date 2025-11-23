@@ -129,6 +129,7 @@
     <ClInclude Include="MainWindow.h" />
     <ClInclude Include="ModelHandler.h" />
     <ClInclude Include="PathBuilder.h" />
+    <ClInclude Include="SurfacePlacement.h" />
     <ClInclude Include="PerformanceStats.h" />
     <ClInclude Include="PerlinNoise.h" />
     <ClInclude Include="PlanetSettingsPanel.h" />
@@ -166,6 +167,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="HexSphereWidget_shaders.h" />
+    <None Include="docs\rendering_refactor_task.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

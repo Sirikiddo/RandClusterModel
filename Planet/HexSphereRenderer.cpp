@@ -4,20 +4,9 @@
 #include <QtDebug>
 
 #include "HexSphereWidget_shaders.h"
+#include "SurfacePlacement.h"
 
 namespace {
-QVector3D getSurfacePoint(const HexSphereSceneController& scene, int cellId, float heightStep) {
-    const auto& cells = scene.model().cells();
-    if (cellId < 0 || cellId >= static_cast<int>(cells.size())) {
-        return QVector3D(0, 0, 1.0f);
-    }
-
-    const Cell& cell = cells[static_cast<size_t>(cellId)];
-    const float surfaceHeight = 1.0f + cell.height * heightStep;
-    constexpr float objectOffset = 0.03f;
-    return cell.centroid.normalized() * (surfaceHeight + objectOffset);
-}
-
 void orientToSurfaceNormal(QMatrix4x4& matrix, const QVector3D& normal) {
     QVector3D up = normal.normalized();
 
@@ -239,22 +228,24 @@ void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4&
     proj.perspective(50.0f, float(pw) / float(std::max(ph, 1)), 0.01f, 50.0f);
 }
 
-void HexSphereRenderer::uploadWire(const std::vector<float>& vertices, GLenum usage) {
+void HexSphereRenderer::withContext(const std::function<void()>& task) {
     if (!glReady_) return;
+
     owner_->makeCurrent();
+    task();
+    owner_->doneCurrent();
+}
+
+void HexSphereRenderer::uploadWireInternal(const std::vector<float>& vertices, GLenum usage) {
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboPositions_);
     gl_->glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(vertices.size() * sizeof(float)), vertices.data(), usage);
     lineVertexCount_ = GLsizei(vertices.size() / 3);
     if (stats_) {
         stats_->updateMemoryStats(lineVertexCount_, 0, 0);
     }
-    owner_->doneCurrent();
 }
 
-void HexSphereRenderer::uploadTerrain(const TerrainMesh& mesh, GLenum usage) {
-    if (!glReady_) return;
-    owner_->makeCurrent();
-
+void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum usage) {
     if (stats_) stats_->startGPUTimer();
 
     const GLsizeiptr vbPos = GLsizeiptr(mesh.pos.size() * sizeof(float));
@@ -278,22 +269,15 @@ void HexSphereRenderer::uploadTerrain(const TerrainMesh& mesh, GLenum usage) {
         stats_->updateMemoryStats(GLsizei(mesh.pos.size() / 3), terrainIndexCount_, terrainIndexCount_ / 3);
         stats_->stopGPUTimer();
     }
-
-    owner_->doneCurrent();
 }
 
-void HexSphereRenderer::uploadSelectionOutline(const std::vector<float>& vertices) {
-    if (!glReady_) return;
-    owner_->makeCurrent();
+void HexSphereRenderer::uploadSelectionOutlineInternal(const std::vector<float>& vertices) {
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboSel_);
     gl_->glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(vertices.size() * sizeof(float)), vertices.data(), GL_DYNAMIC_DRAW);
     selLineVertexCount_ = GLsizei(vertices.size() / 3);
-    owner_->doneCurrent();
 }
 
-void HexSphereRenderer::uploadPath(const std::vector<QVector3D>& points) {
-    if (!glReady_) return;
-    owner_->makeCurrent();
+void HexSphereRenderer::uploadPathInternal(const std::vector<QVector3D>& points) {
     std::vector<float> buffer;
     buffer.reserve(points.size() * 3);
     for (const auto& p : points) {
@@ -304,13 +288,9 @@ void HexSphereRenderer::uploadPath(const std::vector<QVector3D>& points) {
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboPath_);
     gl_->glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(buffer.size() * sizeof(float)), buffer.empty() ? nullptr : buffer.data(), GL_DYNAMIC_DRAW);
     pathVertexCount_ = GLsizei(buffer.size() / 3);
-    owner_->doneCurrent();
 }
 
-void HexSphereRenderer::uploadWater(const WaterGeometryData& data) {
-    if (!glReady_) return;
-    owner_->makeCurrent();
-
+void HexSphereRenderer::uploadWaterInternal(const WaterGeometryData& data) {
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboWaterPos_);
     gl_->glBufferData(GL_ARRAY_BUFFER, data.positions.size() * sizeof(float), data.positions.empty() ? nullptr : data.positions.data(), GL_STATIC_DRAW);
 
@@ -332,12 +312,47 @@ void HexSphereRenderer::uploadWater(const WaterGeometryData& data) {
     gl_->glBindVertexArray(0);
 
     waterIndexCount_ = static_cast<GLsizei>(data.indices.size());
-    owner_->doneCurrent();
+}
+
+void HexSphereRenderer::uploadWire(const std::vector<float>& vertices, GLenum usage) {
+    withContext([&]() { uploadWireInternal(vertices, usage); });
+}
+
+void HexSphereRenderer::uploadTerrain(const TerrainMesh& mesh, GLenum usage) {
+    withContext([&]() { uploadTerrainInternal(mesh, usage); });
+}
+
+void HexSphereRenderer::uploadSelectionOutline(const std::vector<float>& vertices) {
+    withContext([&]() { uploadSelectionOutlineInternal(vertices); });
+}
+
+void HexSphereRenderer::uploadPath(const std::vector<QVector3D>& points) {
+    withContext([&]() { uploadPathInternal(points); });
+}
+
+void HexSphereRenderer::uploadWater(const WaterGeometryData& data) {
+    withContext([&]() { uploadWaterInternal(data); });
+}
+
+void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const UploadOptions& options) {
+    withContext([&]() {
+        uploadWireInternal(scene.buildWireVertices(), options.wireUsage);
+        uploadTerrainInternal(scene.terrain(), options.terrainUsage);
+        uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
+        if (auto path = scene.buildPathPolyline()) {
+            uploadPathInternal(*path);
+        } else {
+            uploadPathInternal({});
+        }
+        uploadWaterInternal(scene.buildWaterGeometry());
+    });
+    qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
+             << "(terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
 }
 
 void HexSphereRenderer::render(const QMatrix4x4& view, const QMatrix4x4& proj, const HexSphereSceneController& scene,
                                const scene::SceneGraph& sceneGraph, float waterTime, const QVector3D& lightDir,
-                               int selectedEntityId, float heightStep) {
+                               float heightStep) {
     if (!glReady_) return;
 
     const float dpr = owner_->devicePixelRatioF();
@@ -348,43 +363,59 @@ void HexSphereRenderer::render(const QMatrix4x4& view, const QMatrix4x4& proj, c
     if (stats_) stats_->startGPUTimer();
 
     const QMatrix4x4 mvp = proj * view;
+    const QVector3D cameraPos = (view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
 
-    if (terrainIndexCount_ > 0 && progTerrain_) {
-        gl_->glUseProgram(progTerrain_);
-        gl_->glUniformMatrix4fv(uMVP_Terrain_, 1, GL_FALSE, mvp.constData());
-        QMatrix4x4 model; model.setToIdentity();
-        gl_->glUniformMatrix4fv(uModel_, 1, GL_FALSE, model.constData());
-        gl_->glUniform3f(uLightDir_, lightDir.x(), lightDir.y(), lightDir.z());
-        gl_->glBindVertexArray(vaoTerrain_);
-        gl_->glDrawElements(GL_TRIANGLES, terrainIndexCount_, GL_UNSIGNED_INT, nullptr);
-        gl_->glBindVertexArray(0);
+    renderTerrainPass(mvp, lightDir);
+    renderWaterPass(mvp, waterTime, lightDir, cameraPos);
+    renderEntityPass(view, proj, scene, sceneGraph, heightStep);
+    renderOverlayPass(mvp);
+    renderTreePass(view, proj, scene, heightStep);
+
+    if (stats_) stats_->stopGPUTimer();
+}
+
+void HexSphereRenderer::renderTerrainPass(const QMatrix4x4& mvp, const QVector3D& lightDir) {
+    if (terrainIndexCount_ == 0 || progTerrain_ == 0) return;
+
+    gl_->glUseProgram(progTerrain_);
+    gl_->glUniformMatrix4fv(uMVP_Terrain_, 1, GL_FALSE, mvp.constData());
+    QMatrix4x4 model; model.setToIdentity();
+    gl_->glUniformMatrix4fv(uModel_, 1, GL_FALSE, model.constData());
+    gl_->glUniform3f(uLightDir_, lightDir.x(), lightDir.y(), lightDir.z());
+    gl_->glBindVertexArray(vaoTerrain_);
+    gl_->glDrawElements(GL_TRIANGLES, terrainIndexCount_, GL_UNSIGNED_INT, nullptr);
+    gl_->glBindVertexArray(0);
+}
+
+void HexSphereRenderer::renderWaterPass(const QMatrix4x4& mvp, float waterTime, const QVector3D& lightDir, const QVector3D& cameraPos) {
+    if (waterIndexCount_ == 0 || progWater_ == 0) return;
+
+    gl_->glUseProgram(progWater_);
+    gl_->glUniformMatrix4fv(uMVP_Water_, 1, GL_FALSE, mvp.constData());
+    gl_->glUniform1f(uTime_Water_, waterTime);
+    gl_->glUniform3f(uLightDir_Water_, lightDir.x(), lightDir.y(), lightDir.z());
+    gl_->glUniform3f(uViewPos_Water_, cameraPos.x(), cameraPos.y(), cameraPos.z());
+    if (uEnvMap_ != -1 && envCubemap_ != 0) {
+        gl_->glActiveTexture(GL_TEXTURE0);
+        gl_->glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap_);
+        gl_->glUniform1i(uEnvMap_, 0);
     }
 
-    QVector3D cameraPos = (view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
+    gl_->glEnable(GL_BLEND);
+    gl_->glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    gl_->glDepthMask(GL_FALSE);
+    gl_->glBindVertexArray(vaoWater_);
+    gl_->glDrawElements(GL_TRIANGLES, waterIndexCount_, GL_UNSIGNED_INT, nullptr);
+    gl_->glBindVertexArray(0);
+    gl_->glDepthMask(GL_TRUE);
+    gl_->glDisable(GL_BLEND);
+}
 
-    if (waterIndexCount_ > 0 && progWater_) {
-        gl_->glUseProgram(progWater_);
-        gl_->glUniformMatrix4fv(uMVP_Water_, 1, GL_FALSE, mvp.constData());
-        gl_->glUniform1f(uTime_Water_, waterTime);
-        gl_->glUniform3f(uLightDir_Water_, lightDir.x(), lightDir.y(), lightDir.z());
-        gl_->glUniform3f(uViewPos_Water_, cameraPos.x(), cameraPos.y(), cameraPos.z());
-        if (uEnvMap_ != -1 && envCubemap_ != 0) {
-            gl_->glActiveTexture(GL_TEXTURE0);
-            gl_->glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap_);
-            gl_->glUniform1i(uEnvMap_, 0);
-        }
-        gl_->glEnable(GL_BLEND);
-        gl_->glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        gl_->glDepthMask(GL_FALSE);
-        gl_->glBindVertexArray(vaoWater_);
-        gl_->glDrawElements(GL_TRIANGLES, waterIndexCount_, GL_UNSIGNED_INT, nullptr);
-        gl_->glBindVertexArray(0);
-        gl_->glDepthMask(GL_TRUE);
-        gl_->glDisable(GL_BLEND);
-    }
-
+void HexSphereRenderer::renderEntityPass(const QMatrix4x4& view, const QMatrix4x4& proj, const HexSphereSceneController& scene,
+                                         const scene::SceneGraph& sceneGraph, float heightStep) {
+    const QMatrix4x4 vp = proj * view;
     for (const auto& e : sceneGraph.entities()) {
-        QVector3D surfacePos = getSurfacePoint(scene, e->currentCell(), heightStep);
+        QVector3D surfacePos = computeSurfacePoint(scene, e->currentCell(), heightStep);
 
         QMatrix4x4 model;
         model.translate(surfacePos);
@@ -395,7 +426,7 @@ void HexSphereRenderer::render(const QMatrix4x4& view, const QMatrix4x4& proj, c
             model.scale(1.2f);
         }
 
-        const QMatrix4x4 entityMvp = proj * view * model;
+        const QMatrix4x4 entityMvp = vp * model;
         if (e->selected()) {
             gl_->glUseProgram(progSel_);
             gl_->glUniformMatrix4fv(uMVP_Sel_, 1, GL_FALSE, entityMvp.constData());
@@ -406,7 +437,9 @@ void HexSphereRenderer::render(const QMatrix4x4& view, const QMatrix4x4& proj, c
         gl_->glBindVertexArray(vaoPyramid_);
         gl_->glDrawArrays(GL_TRIANGLES, 0, pyramidVertexCount_);
     }
+}
 
+void HexSphereRenderer::renderOverlayPass(const QMatrix4x4& mvp) {
     if (selLineVertexCount_ > 0 && progSel_) {
         gl_->glUseProgram(progSel_);
         gl_->glUniformMatrix4fv(uMVP_Sel_, 1, GL_FALSE, mvp.constData());
@@ -425,42 +458,43 @@ void HexSphereRenderer::render(const QMatrix4x4& view, const QMatrix4x4& proj, c
         gl_->glBindVertexArray(vaoPath_);
         gl_->glDrawArrays(GL_LINE_STRIP, 0, pathVertexCount_);
     }
+}
 
-    if (treeModel_ && treeModel_->isInitialized() && progModel_ != 0 && !treeModel_->isEmpty()) {
-        gl_->glUseProgram(progModel_);
+void HexSphereRenderer::renderTreePass(const QMatrix4x4& view, const QMatrix4x4& proj, const HexSphereSceneController& scene,
+                                       float heightStep) {
+    if (!treeModel_ || !treeModel_->isInitialized() || progModel_ == 0 || treeModel_->isEmpty()) return;
 
-        QVector3D globalLightDir = QVector3D(0.5f, 1.0f, 0.3f).normalized();
-        QVector3D eye = (view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
+    gl_->glUseProgram(progModel_);
 
-        gl_->glUniform3f(uLightDir_Model_, globalLightDir.x(), globalLightDir.y(), globalLightDir.z());
-        gl_->glUniform3f(uViewPos_Model_, eye.x(), eye.y(), eye.z());
-        gl_->glUniform3f(uColor_Model_, 0.15f, 0.5f, 0.1f);
-        gl_->glUniform1i(uUseTexture_, treeModel_->hasUVs() ? 1 : 0);
+    QVector3D globalLightDir = QVector3D(0.5f, 1.0f, 0.3f).normalized();
+    QVector3D eye = (view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
 
-        const auto& cells = scene.model().cells();
-        int treesRendered = 0;
-        const int maxTrees = 25;
+    gl_->glUniform3f(uLightDir_Model_, globalLightDir.x(), globalLightDir.y(), globalLightDir.z());
+    gl_->glUniform3f(uViewPos_Model_, eye.x(), eye.y(), eye.z());
+    gl_->glUniform3f(uColor_Model_, 0.15f, 0.5f, 0.1f);
+    gl_->glUniform1i(uUseTexture_, treeModel_->hasUVs() ? 1 : 0);
 
-        for (size_t i = 0; i < cells.size() && treesRendered < maxTrees; ++i) {
-            if (cells[i].biome == Biome::Grass && (i % 3 == 0)) {
-                QVector3D treePos = getSurfacePoint(scene, static_cast<int>(i), heightStep);
+    const auto& cells = scene.model().cells();
+    int treesRendered = 0;
+    const int maxTrees = 25;
 
-                QMatrix4x4 model;
-                model.translate(treePos);
-                orientToSurfaceNormal(model, treePos.normalized());
-                model.scale(0.05f + 0.02f * (i % 5));
+    for (size_t i = 0; i < cells.size() && treesRendered < maxTrees; ++i) {
+        if (cells[i].biome == Biome::Grass && (i % 3 == 0)) {
+            QVector3D treePos = computeSurfacePoint(scene, static_cast<int>(i), heightStep);
 
-                QMatrix4x4 mvpTree = proj * view * model;
-                gl_->glUniformMatrix4fv(uMVP_Model_, 1, GL_FALSE, mvpTree.constData());
-                gl_->glUniformMatrix4fv(uModel_Model_, 1, GL_FALSE, model.constData());
+            QMatrix4x4 model;
+            model.translate(treePos);
+            orientToSurfaceNormal(model, treePos.normalized());
+            model.scale(0.05f + 0.02f * (i % 5));
 
-                treeModel_->draw(progModel_, mvpTree, model, view);
-                ++treesRendered;
-            }
+            QMatrix4x4 mvpTree = proj * view * model;
+            gl_->glUniformMatrix4fv(uMVP_Model_, 1, GL_FALSE, mvpTree.constData());
+            gl_->glUniformMatrix4fv(uModel_Model_, 1, GL_FALSE, model.constData());
+
+            treeModel_->draw(progModel_, mvpTree, model, view);
+            ++treesRendered;
         }
     }
-
-    if (stats_) stats_->stopGPUTimer();
 }
 
 void HexSphereRenderer::generateEnvCubemap() {

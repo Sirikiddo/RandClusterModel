@@ -75,7 +75,7 @@ void HexSphereSceneController::toggleCellSelection(int cellId) {
     }
 }
 
-std::optional<std::vector<QVector3D>> HexSphereSceneController::buildPathPolyline() {
+std::optional<std::vector<QVector3D>> HexSphereSceneController::buildPathPolyline() const {
     if (selectedCells_.size() != 2) {
         return std::nullopt;
     }
