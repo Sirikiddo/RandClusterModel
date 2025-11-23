@@ -7,13 +7,6 @@
 #include "SurfacePlacement.h"
 
 namespace {
-struct RenderContext {
-    const HexSphereRenderer::RenderGraph& graph;
-    const HexSphereRenderer::RenderCamera& camera;
-    const HexSphereRenderer::SceneLighting& lighting;
-    QMatrix4x4 mvp;
-    QVector3D cameraPos;
-};
 
 void orientToSurfaceNormal(QMatrix4x4& matrix, const QVector3D& normal) {
     QVector3D up = normal.normalized();
@@ -34,6 +27,14 @@ void orientToSurfaceNormal(QMatrix4x4& matrix, const QVector3D& normal) {
     matrix = matrix * rotation;
 }
 } // namespace
+
+struct HexSphereRenderer::RenderContext {
+    const RenderGraph& graph;
+    const RenderCamera& camera;
+    const SceneLighting& lighting;
+    QMatrix4x4 mvp;
+    QVector3D cameraPos;
+};
 
 HexSphereRenderer::HexSphereRenderer(QOpenGLWidget* owner)
     : owner_(owner)
