@@ -28,6 +28,9 @@
     <Filter Include="tests">
       <UniqueIdentifier>{66922ee6-bff0-415e-996a-f4b02002e8e4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="docs">
+      <UniqueIdentifier>{abf60fe6-6894-4c35-80cc-3ec33692449e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="Planet.qrc">
@@ -121,6 +124,9 @@
     <ClInclude Include="PathBuilder.h">
       <Filter>Headers</Filter>
     </ClInclude>
+    <ClInclude Include="SurfacePlacement.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
     <ClInclude Include="PerformanceStats.h">
       <Filter>Headers</Filter>
     </ClInclude>
@@ -164,6 +170,9 @@
   <ItemGroup>
     <None Include="HexSphereWidget_shaders.inc">
       <Filter>Source</Filter>
+    </None>
+    <None Include="docs\rendering_refactor_task.md">
+      <Filter>docs</Filter>
     </None>
   </ItemGroup>
 </Project>
