@@ -108,7 +108,8 @@ InputController::Response InputController::mousePress(QMouseEvent* e) {
     }
 
     if (e->button() == Qt::LeftButton) {
-        auto hit = pickSceneAt(e->x(), e->y());
+        auto p = e->position();
+        auto hit = pickSceneAt(p.x(), p.y());
         if (!hit) return response;
         if (hit->isEntity) {
             selectEntity(hit->entityId, response);
