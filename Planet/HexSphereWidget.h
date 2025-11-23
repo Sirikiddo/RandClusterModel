@@ -17,11 +17,12 @@
 #include "HexSphereModel.h"
 #include "TerrainTessellator.h"
 #include "TerrainGenerator.h"
-#include "SceneGraph.h"
+#include "scene/SceneGraph.h"
 #include "PathBuilder.h"
 #include "ModelHandler.h"
 #include "PerformanceStats.h"
 #include "scene/Transform.h"
+#include "SceneEntity.h"
 
 class QMouseEvent;
 class QWheelEvent;
@@ -158,7 +159,7 @@ private:
     TerrainMesh terrainCPU_;
 
     // SceneGraph
-    SceneGraph scene_;
+    scene::SceneGraph scene_;
     scene::CoordinateFrame globalFrame_{};
 
     int L_ = 2;
