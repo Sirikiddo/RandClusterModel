@@ -10,6 +10,7 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow();
 private:
     std::unique_ptr<CameraController> cameraController_;
     std::unique_ptr<InputController> inputController_;
