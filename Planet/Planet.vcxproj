@@ -114,6 +114,11 @@
     <QtRcc Include="Planet.qrc" />
   </ItemGroup>
   <ItemGroup>
+    <QtMoc Include="HexSphereWidget.h" />
+    <QtMoc Include="MainWindow.h" />
+    <QtMoc Include="PlanetSettingsPanel.h" />
+  </ItemGroup>
+  <ItemGroup>
     <ClInclude Include="ClimateBiomeGenerator.h" />
     <ClInclude Include="converters\DataAdapters.h" />
     <ClInclude Include="DebugModel.h" />
