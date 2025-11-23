@@ -101,9 +101,7 @@ private:
     QMatrix4x4 view_;
     QMatrix4x4 proj_;
 
-    bool useStaticBuffers_ = true;
-    GLenum terrainBufferUsage_ = GL_STATIC_DRAW;
-    GLenum wireBufferUsage_ = GL_STATIC_DRAW;
+    HexSphereRenderer::UploadOptions uploadOptions_{};
 
     int selectedEntityId_ = -1;
 

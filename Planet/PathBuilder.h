@@ -13,7 +13,7 @@ public:
     explicit PathBuilder(const HexSphereModel& model) : model_(model) {}
 
     // соберём неориентированный граф по соседям (веса по умолчанию = 1)
-    void build(WeightFn w = nullptr);
+    void build(WeightFn w = nullptr) const;
 
     // A* по центроидам ячеек (эвристика — дуговое расстояние по сфере)
     std::vector<int> astar(int startId, int goalId) const;
@@ -28,5 +28,5 @@ public:
 private:
     struct Adj { int to; float w; };
     const HexSphereModel& model_;
-    std::vector<std::vector<Adj>> g_;
+    mutable std::vector<std::vector<Adj>> g_;
 };

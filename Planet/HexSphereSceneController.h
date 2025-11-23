@@ -37,7 +37,7 @@ public:
     void clearSelection();
     void toggleCellSelection(int cellId);
 
-    std::optional<std::vector<QVector3D>> buildPathPolyline();
+    std::optional<std::vector<QVector3D>> buildPathPolyline() const;
 
     std::vector<float> buildWireVertices() const;
     std::vector<float> buildSelectionOutlineVertices() const;
