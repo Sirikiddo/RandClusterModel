@@ -160,6 +160,12 @@
     <ClCompile Include="TerrainGenerator.cpp" />
     <ClCompile Include="TerrainTessellator.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="HexSphereWidget_loading.inc" />
+    <None Include="HexSphereWidget_scene.inc" />
+    <None Include="HexSphereWidget_shaders.inc" />
+    <None Include="HexSphereWidget_window.inc" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
     <Import Project="$(QtMsBuild)\qt.targets" />
@@ -169,7 +175,7 @@
   </ImportGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
-      <ErrorText>Данный проект ссылается на пакеты NuGet, отсутствующие на этом компьютере. Используйте восстановление пакетов NuGet, чтобы скачать их.  Дополнительную информацию см. по адресу: http://go.microsoft.com/fwlink/?LinkID=322105. Отсутствует следующий файл: {0}.</ErrorText>
+      <ErrorText>Г„Г Г­Г­Г»Г© ГЇГ°Г®ГҐГЄГІ Г±Г±Г»Г«Г ГҐГІГ±Гї Г­Г  ГЇГ ГЄГҐГІГ» NuGet, Г®ГІГ±ГіГІГ±ГІГўГіГѕГ№ГЁГҐ Г­Г  ГЅГІГ®Г¬ ГЄГ®Г¬ГЇГјГѕГІГҐГ°ГҐ. Г€Г±ГЇГ®Г«ГјГ§ГіГ©ГІГҐ ГўГ®Г±Г±ГІГ Г­Г®ГўГ«ГҐГ­ГЁГҐ ГЇГ ГЄГҐГІГ®Гў NuGet, Г·ГІГ®ГЎГ» Г±ГЄГ Г·Г ГІГј ГЁГµ.  Г„Г®ГЇГ®Г«Г­ГЁГІГҐГ«ГјГ­ГіГѕ ГЁГ­ГґГ®Г°Г¬Г Г¶ГЁГѕ Г±Г¬. ГЇГ® Г Г¤Г°ГҐГ±Гі: http://go.microsoft.com/fwlink/?LinkID=322105. ГЋГІГ±ГіГІГ±ГІГўГіГҐГІ Г±Г«ГҐГ¤ГіГѕГ№ГЁГ© ГґГ Г©Г«: {0}.</ErrorText>
     </PropertyGroup>
     <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.props'))" />
     <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.targets'))" />
