@@ -5,43 +5,13 @@
 
 #include "HexSphereWidget_shaders.h"
 #include "SurfacePlacement.h"
-
-namespace {
-
-void orientToSurfaceNormal(QMatrix4x4& matrix, const QVector3D& normal) {
-    QVector3D up = normal.normalized();
-
-    QVector3D forward = (qAbs(QVector3D::dotProduct(up, QVector3D(0, 0, 1))) > 0.99f)
-        ? QVector3D(1, 0, 0)
-        : QVector3D(0, 0, 1);
-
-    QVector3D right = QVector3D::crossProduct(forward, up).normalized();
-    forward = QVector3D::crossProduct(up, right).normalized();
-
-    QMatrix4x4 rotation;
-    rotation.setColumn(0, QVector4D(right, 0.0f));
-    rotation.setColumn(1, QVector4D(up, 0.0f));
-    rotation.setColumn(2, QVector4D(forward, 0.0f));
-    rotation.setColumn(3, QVector4D(0.0f, 0.0f, 0.0f, 1.0f));
-
-    matrix = matrix * rotation;
-}
-} // namespace
-
-struct HexSphereRenderer::RenderContext {
-    const RenderGraph& graph;
-    const RenderCamera& camera;
-    const SceneLighting& lighting;
-    QMatrix4x4 mvp;
-    QVector3D cameraPos;
-};
+#include "EntityRenderer.h"
+#include "OverlayRenderer.h"
+#include "TerrainRenderer.h"
+#include "WaterRenderer.h"
 
 HexSphereRenderer::HexSphereRenderer(QOpenGLWidget* owner)
-    : owner_(owner)
-    , terrainSubsystem_(std::make_unique<TerrainSubsystem>(*this))
-    , waterSubsystem_(std::make_unique<WaterSubsystem>(*this))
-    , entitySubsystem_(std::make_unique<EntitySubsystem>(*this))
-    , overlaySubsystem_(std::make_unique<OverlaySubsystem>(*this)) {}
+    : owner_(owner) {}
 
 HexSphereRenderer::~HexSphereRenderer() {
     if (!glReady_) {
@@ -231,6 +201,11 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         treeModel_->uploadToGPU();
     }
 
+    terrainRenderer_ = std::make_unique<TerrainRenderer>(gl_, progTerrain_, uMVP_Terrain_, uModel_, uLightDir_, vaoTerrain_, terrainIndexCount_);
+    waterRenderer_ = std::make_unique<WaterRenderer>(gl_, progWater_, uMVP_Water_, uTime_Water_, uLightDir_Water_, uViewPos_Water_, uEnvMap_, envCubemap_, vaoWater_, waterIndexCount_);
+    entityRenderer_ = std::make_unique<EntityRenderer>(gl_, progWire_, progSel_, progModel_, uMVP_Wire_, uMVP_Sel_, uMVP_Model_, uModel_Model_, uLightDir_Model_, uViewPos_Model_, uColor_Model_, uUseTexture_, vaoPyramid_, pyramidVertexCount_, treeModel_);
+    overlayRenderer_ = std::make_unique<OverlayRenderer>(gl_, progWire_, progSel_, uMVP_Wire_, uMVP_Sel_, vaoWire_, vaoSel_, vaoPath_, lineVertexCount_, selLineVertexCount_, pathVertexCount_);
+
     glReady_ = true;
 }
 
@@ -363,161 +338,6 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
              << "(terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
 }
 
-struct HexSphereRenderer::TerrainSubsystem {
-    explicit TerrainSubsystem(HexSphereRenderer& renderer) : renderer_(renderer) {}
-
-    void render(const RenderContext& ctx) const {
-        if (renderer_.terrainIndexCount_ == 0 || renderer_.progTerrain_ == 0) return;
-
-        auto* gl = renderer_.gl_;
-        gl->glUseProgram(renderer_.progTerrain_);
-        gl->glUniformMatrix4fv(renderer_.uMVP_Terrain_, 1, GL_FALSE, ctx.mvp.constData());
-        QMatrix4x4 model; model.setToIdentity();
-        gl->glUniformMatrix4fv(renderer_.uModel_, 1, GL_FALSE, model.constData());
-        const QVector3D& lightDir = ctx.lighting.direction;
-        gl->glUniform3f(renderer_.uLightDir_, lightDir.x(), lightDir.y(), lightDir.z());
-        gl->glBindVertexArray(renderer_.vaoTerrain_);
-        gl->glDrawElements(GL_TRIANGLES, renderer_.terrainIndexCount_, GL_UNSIGNED_INT, nullptr);
-        gl->glBindVertexArray(0);
-    }
-
-private:
-    HexSphereRenderer& renderer_;
-};
-
-struct HexSphereRenderer::WaterSubsystem {
-    explicit WaterSubsystem(HexSphereRenderer& renderer) : renderer_(renderer) {}
-
-    void render(const RenderContext& ctx) const {
-        if (renderer_.waterIndexCount_ == 0 || renderer_.progWater_ == 0) return;
-
-        auto* gl = renderer_.gl_;
-        gl->glUseProgram(renderer_.progWater_);
-        gl->glUniformMatrix4fv(renderer_.uMVP_Water_, 1, GL_FALSE, ctx.mvp.constData());
-        gl->glUniform1f(renderer_.uTime_Water_, ctx.lighting.waterTime);
-        const QVector3D& lightDir = ctx.lighting.direction;
-        gl->glUniform3f(renderer_.uLightDir_Water_, lightDir.x(), lightDir.y(), lightDir.z());
-        gl->glUniform3f(renderer_.uViewPos_Water_, ctx.cameraPos.x(), ctx.cameraPos.y(), ctx.cameraPos.z());
-        if (renderer_.uEnvMap_ != -1 && renderer_.envCubemap_ != 0) {
-            gl->glActiveTexture(GL_TEXTURE0);
-            gl->glBindTexture(GL_TEXTURE_CUBE_MAP, renderer_.envCubemap_);
-            gl->glUniform1i(renderer_.uEnvMap_, 0);
-        }
-
-        gl->glEnable(GL_BLEND);
-        gl->glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        gl->glDepthMask(GL_FALSE);
-        gl->glBindVertexArray(renderer_.vaoWater_);
-        gl->glDrawElements(GL_TRIANGLES, renderer_.waterIndexCount_, GL_UNSIGNED_INT, nullptr);
-        gl->glBindVertexArray(0);
-        gl->glDepthMask(GL_TRUE);
-        gl->glDisable(GL_BLEND);
-    }
-
-private:
-    HexSphereRenderer& renderer_;
-};
-
-struct HexSphereRenderer::EntitySubsystem {
-    explicit EntitySubsystem(HexSphereRenderer& renderer) : renderer_(renderer) {}
-
-    void renderEntities(const RenderContext& ctx) const {
-        const QMatrix4x4& view = ctx.camera.view;
-        const QMatrix4x4& proj = ctx.camera.projection;
-        const QMatrix4x4 vp = proj * view;
-        for (const auto& e : ctx.graph.sceneGraph.entities()) {
-            QVector3D surfacePos = computeSurfacePoint(ctx.graph.scene, e->currentCell(), ctx.graph.heightStep);
-
-            QMatrix4x4 model;
-            model.translate(surfacePos);
-            QVector3D surfaceNormal = surfacePos.normalized();
-            orientToSurfaceNormal(model, surfaceNormal);
-            model.scale(0.08f);
-            if (e->selected()) {
-                model.scale(1.2f);
-            }
-
-            const QMatrix4x4 entityMvp = vp * model;
-            if (e->selected()) {
-                renderer_.gl_->glUseProgram(renderer_.progSel_);
-                renderer_.gl_->glUniformMatrix4fv(renderer_.uMVP_Sel_, 1, GL_FALSE, entityMvp.constData());
-            } else {
-                renderer_.gl_->glUseProgram(renderer_.progWire_);
-                renderer_.gl_->glUniformMatrix4fv(renderer_.uMVP_Wire_, 1, GL_FALSE, entityMvp.constData());
-            }
-            renderer_.gl_->glBindVertexArray(renderer_.vaoPyramid_);
-            renderer_.gl_->glDrawArrays(GL_TRIANGLES, 0, renderer_.pyramidVertexCount_);
-        }
-    }
-
-    void renderTrees(const RenderContext& ctx) const {
-        if (!renderer_.treeModel_ || !renderer_.treeModel_->isInitialized() || renderer_.progModel_ == 0 || renderer_.treeModel_->isEmpty()) return;
-
-        renderer_.gl_->glUseProgram(renderer_.progModel_);
-
-        QVector3D globalLightDir = QVector3D(0.5f, 1.0f, 0.3f).normalized();
-        QVector3D eye = (ctx.camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
-
-        renderer_.gl_->glUniform3f(renderer_.uLightDir_Model_, globalLightDir.x(), globalLightDir.y(), globalLightDir.z());
-        renderer_.gl_->glUniform3f(renderer_.uViewPos_Model_, eye.x(), eye.y(), eye.z());
-        renderer_.gl_->glUniform3f(renderer_.uColor_Model_, 0.15f, 0.5f, 0.1f);
-        renderer_.gl_->glUniform1i(renderer_.uUseTexture_, renderer_.treeModel_->hasUVs() ? 1 : 0);
-
-        const auto& cells = ctx.graph.scene.model().cells();
-        int treesRendered = 0;
-        const int maxTrees = 25;
-
-        for (size_t i = 0; i < cells.size() && treesRendered < maxTrees; ++i) {
-            if (cells[i].biome == Biome::Grass && (i % 3 == 0)) {
-                QVector3D treePos = computeSurfacePoint(ctx.graph.scene, static_cast<int>(i), ctx.graph.heightStep);
-
-                QMatrix4x4 model;
-                model.translate(treePos);
-                orientToSurfaceNormal(model, treePos.normalized());
-                model.scale(0.05f + 0.02f * (i % 5));
-
-                QMatrix4x4 mvpTree = ctx.camera.projection * ctx.camera.view * model;
-                renderer_.gl_->glUniformMatrix4fv(renderer_.uMVP_Model_, 1, GL_FALSE, mvpTree.constData());
-                renderer_.gl_->glUniformMatrix4fv(renderer_.uModel_Model_, 1, GL_FALSE, model.constData());
-
-                renderer_.treeModel_->draw(renderer_.progModel_, mvpTree, model, ctx.camera.view);
-                ++treesRendered;
-            }
-        }
-    }
-
-private:
-    HexSphereRenderer& renderer_;
-};
-
-struct HexSphereRenderer::OverlaySubsystem {
-    explicit OverlaySubsystem(HexSphereRenderer& renderer) : renderer_(renderer) {}
-
-    void render(const RenderContext& ctx) const {
-        if (renderer_.selLineVertexCount_ > 0 && renderer_.progSel_) {
-            renderer_.gl_->glUseProgram(renderer_.progSel_);
-            renderer_.gl_->glUniformMatrix4fv(renderer_.uMVP_Sel_, 1, GL_FALSE, ctx.mvp.constData());
-            renderer_.gl_->glBindVertexArray(renderer_.vaoSel_);
-            renderer_.gl_->glDrawArrays(GL_LINES, 0, renderer_.selLineVertexCount_);
-        }
-        if (renderer_.lineVertexCount_ > 0 && renderer_.progWire_) {
-            renderer_.gl_->glUseProgram(renderer_.progWire_);
-            renderer_.gl_->glUniformMatrix4fv(renderer_.uMVP_Wire_, 1, GL_FALSE, ctx.mvp.constData());
-            renderer_.gl_->glBindVertexArray(renderer_.vaoWire_);
-            renderer_.gl_->glDrawArrays(GL_LINES, 0, renderer_.lineVertexCount_);
-        }
-        if (renderer_.pathVertexCount_ > 0 && renderer_.progWire_) {
-            renderer_.gl_->glUseProgram(renderer_.progWire_);
-            renderer_.gl_->glUniformMatrix4fv(renderer_.uMVP_Wire_, 1, GL_FALSE, ctx.mvp.constData());
-            renderer_.gl_->glBindVertexArray(renderer_.vaoPath_);
-            renderer_.gl_->glDrawArrays(GL_LINE_STRIP, 0, renderer_.pathVertexCount_);
-        }
-    }
-
-private:
-    HexSphereRenderer& renderer_;
-};
-
 void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting) {
     if (!glReady_) return;
 
@@ -531,11 +351,11 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     RenderContext ctx{graph, camera, lighting, camera.projection * camera.view,
                       (camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D()};
 
-    terrainSubsystem_->render(ctx);
-    waterSubsystem_->render(ctx);
-    entitySubsystem_->renderEntities(ctx);
-    overlaySubsystem_->render(ctx);
-    entitySubsystem_->renderTrees(ctx);
+    terrainRenderer_->render(ctx);
+    waterRenderer_->render(ctx);
+    entityRenderer_->renderEntities(ctx);
+    overlayRenderer_->render(ctx);
+    entityRenderer_->renderTrees(ctx);
 
     if (stats_) stats_->stopGPUTimer();
 }

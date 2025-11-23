@@ -16,6 +16,11 @@
 #include "HexSphereSceneController.h"
 #include "ModelHandler.h"
 
+class TerrainRenderer;
+class WaterRenderer;
+class EntityRenderer;
+class OverlayRenderer;
+
 class HexSphereRenderer {
 public:
     struct RenderGraph {
@@ -32,6 +37,14 @@ public:
     struct SceneLighting {
         QVector3D direction;
         float waterTime = 0.0f;
+    };
+
+    struct RenderContext {
+        const RenderGraph& graph;
+        const RenderCamera& camera;
+        const SceneLighting& lighting;
+        QMatrix4x4 mvp;
+        QVector3D cameraPos;
     };
 
     struct UploadOptions {
@@ -59,12 +72,6 @@ public:
     GLuint envCubemap() const { return envCubemap_; }
 
 private:
-    struct RenderContext;
-    struct TerrainSubsystem;
-    struct WaterSubsystem;
-    struct EntitySubsystem;
-    struct OverlaySubsystem;
-
     GLuint makeProgram(const char* vs, const char* fs);
     void generateEnvCubemap();
     void initPyramidGeometry();
@@ -107,8 +114,8 @@ private:
 
     std::shared_ptr<ModelHandler> treeModel_;
 
-    std::unique_ptr<TerrainSubsystem> terrainSubsystem_;
-    std::unique_ptr<WaterSubsystem> waterSubsystem_;
-    std::unique_ptr<EntitySubsystem> entitySubsystem_;
-    std::unique_ptr<OverlaySubsystem> overlaySubsystem_;
+    std::unique_ptr<TerrainRenderer> terrainRenderer_;
+    std::unique_ptr<WaterRenderer> waterRenderer_;
+    std::unique_ptr<EntityRenderer> entityRenderer_;
+    std::unique_ptr<OverlayRenderer> overlayRenderer_;
 };

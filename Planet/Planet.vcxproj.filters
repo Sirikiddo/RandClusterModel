@@ -47,6 +47,9 @@
     <ClCompile Include="HexSphereRenderer.cpp">
       <Filter>Source</Filter>
     </ClCompile>
+    <ClCompile Include="EntityRenderer.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
     <ClCompile Include="HexSphereSceneController.cpp">
       <Filter>Source</Filter>
     </ClCompile>
@@ -86,6 +89,15 @@
     <ClCompile Include="TerrainTessellator.cpp">
       <Filter>Source</Filter>
     </ClCompile>
+    <ClCompile Include="OverlayRenderer.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="TerrainRenderer.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="WaterRenderer.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
     <ClCompile Include="converters\DataAdapters.cpp">
       <Filter>converters</Filter>
     </ClCompile>
@@ -121,7 +133,13 @@
     <ClInclude Include="ModelHandler.h">
       <Filter>Headers</Filter>
     </ClInclude>
+    <ClInclude Include="EntityRenderer.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
     <ClInclude Include="PathBuilder.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="OverlayRenderer.h">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="SurfacePlacement.h">
@@ -149,6 +167,12 @@
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="TerrainTessellator.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="TerrainRenderer.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="WaterRenderer.h">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="scene\Entity.h">
