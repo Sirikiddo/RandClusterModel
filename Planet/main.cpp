@@ -1,8 +1,15 @@
 #include <QApplication>
 #include <QSurfaceFormat>
+#include <windows.h>
 #include "MainWindow.h"
 
+extern "C" {
+    __declspec(dllexport) DWORD NvOptimusEnablement = 1;
+    __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 1;
+}
+
 int main(int argc, char** argv) {
+
     // Request a 3.3 Core context globally
     QSurfaceFormat fmt;
     fmt.setVersion(3, 3);

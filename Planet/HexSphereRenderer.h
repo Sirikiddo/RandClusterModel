@@ -2,7 +2,9 @@
 
 #include <QMatrix4x4>
 #include <QOpenGLFunctions_3_3_Core>
+#include <QOpenGLFunctions_3_3_Compatibility>
 #include <QVector3D>
+#include <QOpenGLWidget>
 #include <memory>
 #include <vector>
 
@@ -17,7 +19,7 @@ public:
     explicit HexSphereRenderer(QOpenGLWidget* owner);
     ~HexSphereRenderer();
 
-    void initialize(PerformanceStats& stats);
+    void initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Core* gl, PerformanceStats* stats);
     void resize(int w, int h, float devicePixelRatio, QMatrix4x4& proj);
 
     void uploadWire(const std::vector<float>& vertices, GLenum usage);

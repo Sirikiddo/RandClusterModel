@@ -3,7 +3,7 @@
 #include <QOpenGLWidget>
 #include <QtDebug>
 
-#include "HexSphereWidget_shaders.inc"
+#include "HexSphereWidget_shaders.h"
 
 namespace {
 QVector3D getSurfacePoint(const HexSphereSceneController& scene, int cellId, float heightStep) {
@@ -76,10 +76,6 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (iboWater_)       gl_->glDeleteBuffers(1, &iboWater_);
     if (vboWaterEdgeFlags_) gl_->glDeleteBuffers(1, &vboWaterEdgeFlags_);
 
-    if (waterTimer_) {
-        waterTimer_->stop();
-    }
-
     owner_->doneCurrent();
 }
 
@@ -124,10 +120,11 @@ GLuint HexSphereRenderer::makeProgram(const char* vs, const char* fs) {
     return p;
 }
 
-void HexSphereRenderer::initialize(PerformanceStats& stats) {
-    gl_ = owner_->context()->versionFunctions<QOpenGLFunctions_3_3_Core>();
-    gl_->initializeOpenGLFunctions();
-    stats_ = &stats;
+void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Core* gl, PerformanceStats* stats) {
+    owner_ = owner;
+    gl_ = gl;
+    stats_ = stats;
+    glReady_ = true;
 
     gl_->glEnable(GL_DEPTH_TEST);
     gl_->glEnable(GL_CULL_FACE);

@@ -165,7 +165,7 @@
     <ClCompile Include="TerrainTessellator.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="HexSphereWidget_shaders.inc" />
+    <None Include="HexSphereWidget_shaders.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

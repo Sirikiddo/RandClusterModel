@@ -1,4 +1,4 @@
-#include "HexSphereWidget.h"
+﻿#include "HexSphereWidget.h"
 
 #include <QLabel>
 #include <QMouseEvent>
@@ -39,6 +39,18 @@ QVector3D getSurfacePoint(const HexSphereSceneController& scene, int cellId) {
     constexpr float objectOffset = 0.03f;
     return cell.centroid.normalized() * (surfaceHeight + objectOffset);
 }
+
+static void printGlInfo(QOpenGLFunctions_3_3_Core* gl) {
+    const GLubyte* vendor = gl->glGetString(GL_VENDOR);
+    const GLubyte* renderer = gl->glGetString(GL_RENDERER);
+    const GLubyte* version = gl->glGetString(GL_VERSION);
+
+    qDebug() << "=== OpenGL Device Info ===";
+    qDebug() << "GPU Vendor:   " << reinterpret_cast<const char*>(vendor);
+    qDebug() << "GPU Renderer: " << reinterpret_cast<const char*>(renderer);
+    qDebug() << "GL Version:   " << reinterpret_cast<const char*>(version);
+    qDebug() << "===========================";
+}
 }
 
 HexSphereWidget::HexSphereWidget(QWidget* parent) : QOpenGLWidget(parent) {
@@ -61,8 +73,23 @@ HexSphereWidget::HexSphereWidget(QWidget* parent) : QOpenGLWidget(parent) {
 HexSphereWidget::~HexSphereWidget() = default;
 
 void HexSphereWidget::initializeGL() {
-    updateBufferUsageStrategy();
-    renderer_.initialize(stats_);
+    makeCurrent();
+
+    QOpenGLContext* ctx = context();
+
+    if (!ctx) qFatal("No OpenGL context!");
+
+    auto* gl = QOpenGLVersionFunctionsFactory::get<QOpenGLFunctions_3_3_Core>(ctx);
+    if (!gl) {
+        qFatal("Cannot obtain QOpenGLFunctions_3_3_Core");
+    }
+
+    gl->initializeOpenGLFunctions();
+
+    //что за карточка используется
+    printGlInfo(gl);
+
+    renderer_.initialize(this, gl, &stats_);
 
     waterTimer_->start(16);
 
@@ -84,6 +111,7 @@ void HexSphereWidget::resizeGL(int w, int h) {
 }
 
 void HexSphereWidget::paintGL() {
+
     updateCamera();
     renderer_.render(view_, proj_, scene_, sceneGraph_, waterTime_, lightDir_, selectedEntityId_, scene_.heightStep());
 
@@ -345,8 +373,13 @@ std::optional<HexSphereWidget::PickHit> HexSphereWidget::pickEntityAt(int sx, in
 
     for (const auto& e : sceneGraph_.entities()) {
         if (!e->collider()) continue;
+
+        const scene::SphereCollider* sphere =
+            dynamic_cast<const scene::SphereCollider*>(e->collider());
+        if (!sphere) continue;
+
         const QVector3D center = e->transform().position;
-        const float radius = e->collider()->radius();
+        const float radius = sphere->radius();
         const QVector3D oc = ro - center;
         const float b = 2.0f * QVector3D::dotProduct(oc, rd);
         const float c = QVector3D::dotProduct(oc, oc) - radius * radius;

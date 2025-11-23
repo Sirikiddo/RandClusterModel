@@ -3,6 +3,7 @@
 
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions_3_3_Core>
+#include <QOpenGLVersionFunctionsFactory>
 #include <QMatrix4x4>
 #include <QPoint>
 #include <QQuaternion>
