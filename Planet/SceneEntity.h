@@ -1,7 +1,7 @@
 #pragma once
-#include "scene/Entity.h"
+#include "ECS/Entity.h"
 
-using SceneEntity = scene::Entity;
-using IEntity = scene::IEntity;
-using EntityHandle = scene::EntityHandle;
+using SceneEntity = ecs::Entity;
+using IEntity = ecs::Entity;
+using EntityHandle = ecs::EntityId;
 

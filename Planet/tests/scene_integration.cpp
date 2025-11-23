@@ -1,5 +1,5 @@
 #include <QtTest/QtTest>
-#include "../scene/SceneGraph.h"
+#include "../ECS/ComponentStorage.h"
 
 class SceneIntegrationTest : public QObject {
     Q_OBJECT
@@ -8,29 +8,33 @@ private slots:
 };
 
 void SceneIntegrationTest::sceneLifecycle() {
-    scene::SceneGraph graph;
-    scene::CoordinateFrame root;
-    auto planet = std::make_shared<scene::Entity>("Planet", "hexSphere");
-    planet->transform().scale = {2.0f, 2.0f, 2.0f};
+    ecs::ComponentStorage ecs;
+    ecs::CoordinateFrame root;
 
-    auto handle = graph.spawn(planet);
-    QVERIFY(handle->id() >= 0);
+    auto& planet = ecs.createEntity("Planet");
+    planet.currentCell = 0;
+    ecs.emplace<ecs::Mesh>(planet.id).meshId = "hexSphere";
+    ecs::Transform& planetTransform = ecs.emplace<ecs::Transform>(planet.id);
+    planetTransform.scale = {2.0f, 2.0f, 2.0f};
 
-    auto rover = graph.spawn(scene::Entity("Rover", "pyramid"));
-    rover->transform().position = scene::localToWorldPoint(rover->transform(), root, {1.0f, 0.0f, 0.0f});
-    rover->setSelected(true);
+    auto& rover = ecs.createEntity("Rover");
+    ecs.emplace<ecs::Mesh>(rover.id).meshId = "pyramid";
+    ecs::Transform& roverTransform = ecs.emplace<ecs::Transform>(rover.id);
+    roverTransform.position = ecs::localToWorldPoint(roverTransform, root, {1.0f, 0.0f, 0.0f});
+    ecs.setSelected(rover.id, true);
 
     bool updated = false;
-    graph.onUpdate([&](scene::Entity& e) {
-        if (e.id() == rover->id()) updated = true;
-    });
+    auto& roverScript = ecs.emplace<ecs::Script>(rover.id);
+    roverScript.onUpdate = [&](ecs::EntityId id, float) {
+        if (id == rover.id) updated = true;
+    };
 
-    graph.update(0.016f);
+    ecs.update(0.016f);
     QVERIFY(updated);
 
-    QVERIFY(graph.selected());
-    graph.destroy(rover->id());
-    QVERIFY(!graph.selected());
+    QVERIFY(ecs.selectedEntity());
+    ecs.destroyEntity(rover.id);
+    QVERIFY(!ecs.selectedEntity());
 }
 
 QTEST_MAIN(SceneIntegrationTest)

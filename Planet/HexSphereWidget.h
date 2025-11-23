@@ -16,8 +16,7 @@
 #include "HexSphereSceneController.h"
 #include "HexSphereRenderer.h"
 #include "PerformanceStats.h"
-#include "scene/SceneGraph.h"
-#include "SceneEntity.h"
+#include "ECS/ComponentStorage.h"
 
 class QMouseEvent;
 class QWheelEvent;
@@ -89,7 +88,7 @@ private:
 
     HexSphereSceneController scene_{};
     HexSphereRenderer renderer_{ this };
-    scene::SceneGraph sceneGraph_{};
+    ecs::ComponentStorage ecs_{};
 
     PerformanceStats stats_{};
 

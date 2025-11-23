@@ -60,20 +60,22 @@ void EntityRenderer::renderEntities(const HexSphereRenderer::RenderContext& ctx)
     const QMatrix4x4& view = ctx.camera.view;
     const QMatrix4x4& proj = ctx.camera.projection;
     const QMatrix4x4 vp = proj * view;
-    for (const auto& e : ctx.graph.sceneGraph.entities()) {
-        QVector3D surfacePos = computeSurfacePoint(ctx.graph.scene, e->currentCell(), ctx.graph.heightStep);
+    ctx.graph.ecs.each<ecs::Mesh, ecs::Transform>([&](const ecs::Entity& e, const ecs::Mesh&, const ecs::Transform& transform) {
+        QVector3D surfacePos = (e.currentCell >= 0)
+            ? computeSurfacePoint(ctx.graph.scene, e.currentCell, ctx.graph.heightStep)
+            : transform.position;
 
         QMatrix4x4 model;
         model.translate(surfacePos);
         QVector3D surfaceNormal = surfacePos.normalized();
         orientToSurfaceNormal(model, surfaceNormal);
         model.scale(0.08f);
-        if (e->selected()) {
+        if (e.selected) {
             model.scale(1.2f);
         }
 
         const QMatrix4x4 entityMvp = vp * model;
-        if (e->selected()) {
+        if (e.selected) {
             gl_->glUseProgram(progSel_);
             gl_->glUniformMatrix4fv(uMvpSel_, 1, GL_FALSE, entityMvp.constData());
         } else {
@@ -82,7 +84,7 @@ void EntityRenderer::renderEntities(const HexSphereRenderer::RenderContext& ctx)
         }
         gl_->glBindVertexArray(vaoPyramid_);
         gl_->glDrawArrays(GL_TRIANGLES, 0, pyramidVertexCount_);
-    }
+    });
 }
 
 void EntityRenderer::renderTrees(const HexSphereRenderer::RenderContext& ctx) const {
