@@ -75,8 +75,6 @@ void InputController::initialize(QOpenGLWidget* owner) {
     QVector3D surfacePosition = computeSurfacePoint(scene_, 0);
     transform.position = ecs::localToWorldPoint(transform, ecs::CoordinateFrame{}, surfacePosition);
     ecs_.emplace<ecs::Collider>(pyramid.id).radius = 0.08f;
-    ecs_.setSelected(pyramid.id, true);
-    selectedEntityId_ = pyramid.id;
 
     Response initResponse;
     rebuildModel(initResponse);
@@ -115,13 +113,7 @@ InputController::Response InputController::mousePress(QMouseEvent* e) {
             selectEntity(hit->entityId, response);
         }
         else if (hit->cellId >= 0) {
-            const auto& sels = scene_.selectedCells();
-            if (std::find(sels.begin(), sels.end(), hit->cellId) != sels.end()) {
-                scene_.toggleCellSelection(hit->cellId);
-            } else {
-                scene_.clearSelection();
-                scene_.toggleCellSelection(hit->cellId);
-            }
+            scene_.toggleCellSelection(hit->cellId);
             uploadSelection();
             moveSelectedEntityToCell(hit->cellId, response);
         }
@@ -461,7 +453,11 @@ std::optional<InputController::PickHit> InputController::pickSceneAt(int sx, int
 }
 
 void InputController::selectEntity(int entityId, Response& response) {
-    if (selectedEntityId_ == entityId) return;
+    if (selectedEntityId_ == entityId) {
+        deselectEntity();
+        response.requestUpdate = true;
+        return;
+    }
 
     if (auto* previous = ecs_.getEntity(selectedEntityId_)) {
         previous->selected = false;
@@ -489,5 +485,6 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
             transform->position = computeSurfacePoint(scene_, cellId);
         }
     }
+    deselectEntity();
     response.requestUpdate = true;
 }
