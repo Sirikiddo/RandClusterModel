@@ -1,31 +1,122 @@
-# Planet architecture and layout
+## Архитектура проекта Planet (как ориентироваться в коде)
 
-The Planet application is a Qt + OpenGL playground for rendering and interacting with a procedural hex-sphere world. The codebase is split into small subsystems so camera/input handling, scene building, rendering, and generation can evolve independently.
+Проект организован так, чтобы любой новый функционал можно было быстро найти и доработать. Ниже описано, какие слои есть в приложении и куда смотреть для любой фичи.
 
-## Runtime pipeline
-- **Bootstrap:** `core/main.cpp` configures a 3.3 core profile with multisampling and launches `MainWindow`, which hosts the entire UI stack.【F:core/main.cpp†L1-L26】
-- **UI shell and controls:** `ui/MainWindow` wires together the `CameraController`, the central `HexSphereWidget`, and dockable settings. It exposes subdivision, reset, and selection actions plus a docked `PlanetSettingsPanel` for generator controls and visualization toggles.【F:ui/MainWindow.cpp†L1-L66】
-- **Widget event surface:** `ui/HexSphereWidget` owns the GL viewport, translates Qt input events into controller calls, drives a HUD label, and runs a timer to advance animated water.【F:ui/HexSphereWidget.cpp†L1-L76】【F:ui/HexSphereWidget.cpp†L88-L113】
-- **Input, scene, and ECS orchestration:** `controllers/InputController` is the hub for interaction. It initializes the OpenGL function set and `HexSphereRenderer`, seeds the ECS with a default explorer entity on the planet surface, rebuilds GPU buffers when the model changes, and keeps track of buffer usage strategy. Every frame it composes a `RenderGraph`, `RenderCamera`, and `SceneLighting` bundle for the renderer.【F:controllers/InputController.cpp†L38-L83】【F:controllers/InputController.cpp†L89-L98】【F:controllers/InputController.cpp†L324-L372】
-- **GPU rendering back end:** `renderers/HexSphereRenderer` owns the GL programs, VAOs/VBOs, and delegate renderers for terrain, water, entities, and overlays. It exposes `uploadScene` for bulk buffer updates (wireframe, terrain, selection outline, path, and water) and `renderScene` for pass-driven drawing using the camera and lighting data.【F:renderers/HexSphereRenderer.h†L13-L119】
-- **Procedural generation and geometry:** `generation/` hosts terrain generator implementations (`NoOp`, `Sine`, `Perlin`, and climate-based biomes) plus mesh builders for terrain, water, wireframe, and selection outlines. These feed CPU-side `HexSphereModel` data that later gets uploaded to the GPU.【F:generation/TerrainGenerator.h†L1-L34】【F:generation/MeshGenerators/WaterMeshGenerator.h†L1-L17】
-- **Data models and scene storage:** `model/` contains the `HexSphereModel`, OBJ loading via `ModelHandler`, and placement helpers, while `ECS/ComponentStorage` owns entities and components (transform, mesh, collider, material, script) with selection support and update hooks. The lightweight `scene/` folder keeps generic scene graph helpers used alongside the ECS layer.【F:model/ModelHandler.h†L1-L42】【F:ECS/ComponentStorage.h†L1-L63】【F:scene/SceneGraph.h†L1-L42】
+### 1. Общий поток работы
 
-## Directory overview
-- `core/` — application entry point and global GL surface format setup.【F:core/main.cpp†L1-L26】
-- `controllers/` — input/state controllers and helpers for driving the planet scene (`CameraController.*`, `InputController.*`, `HexSphereSceneController.*`, `PathBuilder.*`).【F:controllers/InputController.h†L1-L68】
-- `ui/` — Qt widgets and overlays for the GL viewport, HUD, settings panel, and performance stats (`HexSphereWidget.*`, `MainWindow.*`, `OverlayRenderer.*`, `PerformanceStats.*`, `PlanetSettingsPanel.*`).【F:ui/HexSphereWidget.h†L1-L46】【F:ui/MainWindow.cpp†L1-L66】
-- `renderers/` — OpenGL renderers and tessellation utilities (`HexSphereRenderer.*`, `EntityRenderer.*`, `TerrainRenderer.*`, `WaterRenderer.*`, `TerrainTessellator.*`).【F:renderers/HexSphereRenderer.h†L13-L119】【F:renderers/TerrainTessellator.h†L1-L38】
-- `generation/` — procedural content and mesh builders, including `MeshGenerators/` for terrain, water, wireframe, and selection outlines.【F:generation/TerrainGenerator.h†L1-L34】【F:generation/MeshGenerators/WaterMeshGenerator.h†L1-L17】
-- `model/` — planet data structures, surface placement math, and shared model loading (`HexSphereModel.*`, `ModelHandler.*`, `SurfacePlacement.h`, `SceneEntity.h`, `simple3d_parser.hpp`).【F:model/ModelHandler.h†L1-L42】
-- `ECS/` — lightweight entity/component storage for transforms, meshes, colliders, materials, scripts, and selection tracking.【F:ECS/ComponentStorage.h†L1-L63】
-- `scene/` — foundational scene graph types (`Entity.*`, `SceneGraph.*`, `Transform.h`, `Interaction.h`) used alongside ECS utilities.【F:scene/SceneGraph.h†L1-L42】
-- `resources/` — static assets and Qt resource list (`Planet.qrc`, shader headers, OBJ samples, NuGet packages file).【F:resources/Planet.qrc†L1-L4】
-- `tools/` — developer utilities and data converters (e.g., `model_cache_test.cpp`, `converters/DataAdapters.*`).【F:tools/model_cache_test.cpp†L1-L12】【F:tools/converters/DataAdapters.h†L1-L36】
-- `docs/` — development notes and refactor briefs for the rendering and scene subsystems.【F:docs/planet_reorg_tasks.md†L1-L15】
-- `tests/` — integration and scene-level experiments (`scene_integration.cpp`).【F:tests/scene_integration.cpp†L1-L40】
+1. **Запуск приложения**
+   - Файл: `core/main.cpp`
+   - Создаётся `QApplication`, настраивается формат OpenGL, создаётся и показывается `MainWindow`.
 
-## Project files and adding content
-- Project files (`Planet.vcxproj`, `Planet.vcxproj.filters`, `Planet.vcxproj.user`) live at the root of `Planet/`; keep them in sync with any file moves so Visual Studio mirrors the folder structure.
-- Place new sources beside the subsystem they belong to (controllers, ui, renderers, generation, model, ECS/scene, tools, or resources). Include headers using folder-qualified paths from the project root (e.g., `#include "renderers/TerrainRenderer.h"`).
-- Register new sources, headers, or assets in `Planet.vcxproj` and the matching filter file so they appear in Solution Explorer and are bundled with the build.
+2. **Главное окно и панель настроек**
+   - Файлы: `ui/MainWindow.*`, `ui/PlanetSettingsPanel.*`
+   - `MainWindow`:
+     - создаёт центральный OpenGL-виджет `HexSphereWidget`;
+     - создаёт панель настроек (`PlanetSettingsPanel`) в доке;
+     - соединяет сигналы панели (изменение генератора, параметров рельефа и т.п.) с методами центрального виджета.
+
+3. **OpenGL-виджет планеты**
+   - Файлы: `ui/HexSphereWidget.*`
+   - Наследник `QOpenGLWidget`, отвечает за:
+     - инициализацию контекста (`initializeGL`);
+     - реакцию на изменение размера (`resizeGL`);
+     - отрисовку кадра (`paintGL`);
+     - приём Qt-событий (`mouse*`, `key*`, `wheel`) и их передачу дальше.
+   - Внутри хранит:
+     - `CameraController` — управление камерой;
+     - `InputController` — вся логика ввода, сцены и рендера.
+
+4. **Контроллер ввода и сцены**
+   - Файлы: `controllers/InputController.*`
+   - Центральное место, где сходится всё:
+     - инициализирует `HexSphereRenderer` и OpenGL-функции;
+     - создаёт начальные сущности (например, «исследователь» на поверхности);
+     - хранит:
+       - `HexSphereSceneController` — состояние планеты и её меши;
+       - `ecs::ComponentStorage` — сущности и компоненты (позиция, коллайдеры, меши);
+       - `PerformanceStats` — статистика рендеринга;
+       - настройки загрузки буферов.
+   - Обрабатывает ввод:
+     - клики мышью, перемещение, колесо, клавиши;
+     - вычисляет луч от камеры под курсором;
+     - выбирает ячейки планеты и сущности;
+     - меняет высоту, биомы, выделение, путь;
+     - двигает выбранную сущность по поверхности.
+   - Управляет перестройкой сцены:
+     - `rebuildModel()` — пересобирает модель планеты;
+     - `uploadBuffers()` — отправляет данные на GPU;
+     - `render()` — собирает `RenderGraph`, `RenderCamera`, `SceneLighting` и вызывает `HexSphereRenderer`.
+
+5. **Контроллер планеты**
+   - Файлы: `controllers/HexSphereSceneController.*`
+   - Отвечает за:
+     - уровень разбиения (subdivision level);
+     - модель планеты (`HexSphereModel`);
+     - параметры генерации рельефа и биомов;
+     - CPU-меши террейна, воды, контура выделения, пути;
+     - список выделенных ячеек.
+   - Предоставляет методы:
+     - смена генератора рельефа;
+     - перерасчёт рельефа;
+     - построение полигона пути по выделенным ячейкам;
+     - построение данных для рендера (позиции, индексы, владельцы треугольников и т.п.).
+
+6. **Модель планеты и генерация рельефа**
+   - Папка: `model/`
+     - `HexSphereModel` — данные ячеек (центры, соседи, высоты, биомы).
+   - Папка: `generation/`
+     - интерфейс генераторов рельефа;
+     - конкретные генераторы (плоский, синус, Перлин, климатический и др.);
+     - генераторы мешей террейна, воды, wire-каркаса, контура выделения.
+
+7. **Рендеринг**
+   - Папка: `renderers/`
+   - `HexSphereRenderer`:
+     - владеет шейдерами и OpenGL-буферами;
+     - имеет методы:
+       - `initialize(...)` — создание ресурсов;
+       - `uploadScene(...)` — загрузка планеты;
+       - `uploadSelectionOutline(...)` — контур выделения;
+       - `uploadPath(...)` — путь по поверхности;
+       - `renderScene(...)` — отрисовка кадра.
+   - Под-рендереры (terrain, water, entities, overlay) рисуют соответствующие части сцены.
+
+8. **ECS (сущности и компоненты)**
+   - Папка: `ECS/`
+   - `ComponentStorage` — хранение сущностей и наборов компонентов:
+     - `Transform` — позиция в мире;
+     - `Mesh` — какой меш рисовать;
+     - `Collider` — сфера для пика/столкновений;
+     - другие компоненты по мере необходимости.
+   - `InputController` создаёт сущности и управляет их жизненным циклом.
+   - Рендерер рисует сущности, у которых есть нужные компоненты.
+
+---
+
+### 2. Где искать код для изменений
+
+Для любой новой фичи можно пользоваться следующей картой:
+
+- **Поведение при клике, движении мыши, нажатии клавиш**
+  - `ui/HexSphereWidget.*` — вход Qt-событий;
+  - `controllers/InputController.*` — вся логика реакции и изменение состояния.
+
+- **Управление камерой (вращение, зум, FOV, луч под курсор)**
+  - `controllers/CameraController.*`.
+
+- **Логика планеты (сеточка, высоты, биомы, выделение, путь)**
+  - `controllers/HexSphereSceneController.*`;
+  - `model/HexSphereModel.*`;
+  - `generation/*` — генераторы рельефа и мешей.
+
+- **Внешний вид (цвета, шейдеры, стили линий, вода)**
+  - `renderers/HexSphereRenderer.*` и под-рендереры;
+  - шейдеры в ресурсах (папки с `.glsl` / `.vert` / `.frag`).
+
+- **Объекты на планете (юниты, маркеры, башни и др.)**
+  - `ECS/` — компоненты и хранение;
+  - создание и управление сущностями — в `InputController::initialize` и связанных методах.
+
+- **Панель настроек и связи между UI и логикой**
+  - `ui/PlanetSettingsPanel.*` — виджет панели;
+  - `ui/MainWindow.*` — соединение сигналов панели с методами `HexSphereWidget` / `InputController`.
