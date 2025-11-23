@@ -22,6 +22,9 @@
     <Filter Include="converters">
       <UniqueIdentifier>{99bd33bc-903b-468c-91e6-ce15f19cd9e9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ECS">
+      <UniqueIdentifier>{0e25f6f5-2a9f-4f6f-9e05-0e7c1b9e8d42}</UniqueIdentifier>
+    </Filter>
     <Filter Include="scene">
       <UniqueIdentifier>{4f6fe7fd-5d6b-44ac-bd33-3b2397333bc8}</UniqueIdentifier>
     </Filter>
@@ -79,6 +82,9 @@
     </ClCompile>
     <ClCompile Include="PlanetSettingsPanel.cpp">
       <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="ECS\ComponentStorage.cpp">
+      <Filter>ECS</Filter>
     </ClCompile>
     <ClCompile Include="SceneGraph.cpp">
       <Filter>Source</Filter>
@@ -156,6 +162,27 @@
     </ClInclude>
     <ClInclude Include="SceneEntity.h">
       <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\Collider.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\ComponentStorage.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\Entity.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\Material.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\Mesh.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\Script.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\Transform.h">
+      <Filter>ECS</Filter>
     </ClInclude>
     <ClInclude Include="SceneGraph.h">
       <Filter>Headers</Filter>

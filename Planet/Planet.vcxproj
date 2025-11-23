@@ -120,6 +120,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ClimateBiomeGenerator.h" />
+    <ClInclude Include="ECS\Collider.h" />
+    <ClInclude Include="ECS\ComponentStorage.h" />
+    <ClInclude Include="ECS\Entity.h" />
+    <ClInclude Include="ECS\Material.h" />
+    <ClInclude Include="ECS\Mesh.h" />
+    <ClInclude Include="ECS\Script.h" />
+    <ClInclude Include="ECS\Transform.h" />
     <ClInclude Include="converters\DataAdapters.h" />
     <ClInclude Include="DebugModel.h" />
     <ClInclude Include="HexSphereModel.h" />
@@ -155,6 +162,7 @@
     <ClCompile Include="HexSphereWidget.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MainWindow.cpp" />
+    <ClCompile Include="ECS\ComponentStorage.cpp" />
     <ClCompile Include="ModelHandler.cpp" />
     <ClCompile Include="model_cache_test.cpp">
       <ExcludedFromBuild Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">true</ExcludedFromBuild>

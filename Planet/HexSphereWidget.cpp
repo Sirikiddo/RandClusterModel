@@ -8,7 +8,7 @@
 #include <cmath>
 #include <limits>
 
-#include "scene/Transform.h"
+#include "ECS/Transform.h"
 #include "SurfacePlacement.h"
 
 namespace {
@@ -83,13 +83,15 @@ void HexSphereWidget::initializeGL() {
 
     waterTimer_->start(16);
 
-    SceneEntity pyramid("Explorer", "pyramid");
-    pyramid.setCurrentCell(0);
+    auto& pyramid = ecs_.createEntity("Explorer");
+    pyramid.currentCell = 0;
+    ecs_.emplace<ecs::Mesh>(pyramid.id).meshId = "pyramid";
+    ecs::Transform& transform = ecs_.emplace<ecs::Transform>(pyramid.id);
     QVector3D surfacePosition = computeSurfacePoint(scene_, 0);
-    pyramid.transform().position = scene::localToWorldPoint(pyramid.transform(), scene::CoordinateFrame{}, surfacePosition);
-    pyramid.attachCollider(std::make_unique<scene::SphereCollider>(0.08f));
-    pyramid.setSelected(true);
-    sceneGraph_.addEntity(pyramid);
+    transform.position = ecs::localToWorldPoint(transform, ecs::CoordinateFrame{}, surfacePosition);
+    ecs_.emplace<ecs::Collider>(pyramid.id).radius = 0.08f;
+    ecs_.setSelected(pyramid.id, true);
+    selectedEntityId_ = pyramid.id;
 
     rebuildModel();
 
@@ -103,7 +105,7 @@ void HexSphereWidget::resizeGL(int w, int h) {
 void HexSphereWidget::paintGL() {
 
     updateCamera();
-    HexSphereRenderer::RenderGraph graph{scene_, sceneGraph_, scene_.heightStep()};
+    HexSphereRenderer::RenderGraph graph{scene_, ecs_, scene_.heightStep()};
     HexSphereRenderer::RenderCamera camera{view_, proj_};
     HexSphereRenderer::SceneLighting lighting{lightDir_, waterTime_};
     renderer_.renderScene(graph, camera, lighting);
@@ -187,17 +189,19 @@ void HexSphereWidget::keyPressEvent(QKeyEvent* e) {
         return;
     case Qt::Key_W:
     {
-        auto sel = sceneGraph_.getSelectedEntity();
+        auto sel = ecs_.selectedEntity();
         if (!sel) return;
-        SceneEntity& ent = sel->get();
+        ecs::Entity& ent = sel->get();
         const auto& cells = scene_.model().cells();
-        if (ent.currentCell() < 0 || ent.currentCell() >= (int)cells.size()) return;
-        const auto& c = cells[(size_t)ent.currentCell()];
+        if (ent.currentCell < 0 || ent.currentCell >= (int)cells.size()) return;
+        const auto& c = cells[(size_t)ent.currentCell];
         if (c.neighbors.empty()) return;
         int next = c.neighbors[0];
         if (next < 0) return;
-        ent.setCurrentCell(next);
-        ent.transform().position = computeSurfacePoint(scene_, next);
+        ent.currentCell = next;
+        if (auto* transform = ecs_.get<ecs::Transform>(ent.id)) {
+            transform->position = computeSurfacePoint(scene_, next);
+        }
         update();
         break;
     }
@@ -207,7 +211,7 @@ void HexSphereWidget::keyPressEvent(QKeyEvent* e) {
         return;
     case Qt::Key_Delete:
         if (selectedEntityId_ != -1) {
-            sceneGraph_.removeEntity(selectedEntityId_);
+            ecs_.destroyEntity(selectedEntityId_);
             selectedEntityId_ = -1;
             update();
         }
@@ -364,30 +368,24 @@ std::optional<HexSphereWidget::PickHit> HexSphereWidget::pickEntityAt(int sx, in
     int bestEntityId = -1;
     QVector3D bestPos;
 
-    for (const auto& e : sceneGraph_.entities()) {
-        if (!e->collider()) continue;
-
-        const scene::SphereCollider* sphere =
-            dynamic_cast<const scene::SphereCollider*>(e->collider());
-        if (!sphere) continue;
-
-        const QVector3D center = e->transform().position;
-        const float radius = sphere->radius();
+    ecs_.each<ecs::Collider, ecs::Transform>([&](const ecs::Entity& e, const ecs::Collider& collider, const ecs::Transform& transform) {
+        const QVector3D center = transform.position;
+        const float radius = collider.radius;
         const QVector3D oc = ro - center;
         const float b = 2.0f * QVector3D::dotProduct(oc, rd);
         const float c = QVector3D::dotProduct(oc, oc) - radius * radius;
         const float discriminant = b * b - 4.0f * c;
-        if (discriminant < 0) continue;
+        if (discriminant < 0) return;
         const float sqrtDisc = std::sqrt(discriminant);
         const float t0 = (-b - sqrtDisc) * 0.5f;
         const float t1 = (-b + sqrtDisc) * 0.5f;
         float t = (t0 > 0) ? t0 : t1;
         if (t > 0 && t < bestT) {
             bestT = t;
-            bestEntityId = e->id();
+            bestEntityId = e.id;
             bestPos = ro + rd * t;
         }
-    }
+    });
 
     if (bestEntityId != -1) {
         return PickHit{ -1, bestEntityId, bestPos, bestT, true };
@@ -408,35 +406,31 @@ std::optional<HexSphereWidget::PickHit> HexSphereWidget::pickSceneAt(int sx, int
 void HexSphereWidget::selectEntity(int entityId) {
     if (selectedEntityId_ == entityId) return;
 
-    if (auto previous = sceneGraph_.getEntity(selectedEntityId_)) {
-        previous->get().setSelected(false);
+    if (auto* previous = ecs_.getEntity(selectedEntityId_)) {
+        previous->selected = false;
     }
 
     selectedEntityId_ = entityId;
-    if (auto entityOpt = sceneGraph_.getEntity(entityId)) {
-        entityOpt->get().setSelected(true);
-    }
+    ecs_.setSelected(entityId, true);
     update();
 }
 
 void HexSphereWidget::deselectEntity() {
     if (selectedEntityId_ != -1) {
-        if (auto entityOpt = sceneGraph_.getEntity(selectedEntityId_)) {
-            entityOpt->get().setSelected(false);
-        }
+        ecs_.setSelected(selectedEntityId_, false);
         selectedEntityId_ = -1;
     }
 }
 
 void HexSphereWidget::moveSelectedEntityToCell(int cellId) {
     if (selectedEntityId_ == -1) return;
-    auto entityOpt = sceneGraph_.getEntity(selectedEntityId_);
-    if (!entityOpt) return;
-
-    SceneEntity& entity = entityOpt->get();
+    auto* entity = ecs_.getEntity(selectedEntityId_);
+    if (!entity) return;
     if (cellId >= 0 && cellId < scene_.model().cellCount()) {
-        entity.setCurrentCell(cellId);
-        entity.transform().position = computeSurfacePoint(scene_, cellId);
+        entity->currentCell = cellId;
+        if (auto* transform = ecs_.get<ecs::Transform>(entity->id)) {
+            transform->position = computeSurfacePoint(scene_, cellId);
+        }
     }
     update();
 }

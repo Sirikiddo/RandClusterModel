@@ -11,8 +11,7 @@
 #include <vector>
 
 #include "PerformanceStats.h"
-#include "SceneEntity.h"
-#include "scene/SceneGraph.h"
+#include "ECS/ComponentStorage.h"
 #include "HexSphereSceneController.h"
 #include "ModelHandler.h"
 
@@ -25,7 +24,7 @@ class HexSphereRenderer {
 public:
     struct RenderGraph {
         const HexSphereSceneController& scene;
-        const scene::SceneGraph& sceneGraph;
+        const ecs::ComponentStorage& ecs;
         float heightStep = 0.0f;
     };
 

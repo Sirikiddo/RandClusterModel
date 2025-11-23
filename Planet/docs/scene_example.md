@@ -1,25 +1,32 @@
-# Scene graph example
+# ECS example
 
-This document outlines a minimal workflow for creating a shared scene graph, registering a planet entity and a few helpers, and driving an update loop.
+This document outlines a minimal workflow for creating entities, attaching core components, and driving an update loop with the new ECS storage.
 
 ```cpp
-#include "scene/SceneGraph.h"
+#include "ECS/ComponentStorage.h"
 
-scene::SceneGraph scene;
-scene::CoordinateFrame world;
+ecs::ComponentStorage ecs;
+ecs::CoordinateFrame world;
 
-scene::Entity planet("Planet", "hexSphere");
-planet.transform().scale = { 2.0f, 2.0f, 2.0f };
-scene.spawn(planet);
+auto& planet = ecs.createEntity("Planet");
+ecs.emplace<ecs::Mesh>(planet.id).meshId = "hexSphere";
+ecs::Transform& planetTransform = ecs.emplace<ecs::Transform>(planet.id);
+planetTransform.scale = { 2.0f, 2.0f, 2.0f };
 
-scene::Entity rover("Rover", "pyramid");
-rover.transform().position = scene::localToWorldPoint(rover.transform(), world, {1.0f, 0.0f, 0.0f});
-scene.spawn(rover);
+auto& rover = ecs.createEntity("Rover");
+ecs.emplace<ecs::Mesh>(rover.id).meshId = "pyramid";
+ecs::Transform& roverTransform = ecs.emplace<ecs::Transform>(rover.id);
+roverTransform.position = ecs::localToWorldPoint(roverTransform, world, {1.0f, 0.0f, 0.0f});
+ecs.setSelected(rover.id, true);
 
-scene.onUpdate([](scene::Entity& e){ /* physics, AI, etc. */ });
-scene.update(0.016f);
+auto& script = ecs.emplace<ecs::Script>(rover.id);
+script.onUpdate = [&](ecs::EntityId id, float dt) {
+    Q_UNUSED(dt);
+    /* physics, AI, etc. */
+};
+ecs.update(0.016f);
 ```
 
 * Global coordinate system is right-handed with **Y** up and meters as the default unit.
 * `Transform` stores position, orientation, and scale and can convert local points to world space.
-* The `SceneGraph` provides spawn/destroy events and update callbacks so disparate systems (physics, UI) can react consistently.
+* `ComponentStorage` owns entities and their components, providing simple iteration (`each`) and an update pass for script callbacks.
