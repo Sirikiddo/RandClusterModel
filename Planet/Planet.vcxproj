@@ -88,6 +88,7 @@
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -102,6 +103,7 @@
       <ConformanceMode>true</ConformanceMode>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -111,15 +113,41 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <QtRcc Include="Planet.qrc" />
+    <QtRcc Include="resources\Planet.qrc" />
   </ItemGroup>
   <ItemGroup>
-    <QtMoc Include="HexSphereWidget.h" />
-    <QtMoc Include="MainWindow.h" />
-    <QtMoc Include="PlanetSettingsPanel.h" />
+    <QtMoc Include="ui\HexSphereWidget.h" />
+    <QtMoc Include="ui\MainWindow.h" />
+    <QtMoc Include="ui\PlanetSettingsPanel.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ClimateBiomeGenerator.h" />
+    <ClInclude Include="controllers\CameraController.h" />
+    <ClInclude Include="controllers\HexSphereSceneController.h" />
+    <ClInclude Include="controllers\InputController.h" />
+    <ClInclude Include="controllers\PathBuilder.h" />
+    <ClInclude Include="generation\ClimateBiomeGenerator.h" />
+    <ClInclude Include="generation\PerlinNoise.h" />
+    <ClInclude Include="generation\TerrainGenerator.h" />
+    <ClInclude Include="generation\MeshGenerators\SelectionOutlineGenerator.h" />
+    <ClInclude Include="generation\MeshGenerators\TerrainMeshGenerator.h" />
+    <ClInclude Include="generation\MeshGenerators\WaterMeshGenerator.h" />
+    <ClInclude Include="generation\MeshGenerators\WireMeshGenerator.h" />
+    <ClInclude Include="model\DebugModel.h" />
+    <ClInclude Include="model\HexSphereModel.h" />
+    <ClInclude Include="model\ModelHandler.h" />
+    <ClInclude Include="model\SceneEntity.h" />
+    <ClInclude Include="model\SurfacePlacement.h" />
+    <ClInclude Include="model\simple3d_parser.hpp" />
+    <ClInclude Include="renderers\EntityRenderer.h" />
+    <ClInclude Include="renderers\HexSphereRenderer.h" />
+    <ClInclude Include="renderers\TerrainRenderer.h" />
+    <ClInclude Include="renderers\TerrainTessellator.h" />
+    <ClInclude Include="renderers\WaterRenderer.h" />
+    <ClInclude Include="ui\HexSphereWidget.h" />
+    <ClInclude Include="ui\MainWindow.h" />
+    <ClInclude Include="ui\OverlayRenderer.h" />
+    <ClInclude Include="ui\PerformanceStats.h" />
+    <ClInclude Include="ui\PlanetSettingsPanel.h" />
     <ClInclude Include="ECS\Collider.h" />
     <ClInclude Include="ECS\ComponentStorage.h" />
     <ClInclude Include="ECS\Entity.h" />
@@ -127,74 +155,48 @@
     <ClInclude Include="ECS\Mesh.h" />
     <ClInclude Include="ECS\Script.h" />
     <ClInclude Include="ECS\Transform.h" />
-    <ClInclude Include="converters\DataAdapters.h" />
-    <ClInclude Include="DebugModel.h" />
-    <ClInclude Include="HexSphereModel.h" />
-    <ClInclude Include="HexSphereRenderer.h" />
-    <ClInclude Include="HexSphereSceneController.h" />
-    <ClInclude Include="MeshGenerators\SelectionOutlineGenerator.h" />
-    <ClInclude Include="MeshGenerators\TerrainMeshGenerator.h" />
-    <ClInclude Include="MeshGenerators\WaterMeshGenerator.h" />
-    <ClInclude Include="MeshGenerators\WireMeshGenerator.h" />
-    <ClInclude Include="HexSphereWidget.h" />
-    <ClInclude Include="CameraController.h" />
-    <ClInclude Include="InputController.h" />
-    <ClInclude Include="MainWindow.h" />
-    <ClInclude Include="ModelHandler.h" />
-    <ClInclude Include="EntityRenderer.h" />
-    <ClInclude Include="PathBuilder.h" />
-    <ClInclude Include="OverlayRenderer.h" />
-    <ClInclude Include="SurfacePlacement.h" />
-    <ClInclude Include="PerformanceStats.h" />
-    <ClInclude Include="PerlinNoise.h" />
-    <ClInclude Include="PlanetSettingsPanel.h" />
-    <ClInclude Include="TerrainRenderer.h" />
-    <ClInclude Include="SceneEntity.h" />
     <ClInclude Include="scene\Entity.h" />
     <ClInclude Include="scene\Interaction.h" />
     <ClInclude Include="scene\SceneGraph.h" />
     <ClInclude Include="scene\Transform.h" />
-    <ClInclude Include="simple3d_parser.hpp" />
-    <ClInclude Include="WaterRenderer.h" />
-    <ClInclude Include="TerrainGenerator.h" />
-    <ClInclude Include="TerrainTessellator.h" />
+    <ClInclude Include="tools\converters\DataAdapters.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ClimateBiomeGenerator.cpp" />
-    <ClCompile Include="converters\DataAdapters.cpp" />
-    <ClCompile Include="HexSphereModel.cpp" />
-    <ClCompile Include="HexSphereRenderer.cpp" />
-    <ClCompile Include="HexSphereSceneController.cpp" />
-    <ClCompile Include="MeshGenerators\SelectionOutlineGenerator.cpp" />
-    <ClCompile Include="MeshGenerators\TerrainMeshGenerator.cpp" />
-    <ClCompile Include="MeshGenerators\WaterMeshGenerator.cpp" />
-    <ClCompile Include="MeshGenerators\WireMeshGenerator.cpp" />
-    <ClCompile Include="HexSphereWidget.cpp" />
-    <ClCompile Include="CameraController.cpp" />
-    <ClCompile Include="InputController.cpp" />
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="MainWindow.cpp" />
+    <ClCompile Include="controllers\CameraController.cpp" />
+    <ClCompile Include="controllers\HexSphereSceneController.cpp" />
+    <ClCompile Include="controllers\InputController.cpp" />
+    <ClCompile Include="controllers\PathBuilder.cpp" />
+    <ClCompile Include="core\main.cpp" />
+    <ClCompile Include="generation\ClimateBiomeGenerator.cpp" />
+    <ClCompile Include="generation\PerlinNoise.cpp" />
+    <ClCompile Include="generation\TerrainGenerator.cpp" />
+    <ClCompile Include="generation\MeshGenerators\SelectionOutlineGenerator.cpp" />
+    <ClCompile Include="generation\MeshGenerators\TerrainMeshGenerator.cpp" />
+    <ClCompile Include="generation\MeshGenerators\WaterMeshGenerator.cpp" />
+    <ClCompile Include="generation\MeshGenerators\WireMeshGenerator.cpp" />
+    <ClCompile Include="model\HexSphereModel.cpp" />
+    <ClCompile Include="model\ModelHandler.cpp" />
+    <ClCompile Include="renderers\EntityRenderer.cpp" />
+    <ClCompile Include="renderers\HexSphereRenderer.cpp" />
+    <ClCompile Include="renderers\TerrainRenderer.cpp" />
+    <ClCompile Include="renderers\TerrainTessellator.cpp" />
+    <ClCompile Include="renderers\WaterRenderer.cpp" />
+    <ClCompile Include="ui\HexSphereWidget.cpp" />
+    <ClCompile Include="ui\MainWindow.cpp" />
+    <ClCompile Include="ui\OverlayRenderer.cpp" />
+    <ClCompile Include="ui\PerformanceStats.cpp" />
+    <ClCompile Include="ui\PlanetSettingsPanel.cpp" />
     <ClCompile Include="ECS\ComponentStorage.cpp" />
-    <ClCompile Include="ModelHandler.cpp" />
-    <ClCompile Include="model_cache_test.cpp">
+    <ClCompile Include="scene\Entity.cpp" />
+    <ClCompile Include="scene\SceneGraph.cpp" />
+    <ClCompile Include="tools\converters\DataAdapters.cpp" />
+    <ClCompile Include="tools\model_cache_test.cpp">
       <ExcludedFromBuild Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="EntityRenderer.cpp" />
-    <ClCompile Include="PathBuilder.cpp" />
-    <ClCompile Include="PerformanceStats.cpp" />
-    <ClCompile Include="PerlinNoise.cpp" />
-    <ClCompile Include="PlanetSettingsPanel.cpp" />
-    <ClCompile Include="scene\Entity.cpp" />
-    <ClCompile Include="scene\SceneGraph.cpp" />
-    <ClCompile Include="OverlayRenderer.cpp" />
-    <ClCompile Include="TerrainGenerator.cpp" />
-    <ClCompile Include="TerrainTessellator.cpp" />
-    <ClCompile Include="TerrainRenderer.cpp" />
-    <ClCompile Include="WaterRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="HexSphereWidget_shaders.h" />
+    <None Include="resources\HexSphereWidget_shaders.h" />
     <None Include="docs\rendering_refactor_task.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
