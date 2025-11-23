@@ -154,4 +154,18 @@
   <ItemGroup>
     <ClInclude Include="SceneGraph.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="HexSphereWidget_loading.inc">
+      <Filter>Source</Filter>
+    </None>
+    <None Include="HexSphereWidget_scene.inc">
+      <Filter>Source</Filter>
+    </None>
+    <None Include="HexSphereWidget_shaders.inc">
+      <Filter>Source</Filter>
+    </None>
+    <None Include="HexSphereWidget_window.inc">
+      <Filter>Source</Filter>
+    </None>
+  </ItemGroup>
 </Project>
