@@ -115,13 +115,7 @@ InputController::Response InputController::mousePress(QMouseEvent* e) {
             selectEntity(hit->entityId, response);
         }
         else if (hit->cellId >= 0) {
-            const auto& sels = scene_.selectedCells();
-            if (std::find(sels.begin(), sels.end(), hit->cellId) != sels.end()) {
-                scene_.toggleCellSelection(hit->cellId);
-            } else {
-                scene_.clearSelection();
-                scene_.toggleCellSelection(hit->cellId);
-            }
+            scene_.toggleCellSelection(hit->cellId);
             uploadSelection();
             moveSelectedEntityToCell(hit->cellId, response);
         }
