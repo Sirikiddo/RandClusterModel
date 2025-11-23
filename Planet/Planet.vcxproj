@@ -114,6 +114,11 @@
     <QtRcc Include="Planet.qrc" />
   </ItemGroup>
   <ItemGroup>
+    <QtMoc Include="HexSphereWidget.h" />
+    <QtMoc Include="MainWindow.h" />
+    <QtMoc Include="PlanetSettingsPanel.h" />
+  </ItemGroup>
+  <ItemGroup>
     <ClInclude Include="ClimateBiomeGenerator.h" />
     <ClInclude Include="converters\DataAdapters.h" />
     <ClInclude Include="DebugModel.h" />
@@ -139,20 +144,26 @@
     <ClCompile Include="ClimateBiomeGenerator.cpp" />
     <ClCompile Include="converters\DataAdapters.cpp" />
     <ClCompile Include="HexSphereModel.cpp" />
-    <ClCompile Include="HexSphereWidget.cpp" />
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="MainWindow.cpp" />
-    <ClCompile Include="ModelHandler.cpp" />
-    <ClCompile Include="model_cache_test.cpp" />
-    <ClCompile Include="PathBuilder.cpp" />
-    <ClCompile Include="PerformanceStats.cpp" />
-    <ClCompile Include="PerlinNoise.cpp" />
-    <ClCompile Include="PlanetSettingsPanel.cpp" />
-    <ClCompile Include="SceneGraph.cpp" />
-    <ClCompile Include="scene\Entity.cpp" />
-    <ClCompile Include="scene\SceneGraph.cpp" />
-    <ClCompile Include="TerrainGenerator.cpp" />
-    <ClCompile Include="TerrainTessellator.cpp" />
+      <ClCompile Include="HexSphereWidget.cpp" />
+      <ClCompile Include="main.cpp" />
+      <ClCompile Include="MainWindow.cpp" />
+      <ClCompile Include="ModelHandler.cpp" />
+      <ClCompile Include="model_cache_test.cpp">
+        <ExcludedFromBuild Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">true</ExcludedFromBuild>
+        <ExcludedFromBuild Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">true</ExcludedFromBuild>
+      </ClCompile>
+      <ClCompile Include="PathBuilder.cpp" />
+      <ClCompile Include="PerformanceStats.cpp" />
+      <ClCompile Include="PerlinNoise.cpp" />
+      <ClCompile Include="PlanetSettingsPanel.cpp" />
+      <ClCompile Include="SceneGraph.cpp">
+        <ExcludedFromBuild Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">true</ExcludedFromBuild>
+        <ExcludedFromBuild Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">true</ExcludedFromBuild>
+      </ClCompile>
+      <ClCompile Include="scene\Entity.cpp" />
+      <ClCompile Include="scene\SceneGraph.cpp" />
+      <ClCompile Include="TerrainGenerator.cpp" />
+      <ClCompile Include="TerrainTessellator.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
