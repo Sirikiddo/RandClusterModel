@@ -128,17 +128,21 @@
     <ClInclude Include="HexSphereWidget.h" />
     <ClInclude Include="MainWindow.h" />
     <ClInclude Include="ModelHandler.h" />
+    <ClInclude Include="EntityRenderer.h" />
     <ClInclude Include="PathBuilder.h" />
+    <ClInclude Include="OverlayRenderer.h" />
     <ClInclude Include="SurfacePlacement.h" />
     <ClInclude Include="PerformanceStats.h" />
     <ClInclude Include="PerlinNoise.h" />
     <ClInclude Include="PlanetSettingsPanel.h" />
+    <ClInclude Include="TerrainRenderer.h" />
     <ClInclude Include="SceneEntity.h" />
     <ClInclude Include="scene\Entity.h" />
     <ClInclude Include="scene\Interaction.h" />
     <ClInclude Include="scene\SceneGraph.h" />
     <ClInclude Include="scene\Transform.h" />
     <ClInclude Include="simple3d_parser.hpp" />
+    <ClInclude Include="WaterRenderer.h" />
     <ClInclude Include="TerrainGenerator.h" />
     <ClInclude Include="TerrainTessellator.h" />
   </ItemGroup>
@@ -156,14 +160,18 @@
       <ExcludedFromBuild Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="EntityRenderer.cpp" />
     <ClCompile Include="PathBuilder.cpp" />
     <ClCompile Include="PerformanceStats.cpp" />
     <ClCompile Include="PerlinNoise.cpp" />
     <ClCompile Include="PlanetSettingsPanel.cpp" />
     <ClCompile Include="scene\Entity.cpp" />
     <ClCompile Include="scene\SceneGraph.cpp" />
+    <ClCompile Include="OverlayRenderer.cpp" />
     <ClCompile Include="TerrainGenerator.cpp" />
     <ClCompile Include="TerrainTessellator.cpp" />
+    <ClCompile Include="TerrainRenderer.cpp" />
+    <ClCompile Include="WaterRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="HexSphereWidget_shaders.h" />
