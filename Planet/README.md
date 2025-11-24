@@ -765,3 +765,243 @@ collider.radius = 0.05f;
 После этого можно возвращаться к этому README как к карте и использовать специализированные разделы (10–20) для конкретных задач.
 
 Отдельно остаются за рамками этого документа более узкие технические детали: математика генерации рельефа, специфические формулы шейдеров, тонкости работы OpenGL-пайплайна, внутренние алгоритмы генерации мешей и оптимизации буферов. Здесь описана прежде всего архитектура и потоки данных; за реализацией низкоуровневых алгоритмов имеет смысл обращаться непосредственно к исходному коду соответствующих модулей.
+
+## 21. API-справочник по основным структурам
+
+Этот раздел предназначен для тех случаев, когда нужно понять, **какие именно поля есть у основных структур данных** и **какие инварианты они соблюдают**. Здесь собраны только самые важные типы, с которыми вы столкнётесь при доработке логики и рендера.
+
+### 21.1. `HexSphereModel` и `Cell`
+
+**Где искать:** `model/HexSphereModel.*`.
+
+#### 21.1.1. Структура `Cell`
+
+Упрощённо (без служебных деталей):
+
+```cpp
+struct Cell {
+    int id;                    // совпадает с индексом вершины исходной икосферы
+    bool isPentagon;           // true, если степень 5, иначе 6
+    std::vector<int> poly;     // индексы в dualVerts, обход CCW вокруг ячейки
+    std::vector<int> neighbors;// id соседних ячеек, CCW, длина == poly.size()
+    int height;                // дискретная высота (целое значение)
+    Biome biome;               // тип биома
+    QVector3D centroid;        // нормализованный центроид (мировые координаты)
+    float area;                // площадь (для информации)
+    uint32_t stateMask;        // бит 0 — выделена ли ячейка
+};
+```
+
+Основные инварианты:
+
+* `poly.size() == neighbors.size()` — у каждой стороны есть сосед.
+* `poly` хранит индексы в `dualVerts` (`HexSphereModel::dualVerts()`), а не в массив `cells`.
+* `centroid` всегда нормализован и лежит на единичной сфере.
+* `height` — целое число, реальная высота получается умножением на `heightStep`.
+* `stateMask & 1u` используется для логического выделения (selection).
+
+#### 21.1.2. Класс `HexSphereModel`
+
+Ключевые поля и методы (в концептуальном виде):
+
+* Геометрия и топология:
+
+  * `const std::vector<QVector3D>& dualVerts() const;` — вершины дуального графа (по одной на треугольник исходной икосферы).
+  * `const std::vector<Cell>& cells() const;` / `std::vector<Cell>& cells();` — массив ячеек.
+  * `const std::vector<std::pair<int,int>>& wireEdges() const;` — уникальные рёбра дуального графа (пары индексов в `dualVerts`).
+  * `const std::vector<PickTri>& pickTris() const;` — треугольники для ray picking (см. раздел 14).
+* Размерность и статистика:
+
+  * `int subdivisions() const;` — уровень разбиения L.
+  * `int pentagonCount() const;` — число пятиугольных ячеек.
+  * `int cellCount() const;` — число ячеек.
+* Удобные изменяющие методы:
+
+  * `setHeight(int cellId, int h);`
+  * `addHeight(int cellId, int dh);`
+  * `setBiome(int cellId, Biome b);`
+
+Инварианты модели:
+
+* `dualVerts().size()` совпадает с числом треугольников исходной икосферы.
+* `cells().size()` совпадает с числом вершин икосферы (одна ячейка на одну вершину).
+* `wireEdges()` всегда содержит неориентированные рёбра без дубликатов.
+* `pickTris()` покрывает всю поверхность планеты без самопересечений и используется только для пика и вспомогательной визуализации.
+
+`HexSphereSceneController` никогда не меняет внутреннюю топологию `HexSphereModel`, он только обновляет высоты/биомы и пересчитывает производные меши (terrain, water и т.п.).
+
+---
+
+### 21.2. Геометрия террейна и воды: `TerrainMesh`, `WaterGeometryData`
+
+#### 21.2.1. `TerrainMesh`
+
+**Где искать:** `renderers/TerrainTessellator.h`.
+
+```cpp
+struct TerrainMesh {
+    std::vector<float>    pos;   // xyz, по 3 float на вершину
+    std::vector<float>    col;   // rgb, по 3 float на вершину
+    std::vector<float>    norm;  // nx, ny, nz, по 3 float на вершину
+    std::vector<uint32_t> idx;   // индексы треугольников
+    std::vector<int>      triOwner; // для каждого треугольника — id ячейки
+};
+```
+
+Инварианты:
+
+* `pos.size() % 3 == 0`, `col.size() % 3 == 0`, `norm.size() % 3 == 0` — каждые 3 числа образуют один вектор.
+* `idx.size() % 3 == 0` — индексы хранятся тройками (по одному треугольнику).
+* `triOwner.size() == idx.size() / 3` — для каждого треугольника есть ровно один владелец-ячейка.
+* Все координаты в `pos` заданы в мировых координатах и лежат на сфере радиуса `R + height * heightStep`.
+
+`TerrainMesh` строится в `TerrainTessellator::build(const HexSphereModel&)`, а сам тесселлятор вызывается через `TerrainMeshGenerator` из `HexSphereSceneController::updateTerrainMesh()`. После этого `InputController::uploadBuffers()` передаёт `terrainCPU_` в `HexSphereRenderer::uploadScene(...)`.
+
+#### 21.2.2. `WaterGeometryData`
+
+**Где искать:** `generation/MeshGenerators/WaterMeshGenerator.h`.
+
+```cpp
+struct WaterGeometryData {
+    std::vector<float>    positions; // xyz для вершин воды
+    std::vector<float>    edgeFlags; // 1.0 на границах, 0.0 внутри (для шейдера)
+    std::vector<uint32_t> indices;   // треугольники воды
+};
+```
+
+Инварианты:
+
+* `positions.size() % 3 == 0`.
+* `edgeFlags.size() == positions.size() / 3` — по одному флагу на вершину.
+* `indices.size() % 3 == 0`.
+* Все вершины лежат примерно на фиксированном радиусе «уровня моря» (например, 1.0).
+
+`WaterGeometryData` заполняется в `WaterMeshGenerator::buildWaterGeometry(const HexSphereModel&)` и попадает в рендер через `HexSphereRenderer::uploadWater(...)` и далее в `WaterRenderer`.
+
+---
+
+### 21.3. Контракт между сценой и рендерером: `RenderGraph`, `RenderCamera`, `SceneLighting`, `RenderContext`
+
+**Где искать:** `renderers/HexSphereRenderer.h`.
+
+#### 21.3.1. `RenderGraph`
+
+```cpp
+struct RenderGraph {
+    const HexSphereSceneController& scene;
+    const ecs::ComponentStorage&    ecs;
+    float                           heightStep;
+};
+```
+
+Смысл полей:
+
+* `scene` — текущее состояние планеты и её CPU-меши (terrain, water, wire, selection outline, путь).
+* `ecs` — все сущности и компоненты (юниты, маркеры и т.п.).
+* `heightStep` — шаг по высоте, согласованный с `scene.heightStep()`.
+
+`RenderGraph` заполняется в `InputController::render()` с использованием текущего `scene_`, `ecs_` и `scene_.heightStep()`.
+
+#### 21.3.2. `RenderCamera`
+
+```cpp
+struct RenderCamera {
+    QMatrix4x4 view;
+    QMatrix4x4 projection;
+};
+```
+
+* `view` — матрица вида из `CameraController`.
+* `projection` — перспектива/ортогональная проекция, также задаётся `CameraController` и обновляется при `resize`.
+
+#### 21.3.3. `SceneLighting`
+
+```cpp
+struct SceneLighting {
+    QVector3D direction;  // направление света в мировых координатах
+    float     waterTime;  // «время» для анимации воды
+};
+```
+
+* `direction` — нормализованный вектор направления света (например, от солнца).
+* `waterTime` — накопленное время, которое увеличивается в `InputController::advanceWaterTime(dt)` и используется в water-шейдере для анимации волн.
+
+#### 21.3.4. `RenderContext`
+
+```cpp
+struct RenderContext {
+    const RenderGraph&    graph;
+    const RenderCamera&   camera;
+    const SceneLighting&  lighting;
+    QMatrix4x4            mvp;       // projection * view
+    QVector3D             cameraPos; // позиция камеры в мировых координатах
+};
+```
+
+* `mvp` вычисляется в `HexSphereRenderer::renderScene(...)` как `camera.projection * camera.view`.
+* `cameraPos` вычисляется через обратную матрицу вида.
+* `RenderContext` передаётся во все под-рендереры (terrain, water, entities, overlay), которые **только читают** данные и не меняют `graph`.
+
+---
+
+### 21.4. Координатные системы и высоты
+
+Основные соглашения по координатам:
+
+* Центр планеты находится в начале координат (0,0,0).
+* Все базовые вершины (`dualVerts`, `centroid` в `Cell`) лежат на **единичной сфере**.
+* Физическая высота задаётся как:
+
+  ```text
+  radius = R + height * heightStep
+  ```
+
+  где `R` — базовый радиус (обычно 1.0), `height` — целое из `Cell::height`, `heightStep` — вещественный шаг высоты.
+* Позиции сущностей (`ecs::Transform::position`) задаются сразу в мировых координатах и, как правило, равны положению точки на сфере (возможно, с небольшим смещением наружу).
+
+При генерации мешей террейна и контура выделения используются различные комбинации:
+
+* подъём точки над сферой на `height * heightStep`;
+* дополнительный bias (`outlineBias`, `stripInset` и т.п.) для визуального отделения линий и полос.
+
+Главное: **все структуры, которые передаются в рендерер (`TerrainMesh`, `WaterGeometryData`, пути, контуры)** уже находятся в единой мировой системе координат.
+
+---
+
+### 21.5. Триангуляция террейна и picking
+
+Этот подпункт дополняет раздел 14 «Как устроен picking» более формальными деталями.
+
+#### 21.5.1. `triOwner[]` в `TerrainMesh`
+
+При построении меша террейна `TerrainTessellator` заполняет массив `triOwner` через внутренний `MeshBuilder`:
+
+* при добавлении треугольника или квадрата каждый элемент (треугольник) получает `cellOwner` — id ячейки `Cell`;
+* `triOwner[k]` соответствует тройке индексов `idx[3*k + 0..2]`.
+
+Это гарантирует однозначное соответствие «треугольник → ячейка». Это соответствие используется, например, для более сложных схем подсветки, вычисления нормалей на основе высот клеток и потенциально может быть использовано для advanced picking.
+
+#### 21.5.2. `PickTri` в `HexSphereModel`
+
+Помимо `TerrainMesh`, для быстрого picking используется отдельная структура:
+
+```cpp
+struct PickTri {
+    int        cellId;  // к какой ячейке относится треугольник
+    QVector3D  v0, v1, v2; // вершины треугольника в мировых координатах
+};
+```
+
+Массив `pickTris_` заполняется в `HexSphereModel::rebuildFromIcosphere(...)` следующим образом:
+
+* для каждой ячейки строится веер треугольников от центроида ячейки к вершинам её многоугольника (`poly` → `dualVerts`);
+* каждый такой треугольник получает соответствующий `cellId`.
+
+`InputController::pickCellAt` проходит по этому массиву и проверяет пересечение луча от камеры с каждым треугольником, выбирая ближайшее попадание.
+
+Таким образом:
+
+* `triOwner[]` в `TerrainMesh` привязан к визуальному мешу террейна;
+* `PickTri[]` в `HexSphereModel` — специализированный, более геометрически простой меш, оптимизированный для picking.
+
+Обе структуры согласованы через `cellId`, но имеют разное назначение и разную геометрию.
