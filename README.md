@@ -57,6 +57,20 @@
 
 ## 6. Глобальный поток обработки
 
+Добавлен TaskManager в поток данных:
+
+```
+UI → applyInput()
+       ↓
+ TimingControl.update(dt)
+       ↓
+if logicStepAllowed → taskManager.submit(snapshot)
+       ↓
+if taskManager.hasResult() && mergeAllowed → commitAsyncResult()
+       ↓
+render()
+```
+
 ```
 [UI] → applyInput() → async/parallel compute → commitAsyncResult() → render()
 
@@ -83,6 +97,55 @@
 * UI никогда напрямую не изменяет состояние ядра.
 * Асинхронные задачи не могут повредить сцену или вызвать гонки.
 * Только синхронный merge обновляет состояние мира.
+* Renderer всегда получает согласованные, проверенные данные.
+
+## 7.1 Архитектурные инварианты
+
+### SceneState / Snapshot
+
+* Snapshot создаётся только PlanetCore.
+* Представляет полную копию состояния сцены.
+* Не содержит указателей на живые данные.
+* Может свободно перемещаться между потоками.
+* Commit — атомарная замена целого SceneState.
+
+### TaskManager
+
+### Snapshot
+
+* Полностью value-объект.
+* Не содержит ссылок/указателей на живые данные.
+* Безопасен для передачи в async-потоки.
+* Используется только внутри async-задач.
+
+### TaskManager
+
+* Единственная точка запуска async-задач.
+* Создание потоков вне TaskManager запрещено.
+* Работает по версиям состояния.
+
+```cpp
+enum class TaskKind { Mesh, AI, Path, Other };
+```
+
+### TimingControl
+
+* Получает только входные сигналы.
+* Не тянет данные напрямую из других систем.
+* Определяет политику, а не реализацию.
+
+### GlobalPipeline
+
+* Единственная точка вызова commit, submit, render.
+
+* Никакие другие модули не имеют права инициировать эти операции.
+
+* UI никогда напрямую не изменяет состояние ядра.
+
+* Асинхронные задачи не могут повредить сцену или вызвать гонки.
+
+* Только синхронный merge обновляет состояние мира.
+
 * Renderer всегда получает согласованные, проверенные данные.
 
 ## 8. Преимущества
@@ -144,7 +207,7 @@ if (renderAllowed) render()
 * отделяет «оба мира» — асинхронный и синхронный,
 * делает GlobalPipeline полностью контролируемым и предсказуемым.
 
-## 10. Пример плоского GlobalPipeline в стиле C++ в стиле C++
+## 10. Пример плоского GlobalPipeline в стиле C++
 
 Ниже — минимальная и максимально понятная реализация конвейера кадра, отражающая всю архитектуру.
 
@@ -160,12 +223,14 @@ void GlobalPipeline::tick(float dt)
     // ===== 2. ЛОГИЧЕСКИЙ ШАГ (ASYNC) =====
     if (timing.logicStepAllowed()) {
         auto snapshot = scene.makeSnapshot();  // неизменяемая копия
-        scheduleAsyncCompute(snapshot, sceneVersion);
+        taskManager.submit(sceneVersion, [snapshot, sceneVersion]() {
+            return computeHeavyStuff(snapshot);
+        });
     }
 
     // ===== 3. ПРИЁМ ASYNC-РЕЗУЛЬТАТА =====
-    if (async.hasResult() && timing.mergeAllowed()) {
-        auto [result, version] = async.popResult();
+    if (taskManager.hasResult() && timing.mergeAllowed()) {
+        auto [result, version] = taskManager.popResult();
         if (version == sceneVersion) {
             commitAsyncResult(result);          // обновление сцены
         }
@@ -180,15 +245,86 @@ void GlobalPipeline::tick(float dt)
 }
 ```
 
-## 11. Пример TimingControl в стиле C++ в стиле C++
+## 11. TaskManager — контейнер асинхронных задач
+
+**TaskManager** — архитектурный контейнер, через который проходят все async/parallel задачи. Он не задаёт стратегий (отмена, приоритеты), но фиксирует место, где эти стратегии будут жить.
+
+### Роль в архитектуре
+
+* Централизованное управление всем асинхронным вычислением.
+* Гарантия, что никакой модуль не создаёт потоки напрямую.
+* Явная точка входа для политик (ограничение очереди, отмены).
+* Предоставляет результаты для sync-merge в `GlobalPipeline`.
+
+### Интерфейс (архитектурный уровень)
+
+```cpp
+struct AsyncResult {
+    ResultData data;
+    uint64_t version;
+};
+
+class TaskManager {
+public:
+    template<typename F>
+    void submit(uint64_t version, F&& fn);   // отправить задачу
+
+    bool hasResult() const;                  // есть готовый результат?
+    AsyncResult popResult();                 // забрать один результат
+};
+```
+
+### Встраивание в GlobalPipeline
+
+```cpp
+if (timing.logicStepAllowed()) {
+    auto snapshot = scene.makeSnapshot();
+    uint64_t version = sceneVersion;
+
+    taskManager.submit(version, [snapshot, version]() {
+        ResultData r = computeHeavyStuff(snapshot);
+        return AsyncResult{ std::move(r), version };
+    });
+}
+
+if (taskManager.hasResult() && timing.mergeAllowed()) {
+    AsyncResult ar = taskManager.popResult();
+    if (ar.version == sceneVersion)
+        commitAsyncResult(ar.data);
+}
+```
+
+### Архитектурные гарантии TaskManager
+
+* Все async-вычисления проходят только через него.
+* Политики отмены/приоритетов могут меняться без изменения архитектуры.
+* `GlobalPipeline` остаётся плоским и детерминированным.
+
+## 12. Ограничения (Disallowed)
+
+* Только GlobalPipeline управляет жизненным циклом кадра.
+* Прямое создание потоков запрещено (кроме внутри TaskManager).
+* Scene можно менять только через commitAsyncResult.
+* Рендер можно запускать только через GlobalPipeline.
+* OpenGL нельзя вызывать вне Renderer.
+* Snapshot может создаваться только PlanetCore.
+* Нельзя создавать потоки вне TaskManager.
+* Нельзя модифицировать сцену вне commitAsyncResult.
+* Нельзя вызывать рендер вне GlobalPipeline.
+* Нельзя вызывать OpenGL вне Renderer.
+* Нельзя создавать snapshot вне PlanetCore.
+
+## 13. Пример TimingControl
+
+в стиле C++
 
 ```cpp
 struct TimingControl {
     float accumLogic  = 0.0f;
     float accumRender = 0.0f;
 
-    float logicRate  = 1.0f / 20.0f;   // 20 Гц логики
-    float renderRate = 1.0f / 60.0f;   // 60 Гц рендера
+    float logicRate  = 1.0f / 20.0f;
+    float renderRate = 1.0f / 60.0f;
 
     bool asyncBusy = false;
     bool criticalLogic = false;
@@ -199,21 +335,69 @@ struct TimingControl {
     }
 
     bool logicStepAllowed() {
-        if (asyncBusy) return false;          // занято async → пропуск шага
+        if (asyncBusy) return false;
         if (accumLogic < logicRate) return false;
         accumLogic -= logicRate;
         return true;
     }
 
     bool mergeAllowed() {
-        return true; // можно добавить условия, например приоритетные задачи
+        return true;
     }
 
     bool renderAllowed() {
-        if (criticalLogic && asyncBusy) return false; // приоритет логики
+        if (criticalLogic && asyncBusy) return false;
         if (accumRender < renderRate) return false;
         accumRender -= renderRate;
         return true;
     }
 };
+```
+
+## 14. EngineFacade — внешний интерфейс движка
+
+Фасад скрывает всю внутреннюю архитектуру. Другие модули видят только его:
+
+```cpp
+// Engine.h
+void tickEngine(float dt);
+void handleUiEvent(const UiEvent& e);
+```
+
+### Инварианты EngineFacade
+
+* Вся архитектура скрыта в Engine.cpp.
+* Никакие внутренние модули не видны наружу.
+* Глобальный pipeline вызывается только из tickEngine().
+* UI взаимодействует только через handleUiEvent().
+
+## 15. Итоговая ASCII‑схема
+
+```
+                [ПОЛЬЗОВАТЕЛЬ]
+                      │
+                      ▼
+                    [UI]
+                      │
+           handleUiEvent(e)
+                      │
+                      ▼
+               tickEngine(dt)
+                      │
+                      ▼
+      ┌───────────────────────────────────┐
+      │           GlobalPipeline          │
+      │-----------------------------------│
+      │ applyInput()                      │
+      │ timing.update(dt)                 │
+      │ if logicAllowed →                 │
+      │      taskManager.submit(snapshot) │
+      │ if hasResult && mergeAllowed →    │
+      │      commitAsyncResult()          │
+      │ if renderAllowed →                │
+      │      renderer.render()            │
+      └───────────────────────────────────┘
+                      │
+                      ▼
+                  [Renderer]
 ```
