@@ -144,7 +144,7 @@ if (renderAllowed) render()
 * отделяет «оба мира» — асинхронный и синхронный,
 * делает GlobalPipeline полностью контролируемым и предсказуемым.
 
-## 10. Пример плоского GlobalPipeline в стиле C++ в стиле C++
+## 10. Пример плоского GlobalPipeline в стиле C++
 
 Ниже — минимальная и максимально понятная реализация конвейера кадра, отражающая всю архитектуру.
 
@@ -164,8 +164,8 @@ void GlobalPipeline::tick(float dt)
     }
 
     // ===== 3. ПРИЁМ ASYNC-РЕЗУЛЬТАТА =====
-    if (async.hasResult() && timing.mergeAllowed()) {
-        auto [result, version] = async.popResult();
+    if (taskManager.hasResult() && timing.mergeAllowed()) {
+        auto [result, version] = taskManager.popResult();
         if (version == sceneVersion) {
             commitAsyncResult(result);          // обновление сцены
         }
@@ -180,7 +180,7 @@ void GlobalPipeline::tick(float dt)
 }
 ```
 
-## 12. TaskManager — контейнер асинхронных задач
+## 11. TaskManager — контейнер асинхронных задач
 
 **TaskManager** — архитектурный контейнер, через который проходят все async/parallel задачи. Он не задаёт стратегий (отмена, приоритеты), но фиксирует место, где эти стратегии будут жить.
 
@@ -235,15 +235,15 @@ if (taskManager.hasResult() && timing.mergeAllowed()) {
 * Политики отмены/приоритетов могут меняться без изменения архитектуры.
 * `GlobalPipeline` остаётся плоским и детерминированным.
 
-## 11. Пример TimingControl в стиле C++ в стиле C++
+## 12. Пример TimingControl в стиле C++
 
 ```cpp
 struct TimingControl {
     float accumLogic  = 0.0f;
     float accumRender = 0.0f;
 
-    float logicRate  = 1.0f / 20.0f;   // 20 Гц логики
-    float renderRate = 1.0f / 60.0f;   // 60 Гц рендера
+    float logicRate  = 1.0f / 20.0f;
+    float renderRate = 1.0f / 60.0f;
 
     bool asyncBusy = false;
     bool criticalLogic = false;
@@ -254,18 +254,18 @@ struct TimingControl {
     }
 
     bool logicStepAllowed() {
-        if (asyncBusy) return false;          // занято async → пропуск шага
+        if (asyncBusy) return false;
         if (accumLogic < logicRate) return false;
         accumLogic -= logicRate;
         return true;
     }
 
     bool mergeAllowed() {
-        return true; // можно добавить условия, например приоритетные задачи
+        return true;
     }
 
     bool renderAllowed() {
-        if (criticalLogic && asyncBusy) return false; // приоритет логики
+        if (criticalLogic && asyncBusy) return false;
         if (accumRender < renderRate) return false;
         accumRender -= renderRate;
         return true;
