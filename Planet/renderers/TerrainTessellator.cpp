@@ -1,6 +1,7 @@
 #include "renderers/TerrainTessellator.h"
 #include <cmath>
 #include <numeric>
+#include <random>
 
 // ── базовые операции ────────────────────────────────────────────────────────
 QVector3D TerrainTessellator::slerpish(const QVector3D& a, const QVector3D& b, float t) {
@@ -55,6 +56,158 @@ float TerrainTessellator::cornerBlendTargetHeight(const Cell& c, int i,
     return float(c.height);
 }
 
+// ── реализация OreNoiseGenerator ────────────────────────────────────────────
+TerrainTessellator::OreNoiseGenerator::OreNoiseGenerator(uint32_t seed) {
+    std::array<int, 256> perm;
+    std::iota(perm.begin(), perm.end(), 0);
+    std::shuffle(perm.begin(), perm.end(), std::default_random_engine(seed));
+
+    for (int i = 0; i < 256; i++) {
+        perm_[i] = perm_[i + 256] = perm[i];
+    }
+}
+
+float TerrainTessellator::OreNoiseGenerator::fade(float t) {
+    return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+float TerrainTessellator::OreNoiseGenerator::lerp(float a, float b, float t) {
+    return a + t * (b - a);
+}
+
+float TerrainTessellator::OreNoiseGenerator::grad(int hash, float x, float y, float z) {
+    int h = hash & 15;
+    float u = h < 8 ? x : y;
+    float v = h < 4 ? y : (h == 12 || h == 14 ? x : z);
+    return ((h & 1) == 0 ? u : -u) + ((h & 2) == 0 ? v : -v);
+}
+
+float TerrainTessellator::OreNoiseGenerator::noise(float x, float y, float z, float time) const {
+    int xi = (int)std::floor(x) & 255;
+    int yi = (int)std::floor(y) & 255;
+    int zi = (int)std::floor(z + time) & 255;
+
+    float xf = x - std::floor(x);
+    float yf = y - std::floor(y);
+    float zf = z - std::floor(z);
+
+    float u = fade(xf);
+    float v = fade(yf);
+    float w = fade(zf);
+
+    int a = perm_[xi] + yi;
+    int aa = perm_[a] + zi;
+    int ab = perm_[a + 1] + zi;
+    int b = perm_[xi + 1] + yi;
+    int ba = perm_[b] + zi;
+    int bb = perm_[b + 1] + zi;
+
+    float x1 = lerp(grad(perm_[aa], xf, yf, zf),
+        grad(perm_[ba], xf - 1, yf, zf),
+        u);
+    float x2 = lerp(grad(perm_[ab], xf, yf - 1, zf),
+        grad(perm_[bb], xf - 1, yf - 1, zf),
+        u);
+    float y1 = lerp(x1, x2, v);
+
+    float x3 = lerp(grad(perm_[aa + 1], xf, yf, zf - 1),
+        grad(perm_[ba + 1], xf - 1, yf, zf - 1),
+        u);
+    float x4 = lerp(grad(perm_[ab + 1], xf, yf - 1, zf - 1),
+        grad(perm_[bb + 1], xf - 1, yf - 1, zf - 1),
+        u);
+    float y2 = lerp(x3, x4, v);
+
+    return (lerp(y1, y2, w) + 1.0f) * 0.5f;
+}
+
+void TerrainTessellator::updateAnimation(float deltaTime) {
+    if (enableOreVisualization) {
+        animationTime_ += deltaTime * oreAnimationSpeed;
+    }
+}
+
+QVector3D TerrainTessellator::calculateCellColorWithOre(
+    const Cell& cell,
+    const QVector3D& baseColor,
+    const QVector3D& position) const
+{
+    if (!enableOreVisualization || cell.oreDensity < 0.01f) {
+        return baseColor;
+    }
+
+    // Генерируем визуальные параметры руды на основе ее типа и плотности
+    float grainSize = 0.02f + cell.oreDensity * 0.08f;
+    float grainContrast = 1.0f + cell.oreDensity * 2.0f;
+
+    // Определяем цвет руды на основе типа
+    QVector3D oreColor;
+    switch (cell.oreType) {
+    case 1: // Железо
+        oreColor = QVector3D(0.7f, 0.4f, 0.2f);
+        grainSize *= 1.2f;
+        break;
+    case 2: // Медь
+        oreColor = QVector3D(0.8f, 0.5f, 0.2f);
+        grainContrast *= 1.5f;
+        break;
+    case 3: // Золото
+        oreColor = QVector3D(0.9f, 0.9f, 0.1f);
+        grainSize *= 0.8f;
+        grainContrast *= 2.0f;
+        break;
+    default:
+        oreColor = QVector3D(0.5f, 0.5f, 0.5f);
+    }
+
+    // Масштаб для шума в зависимости от плотности руды
+    float noiseScale = 10.0f + cell.oreDensity * 50.0f;
+
+    // Генерируем шум для зернистости
+    float noise1 = oreNoise_.noise(
+        position.x() * noiseScale,
+        position.y() * noiseScale,
+        position.z() * noiseScale,
+        animationTime_
+    );
+
+    float noise2 = oreNoise_.noise(
+        position.x() * noiseScale * 2.3f,
+        position.y() * noiseScale * 2.3f,
+        position.z() * noiseScale * 2.3f,
+        animationTime_ * 0.7f
+    );
+
+    // Комбинируем шумы для более сложной текстуры
+    float combinedNoise = (noise1 * 0.7f + noise2 * 0.3f);
+
+    // Определяем, является ли эта точка "зерном" руды
+    float grainThreshold = 0.5f + cell.oreDensity * 0.3f;
+    float grainValue = std::sin(combinedNoise * 3.14159f * grainSize * 100.0f);
+
+    if (grainValue > grainThreshold) {
+        // Это зерно руды - используем цвет зерна
+        float grainIntensity = (grainValue - grainThreshold) / (1.0f - grainThreshold);
+        grainIntensity = std::pow(grainIntensity, grainContrast);
+
+        // Цвет зерна - немного темнее/светлее основного цвета руды
+        QVector3D grainColor = oreColor * (0.8f + (cell.oreDensity * 0.4f));
+
+        // Интерполяция между базовым цветом и цветом зерна
+        float oreInfluence = grainIntensity * cell.oreDensity;
+        return baseColor * (1.0f - oreInfluence) + grainColor * oreInfluence;
+    }
+
+    // Не зерно - возможно слабое влияние цвета руды
+    float influence = std::max(0.0f, grainValue - 0.3f) / 0.2f;
+    if (influence > 0.0f) {
+        float oreInfluence = influence * 0.2f * cell.oreDensity;
+        return baseColor * (1.0f - oreInfluence) + oreColor * oreInfluence;
+    }
+
+    return baseColor;
+}
+
 // ── подготовка клетки ───────────────────────────────────────────────────────
 TerrainTessellator::PreCell
 TerrainTessellator::makePreCell(const Cell& c, const std::vector<QVector3D>& dual) const {
@@ -63,7 +216,13 @@ TerrainTessellator::makePreCell(const Cell& c, const std::vector<QVector3D>& dua
     pc.inner.resize(deg);
     pc.outerUnit.resize(deg);
     pc.h = float(c.height);
-    pc.color = HexSphereModel::biomeColor(c.biome);
+
+    // Базовый цвет биома
+    QVector3D baseColor = HexSphereModel::biomeColor(c.biome, c.temperature);
+
+    // Применяем визуализацию руды к цвету
+    pc.color = calculateCellColorWithOre(c, baseColor, c.centroid);
+
     pc.center = liftUnit(c.centroid, pc.h);
 
     for (int i = 0; i < deg; ++i) {

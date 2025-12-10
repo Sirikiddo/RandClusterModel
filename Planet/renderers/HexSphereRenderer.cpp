@@ -424,3 +424,13 @@ void HexSphereRenderer::initPyramidGeometry() {
 
     pyramidVertexCount_ = static_cast<GLsizei>(pyramidVertices.size() / 3);
 }
+
+void HexSphereRenderer::setOreAnimationTime(float time) {
+    oreAnimationTime_ = time;
+    // «десь можно передать врем€ в тессел€тор, если нужно
+}
+
+void HexSphereRenderer::setOreVisualizationEnabled(bool enabled) {
+    oreVisualizationEnabled_ = enabled;
+    // «десь можно обновить состо€ние рендерера
+}

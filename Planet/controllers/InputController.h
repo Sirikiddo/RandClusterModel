@@ -17,6 +17,7 @@ class QKeyEvent;
 class QOpenGLWidget;
 
 class CameraController;
+class HexSphereModel;
 
 class InputController {
 public:
@@ -48,6 +49,18 @@ public:
     Response setOutlineBias(float v);
 
     Response advanceWaterTime(float dt);
+
+    // Для системы руд - новые методы
+    Response toggleOreVisualization();
+    void setOreAnimationTime(float time);
+    void setOreVisualizationEnabled(bool enabled);
+    float getOreAnimationTime() const;
+    bool isOreVisualizationEnabled() const;
+    HexSphereModel* getModel();
+
+    // Дополнительные методы для управления системой руд
+    Response setOreAnimationSpeed(float speed);
+    Response regenerateOreDeposits();
 
 private:
     struct PickHit {
@@ -90,4 +103,9 @@ private:
 
     float waterTime_ = 0.0f;
     QVector3D lightDir_ = QVector3D(1, 1, 1).normalized();
+
+    // Параметры для системы руд
+    float oreAnimationTime_ = 0.0f;
+    bool oreVisualizationEnabled_ = true;
+    float oreAnimationSpeed_ = 0.1f;
 };

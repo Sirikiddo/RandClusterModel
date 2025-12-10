@@ -9,23 +9,30 @@
 #include "controllers/CameraController.h"
 #include "controllers/InputController.h"
 
+#include "OreSystem.h"
+
 HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputController& inputController, QWidget* parent)
     : QOpenGLWidget(parent)
     , cameraController_(cameraController)
-    , inputController_(inputController) {
+    , inputController_(inputController)
+    , oreSystem_(nullptr) {
     setFocusPolicy(Qt::StrongFocus);
 
     auto* hud = new QLabel(this);
     hud->setAttribute(Qt::WA_TransparentForMouseEvents);
     hud->setStyleSheet("QLabel { background: rgba(0,0,0,140); color: white; padding: 6px; }");
     hud->move(10, 10);
-    hud->setText("LMB: select | C: clear path | P: build path | +/-: height | 1-8: biomes | S: smooth | W: move");
+    hud->setText("LMB: select | C: clear path | P: build path | +/-: height | 1-8: biomes | S: smooth | W: move | O: ore viz");
     hud->adjustSize();
 
     waterTimer_ = new QTimer(this);
     connect(waterTimer_, &QTimer::timeout, this, [this]() {
         applyResponse(inputController_.advanceWaterTime(0.016f));
-    });
+
+        // Обновляем анимацию руды
+        inputController_.setOreAnimationTime(inputController_.getOreAnimationTime() + 0.016f * 0.1f);
+        update(); // Запрашиваем перерисовку
+        });
 }
 
 HexSphereWidget::~HexSphereWidget() = default;
@@ -33,9 +40,13 @@ HexSphereWidget::~HexSphereWidget() = default;
 void HexSphereWidget::initializeGL() {
     inputController_.initialize(this);
 
+    // Инициализируем систему руд после загрузки модели
+    // Отложим до первого рендера или создания мира
+    // initOreSystem() будет вызван после генерации мира
+
     waterTimer_->start(16);
 
-    emit hudTextChanged("Controls: [LMB] select | [C] clear path | [P] path between selected | [+/-] height | [1-8] biomes | [S] smooth toggle | [W] move entity");
+    emit hudTextChanged("Controls: [LMB] select | [C] clear path | [P] path between selected | [+/-] height | [1-8] biomes | [S] smooth toggle | [W] move entity | [O] toggle ore visualization");
 }
 
 void HexSphereWidget::resizeGL(int w, int h) {
@@ -89,6 +100,12 @@ void HexSphereWidget::setGeneratorByIndex(int idx) {
 
 void HexSphereWidget::regenerateTerrain() {
     applyResponse(inputController_.regenerateTerrain());
+
+    // После регенерации мира переинициализируем систему руд
+    // Нужно подождать, пока мир будет сгенерирован
+    QTimer::singleShot(100, this, [this]() {
+        initOreSystem();
+        });
 }
 
 void HexSphereWidget::setSmoothOneStep(bool on) {
@@ -110,4 +127,33 @@ void HexSphereWidget::applyResponse(const InputController::Response& response) {
     if (response.requestUpdate) {
         update();
     }
+}
+
+void HexSphereWidget::initOreSystem() {
+    // Создаем систему руд
+    oreSystem_ = std::make_unique<OreSystem>();
+
+    // Получаем модель через InputController
+    HexSphereModel* model = inputController_.getModel();
+    if (model) {
+        oreSystem_->initialize(*model);
+        qDebug() << "OreSystem initialized with" << oreSystem_->getDepositCount() << "deposits";
+    }
+    else {
+        qDebug() << "Failed to initialize OreSystem: model is null";
+    }
+
+    oreAnimationTime_ = 0.0f;
+    oreVisualizationEnabled_ = true;
+
+    // Обновляем тесселятор с временем анимации
+    inputController_.setOreAnimationTime(oreAnimationTime_);
+    inputController_.setOreVisualizationEnabled(oreVisualizationEnabled_);
+}
+
+void HexSphereWidget::updateOreAnimation(float deltaTime) {
+    oreAnimationTime_ += deltaTime * 0.1f; // Скорость анимации
+
+    // Обновляем время анимации в InputController
+    inputController_.setOreAnimationTime(oreAnimationTime_);
 }

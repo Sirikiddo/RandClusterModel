@@ -157,6 +157,8 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
     case Qt::Key_C:
         clearPath(response);
         return response;
+    case Qt::Key_O:
+        return toggleOreVisualization();
     case Qt::Key_S:
         scene_.setSmoothOneStep(!scene_.smoothOneStep());
         rebuildModel(response);
@@ -488,3 +490,57 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     deselectEntity();
     response.requestUpdate = true;
 }
+
+
+InputController::Response InputController::toggleOreVisualization() {
+    oreVisualizationEnabled_ = !oreVisualizationEnabled_;
+    oreAnimationTime_ = 0.0f;
+
+    qDebug() << "Ore visualization toggled to:" << oreVisualizationEnabled_;
+
+    Response r;
+    r.requestUpdate = true;
+    r.hudMessage = oreVisualizationEnabled_
+        ? QString("Ore visualization: ON")
+        : QString("Ore visualization: OFF");
+    return r;
+}
+
+void InputController::setOreAnimationTime(float time) {
+    oreAnimationTime_ = time;
+}
+
+void InputController::setOreVisualizationEnabled(bool enabled) {
+    oreVisualizationEnabled_ = enabled;
+}
+
+float InputController::getOreAnimationTime() const {
+    return oreAnimationTime_;
+}
+
+bool InputController::isOreVisualizationEnabled() const {
+    return oreVisualizationEnabled_;
+}
+
+HexSphereModel* InputController::getModel() {
+    // Получаем модель из сцены
+    return &scene_.modelMutable();
+}
+
+InputController::Response InputController::setOreAnimationSpeed(float speed) {
+    oreAnimationSpeed_ = std::clamp(speed, 0.0f, 2.0f);
+
+    Response r;
+    r.requestUpdate = true;
+    r.hudMessage = QString("Ore animation speed: %1").arg(oreAnimationSpeed_);
+    return r;
+}
+
+InputController::Response InputController::regenerateOreDeposits() {
+    Response r;
+    r.requestUpdate = true;
+    r.hudMessage = QString("Ore deposits regenerated");
+    return r;
+}
+
+

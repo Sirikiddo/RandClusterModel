@@ -4,8 +4,10 @@
 #include <QOpenGLWidget>
 #include <QTimer>
 #include <optional>
+#include <memory>
 
 #include "controllers/InputController.h"
+#include "OreSystem.h"
 
 class CameraController;
 struct TerrainParams;
@@ -49,9 +51,15 @@ protected:
 
 private:
     void applyResponse(const InputController::Response& response);
+    void initOreSystem();
+    void updateOreAnimation(float deltaTime);
 
     CameraController& cameraController_;
     InputController& inputController_;
+
+    std::unique_ptr<OreSystem> oreSystem_;
+    float oreAnimationTime_ = 0.0f;
+    bool oreVisualizationEnabled_ = true;
 
     QTimer* waterTimer_ = nullptr;
 };

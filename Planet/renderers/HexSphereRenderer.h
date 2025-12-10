@@ -22,6 +22,10 @@ class OverlayRenderer;
 
 class HexSphereRenderer {
 public:
+
+    void setOreAnimationTime(float time);
+    void setOreVisualizationEnabled(bool enabled);
+
     struct RenderGraph {
         const HexSphereSceneController& scene;
         const ecs::ComponentStorage& ecs;
@@ -117,4 +121,7 @@ private:
     std::unique_ptr<WaterRenderer> waterRenderer_;
     std::unique_ptr<EntityRenderer> entityRenderer_;
     std::unique_ptr<OverlayRenderer> overlayRenderer_;
+
+    float oreAnimationTime_ = 0.0f;
+    bool oreVisualizationEnabled_ = true;
 };

@@ -49,6 +49,14 @@ enum class Biome : uint8_t {
     Jungle = 7
 };
 
+struct OreVisualParams {
+    float density = 0.0f;           // Плотность [0-1]
+    float grainSize = 0.05f;        // Размер зерна (0.01-0.1)
+    float grainContrast = 1.0f;     // Контрастность зерен (1-3)
+    QVector3D baseColor;            // Базовый цвет руды
+    QVector3D grainColor;           // Цвет зерен
+};
+
 // Dual (hex/pent) sphere data
 struct Cell {
     int id = -1;                 // equals primal vertex index
@@ -60,6 +68,18 @@ struct Cell {
     QVector3D centroid;          // normalized average of poly vertices
     float area = 0.0f;           // euclidean triangle-fan area (for info)
     uint32_t stateMask = 0;      // bit 0 => selected
+
+    // Новые атрибуты для климатической карты
+    float temperature = 0.0f;    // температура [0..1]
+    float humidity = 0.0f;       // влажность [0..1] 
+    float pressure = 0.0f;       // давление [0..1]
+
+    // Дополнительные характеристики
+    float oreDensity = 0.0f;     // плотность руды [0..1]
+    uint8_t oreType = 0;         // тип руды (0-нет, 1-железо, 2-медь, и т.д.)
+
+    OreVisualParams oreVisual;      // Визуальные параметры руды
+    float oreNoiseOffset = 0.0f;    // Смещение для анимации шума
 };
 
 struct PickTri { // geometry for ray picking
@@ -87,25 +107,101 @@ public:
     void setBiome(int cellId, Biome b);
 
     // Утилиты
-    static QVector3D biomeColor(Biome b) {
+    static QVector3D biomeColor(Biome b, float temperature = 0.5f) {
+        // Базовые цвета биомов
+        QVector3D baseColor;
         switch (b) {
-        case Biome::Sea:      return { 0.12f, 0.40f, 0.85f };
-        case Biome::Grass:    return { 0.20f, 0.75f, 0.30f };
-        case Biome::Rock:     return { 0.60f, 0.60f, 0.60f };
-        case Biome::Snow:     return { 0.95f, 0.95f, 0.98f };
-        case Biome::Tundra:   return { 0.70f, 0.75f, 0.65f };
-        case Biome::Desert:   return { 0.90f, 0.85f, 0.55f };
-        case Biome::Savanna:  return { 0.75f, 0.70f, 0.30f };
-        case Biome::Jungle:   return { 0.15f, 0.55f, 0.20f };
+        case Biome::Sea:      baseColor = { 0.12f, 0.40f, 0.85f }; break;
+        case Biome::Grass:    baseColor = { 0.20f, 0.75f, 0.30f }; break;
+        case Biome::Rock:     baseColor = { 0.60f, 0.60f, 0.60f }; break;
+        case Biome::Snow:     baseColor = { 0.95f, 0.95f, 0.98f }; break;
+        case Biome::Tundra:   baseColor = { 0.70f, 0.75f, 0.65f }; break;
+        case Biome::Desert:   baseColor = { 0.90f, 0.85f, 0.55f }; break;
+        case Biome::Savanna:  baseColor = { 0.75f, 0.70f, 0.30f }; break;
+        case Biome::Jungle:   baseColor = { 0.15f, 0.55f, 0.20f }; break;
+        default:              baseColor = { 1,1,1 }; break;
         }
-        return { 1,1,1 };
+
+        // Корректировка цвета в зависимости от температуры
+        // Холодные температуры добавляют синий оттенок, теплые - красный
+        QVector3D tempAdjust;
+        if (temperature < 0.3f) {
+            // Холодно - синий оттенок
+            float coldFactor = (0.3f - temperature) / 0.3f;
+            tempAdjust = { 0.0f, 0.0f, 0.2f * coldFactor };
+        }
+        else if (temperature > 0.7f) {
+            // Жарко - красный/желтый оттенок
+            float heatFactor = (temperature - 0.7f) / 0.3f;
+            tempAdjust = { 0.15f * heatFactor, 0.1f * heatFactor, 0.0f };
+        }
+
+        return baseColor + tempAdjust;
     }
 
-    const std::vector<std::array<int, 3>>& dualOwners() const { return dualOwners_; }
+    // Утилиты для работы с климатическими данными
+    float getAverageTemperature() const {
+        float sum = 0.0f;
+        for (const auto& cell : cells_) sum += cell.temperature;
+        return cells_.empty() ? 0.0f : sum / cells_.size();
+    }
 
-    void debug_setCellsAndDual(std::vector<Cell> c, std::vector<QVector3D> d) {
-        cells_ = std::move(c);
-        dualVerts_ = std::move(d);
+    float getAverageHumidity() const {
+        float sum = 0.0f;
+        for (const auto& cell : cells_) sum += cell.humidity;
+        return cells_.empty() ? 0.0f : sum / cells_.size();
+    }
+
+    // Получение ячеек с определенным типом руды
+    std::vector<int> getCellsWithOre(uint8_t oreType) const {
+        std::vector<int> result;
+        for (const auto& cell : cells_) {
+            if (cell.oreType == oreType && cell.oreDensity > 0.1f) {
+                result.push_back(cell.id);
+            }
+        }
+        return result;
+    }
+
+    // Сброс всех климатических данных
+    void resetClimateData() {
+        for (auto& cell : cells_) {
+            cell.temperature = 0.0f;
+            cell.humidity = 0.0f;
+            cell.pressure = 0.0f;
+            cell.oreDensity = 0.0f;
+            cell.oreType = 0;
+        }
+    }
+
+    void setTemperature(int cellId, float temp) {
+        if (cellId >= 0 && cellId < (int)cells_.size()) {
+            cells_[cellId].temperature = temp;
+        }
+    }
+
+    void setHumidity(int cellId, float humidity) {
+        if (cellId >= 0 && cellId < (int)cells_.size()) {
+            cells_[cellId].humidity = humidity;
+        }
+    }
+
+    void setPressure(int cellId, float pressure) {
+        if (cellId >= 0 && cellId < (int)cells_.size()) {
+            cells_[cellId].pressure = pressure;
+        }
+    }
+
+    void setOreDensity(int cellId, float oreDensity) {
+        if (cellId >= 0 && cellId < (int)cells_.size()) {
+            cells_[cellId].oreDensity = oreDensity;
+        }
+    }
+
+    void setOreType(int cellId, uint8_t oreType) {
+        if (cellId >= 0 && cellId < (int)cells_.size()) {
+            cells_[cellId].oreType = oreType;
+        }
     }
 
 private:
