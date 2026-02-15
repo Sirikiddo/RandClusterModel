@@ -11,28 +11,73 @@
 
 #include "OreSystem.h"
 
+//HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputController& inputController, QWidget* parent)
+//    : QOpenGLWidget(parent)
+//    , cameraController_(cameraController)
+//    , inputController_(inputController)
+//    , oreSystem_(nullptr) {
+//
+//    qDebug() << "HexSphereWidget constructor start";
+//
+//    setFocusPolicy(Qt::StrongFocus);
+//
+//    auto* hud = new QLabel(this);
+//    qDebug() << "HUD created";
+//
+//    hud->setAttribute(Qt::WA_TransparentForMouseEvents);
+//    hud->setStyleSheet("QLabel { background: rgba(0,0,0,140); color: white; padding: 6px; }");
+//    hud->move(10, 10);
+//    hud->setText("LMB: select | C: clear path | P: build path | +/-: height | 1-8: biomes | S: smooth | W: move | O: ore viz");
+//    hud->adjustSize();
+//
+//    waterTimer_ = new QTimer(this);
+//
+//    qDebug() << "Timer created";
+//
+//    qDebug() << "HexSphereWidget constructor end";
+//
+//    connect(waterTimer_, &QTimer::timeout, this, [this]() {
+//        applyResponse(inputController_.advanceWaterTime(0.016f));
+//
+//        // Обновляем анимацию руды
+//        inputController_.setOreAnimationTime(inputController_.getOreAnimationTime() + 0.016f * 0.1f);
+//        update(); // Запрашиваем перерисовку
+//        });
+//}
+
 HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputController& inputController, QWidget* parent)
     : QOpenGLWidget(parent)
     , cameraController_(cameraController)
     , inputController_(inputController)
     , oreSystem_(nullptr) {
+
+    qDebug() << "HexSphereWidget constructor start";
+
     setFocusPolicy(Qt::StrongFocus);
+    qDebug() << "Focus policy set";
 
     auto* hud = new QLabel(this);
+    qDebug() << "HUD created";
+
     hud->setAttribute(Qt::WA_TransparentForMouseEvents);
     hud->setStyleSheet("QLabel { background: rgba(0,0,0,140); color: white; padding: 6px; }");
     hud->move(10, 10);
     hud->setText("LMB: select | C: clear path | P: build path | +/-: height | 1-8: biomes | S: smooth | W: move | O: ore viz");
     hud->adjustSize();
+    qDebug() << "HUD configured";
 
     waterTimer_ = new QTimer(this);
+    qDebug() << "Timer created";
+
     connect(waterTimer_, &QTimer::timeout, this, [this]() {
         applyResponse(inputController_.advanceWaterTime(0.016f));
-
-        // Обновляем анимацию руды
         inputController_.setOreAnimationTime(inputController_.getOreAnimationTime() + 0.016f * 0.1f);
-        update(); // Запрашиваем перерисовку
+        update();
         });
+    qDebug() << "Timer connected";
+
+    qDebug() << "HexSphereWidget constructor end";
+
 }
 
 HexSphereWidget::~HexSphereWidget() = default;
@@ -44,7 +89,7 @@ void HexSphereWidget::initializeGL() {
     // Отложим до первого рендера или создания мира
     // initOreSystem() будет вызван после генерации мира
 
-    waterTimer_->start(16);
+    //waterTimer_->start(16);
 
     emit hudTextChanged("Controls: [LMB] select | [C] clear path | [P] path between selected | [+/-] height | [1-8] biomes | [S] smooth toggle | [W] move entity | [O] toggle ore visualization");
 }

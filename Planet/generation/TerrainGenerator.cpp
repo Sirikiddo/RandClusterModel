@@ -2,13 +2,36 @@
 #include "model/HexSphereModel.h"
 #include "generation/ClimateBiomeGenerator.h"
 #include "generation/PerlinNoise.h"
-#include "converters/DataAdapters.h"
+#include "tools/converters/DataAdapters.h"
 #include <cmath>
 #include <QString>
 
+//void NoOpTerrainGenerator::generate(HexSphereModel& model, const TerrainParams& p) {
+//    (void)model; (void)p;
+//    // Ничего не делаем
+//}
+
 void NoOpTerrainGenerator::generate(HexSphereModel& model, const TerrainParams& p) {
-    (void)model; (void)p;
-    // Ничего не делаем
+    const int n = model.cellCount();
+
+    // Устанавливаем базовые значения для всех клеток
+    for (int cid = 0; cid < n; ++cid) {
+        // Устанавливаем нулевую высоту (ровная сфера)
+        model.setHeight(cid, 0);
+
+        // Используем Sea biome - он уже имеет полупрозрачный голубой цвет
+        // в функции biomeColor() из HexSphereModel.h
+        model.setBiome(cid, Biome::Rock);
+
+        // Сбрасываем все дополнительные параметры
+        model.setTemperature(cid, 0.5f);
+        model.setHumidity(cid, 0.5f);
+        model.setPressure(cid, 0.5f);
+        model.setOreDensity(cid, 0.0f);
+        model.setOreType(cid, 0);
+    }
+
+    qDebug() << "NoOpTerrainGenerator: Created transparent sphere with" << n << "cells";
 }
 
 void SineTerrainGenerator::generate(HexSphereModel& model, const TerrainParams& p) {

@@ -9,8 +9,7 @@ extern "C" {
 }
 
 int main(int argc, char** argv) {
-
-    // Request a 3.3 Core context globally
+    // СНАЧАЛА устанавливаем формат (до QApplication!)
     QSurfaceFormat fmt;
     fmt.setVersion(3, 3);
     fmt.setProfile(QSurfaceFormat::CoreProfile);
@@ -19,9 +18,21 @@ int main(int argc, char** argv) {
     fmt.setSamples(4); // MSAA
     QSurfaceFormat::setDefaultFormat(fmt);
 
+    qDebug() << "1. Format set";
+
+    // ПОТОМ создаём QApplication
     QApplication app(argc, argv);
+    qDebug() << "2. App created";
+
+    // И только потом виджеты
     MainWindow w;
+    qDebug() << "3. MainWindow created";
+
     w.resize(1280, 800);
+    qDebug() << "4. Window resized";
+
     w.show();
+    qDebug() << "5. Window shown";
+
     return app.exec();
 }

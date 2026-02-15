@@ -6,6 +6,7 @@
 #include "generation/MeshGenerators/TerrainMeshGenerator.h"
 #include "generation/MeshGenerators/WaterMeshGenerator.h"
 #include "generation/MeshGenerators/WireMeshGenerator.h"
+#include <QVector3D>
 
 HexSphereSceneController::HexSphereSceneController()
     : generator_(std::make_unique<ClimateBiomeTerrainGenerator>()) {
@@ -127,4 +128,91 @@ void HexSphereSceneController::updateTerrainMesh() {
     options.doEdgeCliffs = true;
 
     terrainCPU_ = TerrainMeshGenerator::buildTerrainMesh(model_, options);
+}
+
+// ========== НОВЫЕ МЕТОДЫ ==========
+
+// Преобразование плоского массива float в массив QVector3D
+static std::vector<QVector3D> convertToQVector3D(const std::vector<float>& positions) {
+    std::vector<QVector3D> result;
+    result.reserve(positions.size() / 3);
+    for (size_t i = 0; i < positions.size(); i += 3) {
+        result.emplace_back(positions[i], positions[i + 1], positions[i + 2]);
+    }
+    return result;
+}
+
+// ОСНОВНАЯ ФУНКЦИЯ: фильтрация треугольников по видимости
+std::vector<uint32_t> HexSphereSceneController::getVisibleIndices(const QVector3D& cameraPos) const {
+    // Если камера не задана или mesh пустой, возвращаем все индексы
+    if (terrainCPU_.idx.empty() || terrainCPU_.pos.empty()) {
+        return terrainCPU_.idx;
+    }
+
+    // Конвертируем позиции в QVector3D для удобства
+    std::vector<QVector3D> positions = convertToQVector3D(terrainCPU_.pos);
+
+    // Центр планеты (всегда в начале координат)
+    QVector3D planetCenter(0, 0, 0);
+
+    // Нормализованное направление от центра планеты к камере
+    QVector3D toCam = (cameraPos - planetCenter).normalized();
+
+    // Результирующий буфер индексов (резервируем примерно половину)
+    std::vector<uint32_t> visibleIndices;
+    visibleIndices.reserve(terrainCPU_.idx.size() / 2);
+
+    // Проходим по всем треугольникам (каждые 3 индекса)
+    for (size_t i = 0; i + 2 < terrainCPU_.idx.size(); i += 3) {
+        uint32_t i0 = terrainCPU_.idx[i];
+        uint32_t i1 = terrainCPU_.idx[i + 1];
+        uint32_t i2 = terrainCPU_.idx[i + 2];
+
+        // Центр треугольника (среднее арифметическое вершин)
+        QVector3D triCenter = (positions[i0] + positions[i1] + positions[i2]) * (1.0f / 3.0f);
+
+        // Внешняя нормаль в центре треугольника (от центра планеты к центру треугольника)
+        QVector3D normal = (triCenter - planetCenter).normalized();
+
+        // Проверка видимости: если нормаль смотрит в сторону камеры (угол < 90°)
+        float visibility = QVector3D::dotProduct(normal, toCam);
+
+        // Эпсилон для численной стабильности (0.0f - строгое отсечение)
+        const float eps = 0.0f;
+
+        if (visibility > eps) {
+            // Треугольник видим - добавляем его индексы
+            visibleIndices.push_back(i0);
+            visibleIndices.push_back(i1);
+            visibleIndices.push_back(i2);
+        }
+    }
+
+    return visibleIndices;
+}
+
+// Получить отфильтрованный TerrainMesh для текущей позиции камеры
+TerrainMesh HexSphereSceneController::getVisibleTerrainMesh() const {
+    TerrainMesh visibleMesh = terrainCPU_;  // Копируем весь mesh
+
+    // Фильтруем индексы на основе текущей позиции камеры
+    visibleMesh.idx = getVisibleIndices(cameraPos_);
+
+    return visibleMesh;
+}
+
+// Обновить видимость (вызывается каждый кадр перед рендерингом)
+void HexSphereSceneController::updateVisibility(const QVector3D& cameraPos) {
+    // Сохраняем новую позицию камеры
+    setCameraPosition(cameraPos);
+
+    // Здесь можно добавить логику, если нужно что-то делать при изменении видимости
+    // Например, отметить, что индексы нужно перезагрузить в GPU
+}
+
+// Получить статистику по видимости
+std::pair<size_t, size_t> HexSphereSceneController::getVisibilityStats() const {
+    size_t totalTriangles = terrainCPU_.idx.size() / 3;
+    size_t visibleTriangles = getVisibleIndices(cameraPos_).size() / 3;
+    return { visibleTriangles, totalTriangles };
 }

@@ -2,6 +2,7 @@
 
 #include <QMatrix4x4>
 #include <QOpenGLFunctions_3_3_Core>
+#include <QOpenGLVertexArrayObject>
 #include <QVector3D>
 #include <QOpenGLWidget>
 #include <QtOpenGL>
@@ -25,6 +26,9 @@ public:
 
     void setOreAnimationTime(float time);
     void setOreVisualizationEnabled(bool enabled);
+
+    void updateVisibility(const QVector3D& cameraPos);
+
 
     struct RenderGraph {
         const HexSphereSceneController& scene;
@@ -85,6 +89,11 @@ private:
     void uploadPathInternal(const std::vector<QVector3D>& points);
     void uploadWaterInternal(const WaterGeometryData& data);
 
+    // мнбши лернд
+    void recreateTerrainVAO();
+
+    HexSphereSceneController* lastScene_ = nullptr;
+
     QOpenGLWidget* owner_ = nullptr;
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
     PerformanceStats* stats_ = nullptr;
@@ -98,11 +107,13 @@ private:
     GLuint progWater_ = 0, progModel_ = 0;
     GLint uMVP_Wire_ = -1, uMVP_Terrain_ = -1, uMVP_Sel_ = -1;
     GLint uModel_ = -1, uLightDir_ = -1;
+    GLint uNormalMatrix_ = -1;
     GLint uMVP_Water_ = -1, uTime_Water_ = -1, uLightDir_Water_ = -1, uViewPos_Water_ = -1;
     GLint uMVP_Model_ = -1, uModel_Model_ = -1, uLightDir_Model_ = -1, uViewPos_Model_ = -1, uColor_Model_ = -1, uUseTexture_ = -1;
 
     GLuint vaoWire_ = 0, vboPositions_ = 0;
-    GLuint vaoTerrain_ = 0, vboTerrainPos_ = 0, vboTerrainCol_ = 0, vboTerrainNorm_ = 0, iboTerrain_ = 0;
+    QOpenGLVertexArrayObject vaoTerrain_;
+    GLuint vboTerrainPos_ = 0, vboTerrainCol_ = 0, vboTerrainNorm_ = 0, iboTerrain_ = 0;
     GLuint vaoSel_ = 0, vboSel_ = 0;
     GLuint vaoPath_ = 0, vboPath_ = 0;
     GLuint vaoPyramid_ = 0, vboPyramid_ = 0;
@@ -124,4 +135,5 @@ private:
 
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
+    bool firstRenderDone_ = false;
 };

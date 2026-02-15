@@ -1,6 +1,6 @@
 #include "TerrainMeshGenerator.h"
 
-#include "TerrainTessellator.h"
+#include "renderers/TerrainTessellator.h"
 
 TerrainMesh TerrainMeshGenerator::buildTerrainMesh(const HexSphereModel& model, const TerrainMeshOptions& options) {
     TerrainTessellator tt;

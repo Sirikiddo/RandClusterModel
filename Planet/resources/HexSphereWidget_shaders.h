@@ -20,7 +20,7 @@ layout(location=2) in vec3 aNormal;
 
 uniform mat4 uMVP;
 uniform mat4 uModel;
-uniform mat4 uView;
+uniform mat3 uNormalMatrix; 
 
 out vec3 vColor;
 out vec3 vNormal;
