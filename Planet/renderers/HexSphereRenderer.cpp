@@ -229,6 +229,13 @@ void HexSphereRenderer::withContext(const std::function<void()>& task) {
     }
 
     owner_->makeCurrent();
+
+    if (QOpenGLContext::currentContext() != target) {
+        qCritical() << "[HexSphereRenderer::withContext] makeCurrent failed"
+                    << "current=" << QOpenGLContext::currentContext()
+                    << "target=" << target;
+    }
+
     task();
     owner_->doneCurrent();
 }
