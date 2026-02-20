@@ -127,6 +127,9 @@
     <ClInclude Include="controllers\PathBuilder.h" />
     <ClInclude Include="core\DebugOverlay.h" />
     <ClInclude Include="core\EngineFacade.h" />
+    <ClInclude Include="core\PlanetCore.h" />
+    <ClInclude Include="core\UiCommands.h" />
+    <ClInclude Include="core\WorkOrder.h" />
     <ClInclude Include="generation\ClimateBiomeGenerator.h" />
     <ClInclude Include="generation\PerlinNoise.h" />
     <ClInclude Include="generation\TerrainGenerator.h" />
@@ -170,6 +173,7 @@
     <ClCompile Include="controllers\InputController.cpp" />
     <ClCompile Include="controllers\PathBuilder.cpp" />
     <ClCompile Include="core\EngineFacade.cpp" />
+    <ClCompile Include="core\PlanetCore.cpp" />
     <ClCompile Include="core\main.cpp" />
     <ClCompile Include="generation\ClimateBiomeGenerator.cpp" />
     <ClCompile Include="generation\PerlinNoise.cpp" />
