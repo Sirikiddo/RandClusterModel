@@ -128,7 +128,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     owner_->makeCurrent();
     glContext_ = owner_->context();
 
-    if (glContext_)
+    if (!glContext_)
 		qDebug() << "[HexSphereRenderer::initialize] Failed to obtain OpenGL context from owner";
     else
         qDebug() << "[HexSphereRenderer::initialize] context=" << glContext_
@@ -272,14 +272,21 @@ void HexSphereRenderer::withContext(const std::function<void()>& task) {
     if (!glReady_ || !owner_) return;
 
     QOpenGLContext* currentCtx = QOpenGLContext::currentContext();
-    const bool ownerContextAlreadyCurrent = (currentCtx && currentCtx == owner_->context());
-    if (!ownerContextAlreadyCurrent && !externalContextActive_) {
+    QOpenGLContext* ownerContext = owner_->context();
+    const bool ownerContextAlreadyCurrent = (currentCtx && currentCtx == ownerContext);
+    const bool mustAcquireContext = !ownerContextAlreadyCurrent && (!externalContextActive_ || !currentCtx);
+
+    if (mustAcquireContext) {
+        if (externalContextActive_) {
+            qWarning() << "[HexSphereRenderer::withContext] external context was marked active"
+                       << "but no current GL context is bound; forcing owner->makeCurrent()";
+        }
         owner_->makeCurrent();
     }
 
     task();
 
-    if (!ownerContextAlreadyCurrent && !externalContextActive_) {
+    if (mustAcquireContext) {
         owner_->doneCurrent();
     }
 }
@@ -438,38 +445,39 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
                  << "waterIdx=" << waterIndexCount_;
     }
 
-    const float dpr = owner_->devicePixelRatioF();
-    gl_->glViewport(0, 0, int(owner_->width() * dpr), int(owner_->height() * dpr));
-    gl_->glClearColor(0.05f, 0.06f, 0.08f, 1.0f);
-    gl_->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    withContext([&]() {
+        const float dpr = owner_->devicePixelRatioF();
+        gl_->glViewport(0, 0, int(owner_->width() * dpr), int(owner_->height() * dpr));
+        gl_->glClearColor(0.05f, 0.06f, 0.08f, 1.0f);
+        gl_->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // === BASELINE GL STATE (÷òîáû îâåðëåé/âîäà íå "òåêëè" â òåððåéí) ===
-    gl_->glDisable(GL_BLEND);
-    gl_->glDepthMask(GL_TRUE);
-    gl_->glEnable(GL_DEPTH_TEST);
+        // === BASELINE GL STATE (÷òîáû îâåðëåé/âîäà íå "òåêëè" â òåððåéí) ===
+        gl_->glDisable(GL_BLEND);
+        gl_->glDepthMask(GL_TRUE);
+        gl_->glEnable(GL_DEPTH_TEST);
 
-    gl_->glEnable(GL_CULL_FACE);
-    gl_->glCullFace(GL_BACK);
-    gl_->glFrontFace(GL_CCW);
+        gl_->glEnable(GL_CULL_FACE);
+        gl_->glCullFace(GL_BACK);
+        gl_->glFrontFace(GL_CCW);
 
-    gl_->glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        gl_->glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-    gl_->glBindVertexArray(0);
-    gl_->glUseProgram(0);
+        gl_->glBindVertexArray(0);
+        gl_->glUseProgram(0);
 
-    if (stats_) stats_->startGPUTimer();
+        if (stats_) stats_->startGPUTimer();
 
-    RenderContext ctx{ graph, camera, lighting, camera.projection * camera.view,
-                      (camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D() };
+        RenderContext ctx{ graph, camera, lighting, camera.projection * camera.view,
+                          (camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D() };
 
-    terrainRenderer_->render(ctx);
-    logGlError(gl_, "renderScene/terrain");
-    waterRenderer_->render(ctx);
-    logGlError(gl_, "renderScene/water");
-    entityRenderer_->renderEntities(ctx);
-    logGlError(gl_, "renderScene/entities");
-    overlayRenderer_->render(ctx);
-    logGlError(gl_, "renderScene/overlay");
+        terrainRenderer_->render(ctx);
+        logGlError(gl_, "renderScene/terrain");
+        waterRenderer_->render(ctx);
+        logGlError(gl_, "renderScene/water");
+        entityRenderer_->renderEntities(ctx);
+        logGlError(gl_, "renderScene/entities");
+        overlayRenderer_->render(ctx);
+        logGlError(gl_, "renderScene/overlay");
 
     // overlay ÷àñòî ðèñóåò ëèíèè/ïîäñâåòêó è ìîæåò ìåíÿòü state
     //gl_->glDisable(GL_BLEND);
@@ -479,10 +487,11 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     //gl_->glBindVertexArray(0);
     //gl_->glUseProgram(0);
 
-    entityRenderer_->renderTrees(ctx);
-    logGlError(gl_, "renderScene/trees");
+        entityRenderer_->renderTrees(ctx);
+        logGlError(gl_, "renderScene/trees");
 
-    if (stats_) stats_->stopGPUTimer();
+        if (stats_) stats_->stopGPUTimer();
+    });
 }
 
 void HexSphereRenderer::generateEnvCubemap() {
