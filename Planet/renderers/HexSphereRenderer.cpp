@@ -257,18 +257,26 @@ void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4&
     proj.perspective(50.0f, float(pw) / float(std::max(ph, 1)), 0.01f, 50.0f);
 }
 
+void HexSphereRenderer::beginExternalContext() {
+    setExternalContextActive(true);
+}
+
+void HexSphereRenderer::endExternalContext() {
+    setExternalContextActive(false);
+}
+
 void HexSphereRenderer::withContext(const std::function<void()>& task) {
     if (!glReady_ || !owner_) return;
 
     QOpenGLContext* currentCtx = QOpenGLContext::currentContext();
     const bool ownerContextAlreadyCurrent = (currentCtx && currentCtx == owner_->context());
-    if (!ownerContextAlreadyCurrent) {
+    if (!ownerContextAlreadyCurrent && !externalContextActive_) {
         owner_->makeCurrent();
     }
 
     task();
 
-    if (!ownerContextAlreadyCurrent) {
+    if (!ownerContextAlreadyCurrent && !externalContextActive_) {
         owner_->doneCurrent();
     }
 }

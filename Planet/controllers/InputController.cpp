@@ -88,13 +88,13 @@ void InputController::resize(int w, int h, float devicePixelRatio) {
 
 void InputController::beginFrameContext() {
     if (renderer_) {
-        renderer_->setExternalContextActive(true);
+        renderer_->beginExternalContext();
     }
 }
 
 void InputController::endFrameContext() {
     if (renderer_) {
-        renderer_->setExternalContextActive(false);
+        renderer_->endExternalContext();
     }
 }
 
