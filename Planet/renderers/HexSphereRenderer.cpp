@@ -2,6 +2,7 @@
 
 #include <QOpenGLContext>
 #include <QOpenGLWidget>
+#include <QThread>
 #include <QtDebug>
 
 #include "resources/HexSphereWidget_shaders.h"
