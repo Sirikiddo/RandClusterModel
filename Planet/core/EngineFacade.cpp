@@ -23,19 +23,25 @@ void EngineFacade::tick(float dtSeconds) {
     overlay_.sceneVersion = core_.sceneVersion();
 
     if (const auto work = core_.peekWork()) {
-        overlay_.hasPlan = true;
-        executeWorkOrder(*work);
-        core_.consumeWork();
+        overlay_.hasPendingWork = true;
+
+        // consumeWork() must happen only after successful synchronous execution.
+        // If executeWorkOrder() throws, work remains pending and can be retried/diagnosed.
+        const bool executed = executeWorkOrder(*work);
+        if (executed) {
+            core_.consumeWork();
+        }
     }
 
-    overlay_.hasPlan = core_.peekWork().has_value();
+    // Strictly mirrors PlanetCore pending work (not async state).
+    overlay_.hasPendingWork = core_.peekWork().has_value();
 }
 
 void EngineFacade::handleUiCommand(UiCommand command) {
     core_.enqueue(std::move(command));
 }
 
-void EngineFacade::executeWorkOrder(const WorkOrder& work) {
+bool EngineFacade::executeWorkOrder(const WorkOrder& work) {
     if (work.newLevel) {
         legacy_.setSubdivisionLevel(*work.newLevel);
     }
@@ -60,11 +66,14 @@ void EngineFacade::executeWorkOrder(const WorkOrder& work) {
         legacy_.setOutlineBias(*work.outlineBias);
     }
 
-    for (const int cellId : work.toggleCells) {
-        (void)cellId;
-    }
-
+    // Order is intentional: regeneration can reset selection, so replay toggles after it.
     if (work.regenerateTerrain) {
         legacy_.regenerateTerrain();
     }
+
+    for (const int cellId : work.toggleCells) {
+        legacy_.toggleCellSelection(cellId);
+    }
+
+    return true;
 }

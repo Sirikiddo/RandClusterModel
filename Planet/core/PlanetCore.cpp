@@ -43,9 +43,7 @@ void PlanetCore::applyCommand(const UiCommand& command) {
             work_.uploadBuffers = true;
         }
         else if constexpr (std::is_same_v<T, CmdToggleCell>) {
-            work_.toggleCells.push_back(cmd.cellId);
-            work_.rebuildMesh = true;
-            work_.uploadBuffers = true;
+            work_.queueToggleCell(cmd.cellId);
         }
         else if constexpr (std::is_same_v<T, CmdSetGenerator>) {
             work_.generatorIndex = cmd.index;

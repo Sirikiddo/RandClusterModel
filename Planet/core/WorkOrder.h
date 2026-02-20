@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <optional>
 #include <vector>
 
@@ -17,6 +18,13 @@ struct WorkOrder {
     std::optional<float> stripInset{};
     std::optional<float> outlineBias{};
     std::vector<int> toggleCells{};
+
+    // Boundary #1 semantics: coalesce per-cell toggles inside one work batch.
+    // This gives deterministic "last command wins" behavior for duplicate cell ids.
+    void queueToggleCell(int cellId) {
+        toggleCells.erase(std::remove(toggleCells.begin(), toggleCells.end(), cellId), toggleCells.end());
+        toggleCells.push_back(cellId);
+    }
 
     bool hasWork() const {
         return rebuildMesh || regenerateTerrain || uploadBuffers || newLevel.has_value() ||

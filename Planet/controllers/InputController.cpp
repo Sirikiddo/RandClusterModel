@@ -308,6 +308,17 @@ InputController::Response InputController::setOutlineBias(float v) {
     return response;
 }
 
+InputController::Response InputController::toggleCellSelection(int cellId) {
+    Response response;
+    scene_.toggleCellSelection(cellId);
+
+    // Lightweight path: updates only selection-outline buffer (no full uploadScene).
+    uploadSelection();
+
+    response.requestUpdate = true;
+    return response;
+}
+
 InputController::Response InputController::advanceWaterTime(float dt) {
     Response response;
     waterTime_ += dt;
@@ -523,7 +534,7 @@ bool InputController::isOreVisualizationEnabled() const {
 }
 
 HexSphereModel* InputController::getModel() {
-    // Получаем модель из сцены
+    // ГЏГ®Г«ГіГ·Г ГҐГ¬ Г¬Г®Г¤ГҐГ«Гј ГЁГ§ Г±Г¶ГҐГ­Г»
     return &scene_.modelMutable();
 }
 
