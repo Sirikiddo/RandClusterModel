@@ -260,9 +260,17 @@ void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4&
 void HexSphereRenderer::withContext(const std::function<void()>& task) {
     if (!glReady_ || !owner_) return;
 
-    owner_->makeCurrent();
+    QOpenGLContext* currentCtx = QOpenGLContext::currentContext();
+    const bool ownerContextAlreadyCurrent = (currentCtx && currentCtx == owner_->context());
+    if (!ownerContextAlreadyCurrent) {
+        owner_->makeCurrent();
+    }
+
     task();
-    owner_->doneCurrent();
+
+    if (!ownerContextAlreadyCurrent) {
+        owner_->doneCurrent();
+    }
 }
 
 void HexSphereRenderer::uploadWireInternal(const std::vector<float>& vertices, GLenum usage) {
