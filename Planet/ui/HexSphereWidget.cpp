@@ -75,8 +75,15 @@ void HexSphereWidget::paintGL() {
     frameTimer_.restart();
     float dt = float(ns) * 1e-9f;
 
-    // 1) tick facade (пока только overlay/fps)
+    // NOTE: tick() can synchronously run legacy work in Boundary #1 and is not "free".
     engine_->tick(dt);
+
+    // TODO(boundary-2): replace hasPendingWork check with explicit completion
+    // (e.g. executedWorkVersion >= oreInitRequestVersion or completion event).
+    if (oreInitPending_ && !engine_->overlay().hasPendingWork) {
+        initOreSystem();
+        oreInitPending_ = false;
+    }
 
     // 2) старый рендер как есть
     inputController_.render(); // или как у тебя называется
@@ -85,7 +92,7 @@ void HexSphereWidget::paintGL() {
     const auto& o = engine_->overlay();
     overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5")
         .arg(qulonglong(o.sceneVersion))
-        .arg(o.hasPlan ? "1" : "0")
+        .arg(o.hasPendingWork ? "1" : "0")
         .arg(o.asyncBusy ? "1" : "0")
         .arg(QString::number(o.dtMs, 'f', 2))
         .arg(QString::number(o.fps, 'f', 1));
@@ -145,13 +152,11 @@ void HexSphereWidget::setGeneratorByIndex(int idx) {
 }
 
 void HexSphereWidget::regenerateTerrain() {
+    // Boundary #1: bind ore reinit to pending-work drain in the synchronous facade.
+    // TODO(Boundary #2): gate by completion event/version instead of hasPendingWork.
+    oreInitPending_ = true;
     engine_->handleUiCommand(CmdRegenerateTerrain{});
-
-    // После регенерации мира переинициализируем систему руд
-    // Нужно подождать, пока мир будет сгенерирован
-    QTimer::singleShot(100, this, [this]() {
-        initOreSystem();
-        });
+    update();
 }
 
 void HexSphereWidget::setSmoothOneStep(bool on) {
@@ -176,6 +181,8 @@ void HexSphereWidget::applyResponse(const InputController::Response& response) {
 }
 
 void HexSphereWidget::initOreSystem() {
+    // Acceptable in paintGL for now: initialization walks in-memory model data only
+    // (no disk I/O, no GL uploads). If it grows heavier, move off frame path.
     // Создаем систему руд
     oreSystem_ = std::make_unique<OreSystem>();
 

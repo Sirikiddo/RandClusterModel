@@ -70,4 +70,5 @@ private:
 
     QString overlayText_;
     QTimer* waterTimer_ = nullptr;
+    bool oreInitPending_ = false;
 };
