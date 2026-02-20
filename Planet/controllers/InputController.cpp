@@ -86,6 +86,18 @@ void InputController::resize(int w, int h, float devicePixelRatio) {
     camera_.resize(w, h, devicePixelRatio);
 }
 
+void InputController::beginFrameContext() {
+    if (renderer_) {
+        renderer_->setExternalContextActive(true);
+    }
+}
+
+void InputController::endFrameContext() {
+    if (renderer_) {
+        renderer_->setExternalContextActive(false);
+    }
+}
+
 InputController::Response InputController::render() {
     Response response;
     if (!renderer_) return response;

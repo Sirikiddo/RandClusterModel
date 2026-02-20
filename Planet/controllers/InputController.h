@@ -33,6 +33,9 @@ public:
     void resize(int w, int h, float devicePixelRatio);
     Response render();
 
+    void beginFrameContext();
+    void endFrameContext();
+
     Response mousePress(QMouseEvent* e);
     Response mouseMove(QMouseEvent* e);
     void mouseRelease(QMouseEvent* e);
