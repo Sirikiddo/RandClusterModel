@@ -97,6 +97,11 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     owner_ = owner;
     gl_ = gl;
     stats_ = stats;
+    glContext_ = QOpenGLContext::currentContext();
+    if (!glContext_) {
+        qCritical() << "[HexSphereRenderer::initialize] No current GL context";
+        return;
+    }
     glReady_ = true;
 
     gl_->glEnable(GL_DEPTH_TEST);
