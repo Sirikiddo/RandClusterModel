@@ -71,6 +71,8 @@ public:
     void uploadScene(const HexSphereSceneController& scene, const UploadOptions& options);
 
     void renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting);
+    void beginExternalContext();
+    void endExternalContext();
 
     bool ready() const { return glReady_; }
     GLuint envCubemap() const { return envCubemap_; }
