@@ -1,5 +1,6 @@
 #include "renderers/HexSphereRenderer.h"
 
+#include <QOpenGLContext>
 #include <QOpenGLWidget>
 #include <QtDebug>
 
@@ -96,6 +97,11 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     owner_ = owner;
     gl_ = gl;
     stats_ = stats;
+    glContext_ = QOpenGLContext::currentContext();
+    if (!glContext_) {
+        qCritical() << "[HexSphereRenderer::initialize] No current GL context";
+        return;
+    }
     glReady_ = true;
 
     gl_->glEnable(GL_DEPTH_TEST);
@@ -217,9 +223,21 @@ void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4&
 }
 
 void HexSphereRenderer::withContext(const std::function<void()>& task) {
-    if (!glReady_) return;
+    if (!glReady_ || !owner_ || !glContext_) return;
+
+    QOpenGLContext* current = QOpenGLContext::currentContext();
+    if (current == glContext_) {
+        task();
+        return;
+    }
 
     owner_->makeCurrent();
+
+    if (QOpenGLContext::currentContext() != glContext_) {
+        qCritical() << "[HexSphereRenderer::withContext] makeCurrent did not activate renderer context";
+        return;
+    }
+
     task();
     owner_->doneCurrent();
 }
@@ -241,6 +259,10 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
     const GLsizeiptr vbNorm = GLsizeiptr(mesh.norm.size() * sizeof(float));
     const GLsizeiptr ib = GLsizeiptr(mesh.idx.size() * sizeof(uint32_t));
 
+    // GL_ELEMENT_ARRAY_BUFFER binding is VAO state. Bind terrain VAO explicitly,
+    // otherwise another currently bound VAO can steal this EBO binding.
+    gl_->glBindVertexArray(vaoTerrain_);
+
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
     gl_->glBufferData(GL_ARRAY_BUFFER, vbPos, mesh.pos.empty() ? nullptr : mesh.pos.data(), usage);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainCol_);
@@ -250,6 +272,8 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
 
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
     gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER, ib, mesh.idx.empty() ? nullptr : mesh.idx.data(), usage);
+
+    gl_->glBindVertexArray(0);
 
     terrainIndexCount_ = GLsizei(mesh.idx.size());
 
@@ -279,6 +303,8 @@ void HexSphereRenderer::uploadPathInternal(const std::vector<QVector3D>& points)
 }
 
 void HexSphereRenderer::uploadWaterInternal(const WaterGeometryData& data) {
+    gl_->glBindVertexArray(vaoWater_);
+
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboWaterPos_);
     gl_->glBufferData(GL_ARRAY_BUFFER, data.positions.size() * sizeof(float), data.positions.empty() ? nullptr : data.positions.data(), GL_STATIC_DRAW);
 
@@ -288,7 +314,6 @@ void HexSphereRenderer::uploadWaterInternal(const WaterGeometryData& data) {
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboWater_);
     gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER, data.indices.size() * sizeof(uint32_t), data.indices.empty() ? nullptr : data.indices.data(), GL_STATIC_DRAW);
 
-    gl_->glBindVertexArray(vaoWater_);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboWaterPos_);
     gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(0);
@@ -346,7 +371,7 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     gl_->glClearColor(0.05f, 0.06f, 0.08f, 1.0f);
     gl_->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // === BASELINE GL STATE (чтобы оверлей/вода не "текли" в террейн) ===
+    // === BASELINE GL STATE (Г·ГІГ®ГЎГ» Г®ГўГҐГ°Г«ГҐГ©/ГўГ®Г¤Г  Г­ГҐ "ГІГҐГЄГ«ГЁ" Гў ГІГҐГ°Г°ГҐГ©Г­) ===
     gl_->glDisable(GL_BLEND);
     gl_->glDepthMask(GL_TRUE);
     gl_->glEnable(GL_DEPTH_TEST);
@@ -370,7 +395,7 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     entityRenderer_->renderEntities(ctx);
     overlayRenderer_->render(ctx);
 
-    // overlay часто рисует линии/подсветку и может менять state
+    // overlay Г·Г Г±ГІГ® Г°ГЁГ±ГіГҐГІ Г«ГЁГ­ГЁГЁ/ГЇГ®Г¤Г±ГўГҐГІГЄГі ГЁ Г¬Г®Г¦ГҐГІ Г¬ГҐГ­ГїГІГј state
     //gl_->glDisable(GL_BLEND);
     //gl_->glDepthMask(GL_TRUE);
     //gl_->glEnable(GL_DEPTH_TEST);
@@ -450,10 +475,10 @@ void HexSphereRenderer::initPyramidGeometry() {
 
 void HexSphereRenderer::setOreAnimationTime(float time) {
     oreAnimationTime_ = time;
-    // Здесь можно передать время в тесселятор, если нужно
+    // Г‡Г¤ГҐГ±Гј Г¬Г®Г¦Г­Г® ГЇГҐГ°ГҐГ¤Г ГІГј ГўГ°ГҐГ¬Гї Гў ГІГҐГ±Г±ГҐГ«ГїГІГ®Г°, ГҐГ±Г«ГЁ Г­ГіГ¦Г­Г®
 }
 
 void HexSphereRenderer::setOreVisualizationEnabled(bool enabled) {
     oreVisualizationEnabled_ = enabled;
-    // Здесь можно обновить состояние рендерера
+    // Г‡Г¤ГҐГ±Гј Г¬Г®Г¦Г­Г® Г®ГЎГ­Г®ГўГЁГІГј Г±Г®Г±ГІГ®ГїГ­ГЁГҐ Г°ГҐГ­Г¤ГҐГ°ГҐГ°Г 
 }

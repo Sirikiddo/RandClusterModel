@@ -2,6 +2,7 @@
 
 #include <QMatrix4x4>
 #include <QOpenGLFunctions_3_3_Core>
+#include <QOpenGLContext>
 #include <QVector3D>
 #include <QOpenGLWidget>
 #include <QtOpenGL>
@@ -86,6 +87,7 @@ private:
     void uploadWaterInternal(const WaterGeometryData& data);
 
     QOpenGLWidget* owner_ = nullptr;
+    QOpenGLContext* glContext_ = nullptr;
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
     PerformanceStats* stats_ = nullptr;
 
