@@ -223,17 +223,7 @@ void HexSphereRenderer::withContext(const std::function<void()>& task) {
     QOpenGLContext* target = owner_ ? owner_->context() : nullptr;
     QOpenGLContext* current = QOpenGLContext::currentContext();
 
-    if (!target) {
-        qCritical() << "[HexSphereRenderer::withContext] owner has no GL context";
-        return;
-    }
-
-    if (current && current != target) {
-        qWarning() << "[HexSphereRenderer::withContext] Switching context"
-                   << "from" << current << "to" << target;
-    }
-
-    if (current == target) {
+    if (target && current == target) {
         task();
         return;
     }
