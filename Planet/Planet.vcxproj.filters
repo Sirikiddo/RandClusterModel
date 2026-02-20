@@ -145,6 +145,9 @@
     <ClCompile Include="core\EngineFacade.cpp">
       <Filter>core</Filter>
     </ClCompile>
+    <ClCompile Include="core\PlanetCore.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="controllers\CameraController.h">
@@ -269,6 +272,15 @@
       <Filter>core</Filter>
     </ClInclude>
     <ClInclude Include="core\EngineFacade.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\PlanetCore.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\UiCommands.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\WorkOrder.h">
       <Filter>core</Filter>
     </ClInclude>
   </ItemGroup>
