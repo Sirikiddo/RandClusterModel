@@ -11,6 +11,16 @@
 #include "renderers/TerrainRenderer.h"
 #include "renderers/WaterRenderer.h"
 
+namespace {
+void logGlError(QOpenGLFunctions_3_3_Core* gl, const char* stage) {
+    if (!gl) return;
+    const GLenum err = gl->glGetError();
+    if (err != GL_NO_ERROR) {
+        qCritical() << "[HexSphereRenderer] GL error at" << stage << ":" << Qt::hex << int(err) << Qt::dec;
+    }
+}
+}
+
 HexSphereRenderer::HexSphereRenderer(QOpenGLWidget* owner)
     : owner_(owner) {}
 
@@ -97,11 +107,29 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     owner_ = owner;
     gl_ = gl;
     stats_ = stats;
-    glContext_ = QOpenGLContext::currentContext();
-    if (!glContext_) {
-        qCritical() << "[HexSphereRenderer::initialize] No current GL context";
+
+    if (!owner_) {
+        qCritical() << "[HexSphereRenderer::initialize] Owner widget is null";
         return;
     }
+
+    if (!owner_->context()) {
+        qCritical() << "[HexSphereRenderer::initialize] Owner has no context"
+                    << "isValid=" << owner_->isValid();
+        return;
+    }
+
+    if (!gl_) {
+        qCritical() << "[HexSphereRenderer::initialize] OpenGL functions pointer is null";
+        return;
+    }
+
+    owner_->makeCurrent();
+    glContext_ = owner_->context();
+
+    qDebug() << "[HexSphereRenderer::initialize] context=" << glContext_
+             << "surface=" << glContext_->surface();
+
     glReady_ = true;
 
     gl_->glEnable(GL_DEPTH_TEST);
@@ -141,6 +169,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     uUseTexture_ = gl_->glGetUniformLocation(progModel_, "uUseTexture");
 
     gl_->glUseProgram(0);
+    logGlError(gl_, "initialize/program setup");
 
     gl_->glGenBuffers(1, &vboPositions_);
     gl_->glGenVertexArrays(1, &vaoWire_);
@@ -212,6 +241,11 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     entityRenderer_ = std::make_unique<EntityRenderer>(gl_, progWire_, progSel_, progModel_, uMVP_Wire_, uMVP_Sel_, uMVP_Model_, uModel_Model_, uLightDir_Model_, uViewPos_Model_, uColor_Model_, uUseTexture_, vaoPyramid_, pyramidVertexCount_, treeModel_);
     overlayRenderer_ = std::make_unique<OverlayRenderer>(gl_, progWire_, progSel_, uMVP_Wire_, uMVP_Sel_, vaoWire_, vaoSel_, vaoPath_, lineVertexCount_, selLineVertexCount_, pathVertexCount_);
 
+    qDebug() << "[HexSphereRenderer::initialize] ready"
+             << "programs=" << progTerrain_ << progWire_ << progSel_ << progWater_ << progModel_
+             << "vaoTerrain=" << vaoTerrain_ << "vaoWire=" << vaoWire_ << "vaoWater=" << vaoWater_;
+    logGlError(gl_, "initialize/final");
+
     glReady_ = true;
 }
 
@@ -225,29 +259,7 @@ void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4&
 void HexSphereRenderer::withContext(const std::function<void()>& task) {
     if (!glReady_ || !owner_) return;
 
-    // If any context is already current (typical inside paintGL), keep it attached
-    // and avoid doneCurrent() mid-frame.
-    if (QOpenGLContext::currentContext()) {
-        task();
-        return;
-    }
-
-    QOpenGLContext* target = owner_ ? owner_->context() : nullptr;
-    QOpenGLContext* current = QOpenGLContext::currentContext();
-
-    if (target && current == target) {
-        task();
-        return;
-    }
-
     owner_->makeCurrent();
-
-    if (QOpenGLContext::currentContext() != target) {
-        qCritical() << "[HexSphereRenderer::withContext] makeCurrent failed"
-                    << "current=" << QOpenGLContext::currentContext()
-                    << "target=" << target;
-    }
-
     task();
     owner_->doneCurrent();
 }
@@ -358,23 +370,53 @@ void HexSphereRenderer::uploadWater(const WaterGeometryData& data) {
 }
 
 void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const UploadOptions& options) {
+    const TerrainMesh& terrain = scene.terrain();
+    const auto wire = scene.buildWireVertices();
+    const auto selection = scene.buildSelectionOutlineVertices();
+    auto path = scene.buildPathPolyline();
+    const auto water = scene.buildWaterGeometry();
+
+    qDebug() << "[HexSphereRenderer::uploadScene] cpu mesh snapshot"
+             << "terrainPos=" << terrain.pos.size() / 3
+             << "terrainIdx=" << terrain.idx.size()
+             << "wireVerts=" << wire.size() / 3
+             << "selVerts=" << selection.size() / 3
+             << "pathVerts=" << (path ? path->size() : 0)
+             << "waterPos=" << water.positions.size() / 3
+             << "waterIdx=" << water.indices.size();
+
     withContext([&]() {
-        uploadWireInternal(scene.buildWireVertices(), options.wireUsage);
-        uploadTerrainInternal(scene.terrain(), options.terrainUsage);
-        uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
-        if (auto path = scene.buildPathPolyline()) {
+        uploadWireInternal(wire, options.wireUsage);
+        uploadTerrainInternal(terrain, options.terrainUsage);
+        uploadSelectionOutlineInternal(selection);
+        if (path) {
             uploadPathInternal(*path);
         } else {
             uploadPathInternal({});
         }
-        uploadWaterInternal(scene.buildWaterGeometry());
+        uploadWaterInternal(water);
+        logGlError(gl_, "uploadScene");
     });
     qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
              << "(terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
 }
 
 void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting) {
-    if (!glReady_) return;
+    if (!glReady_) {
+        qCritical() << "[HexSphereRenderer::renderScene] skipped: renderer not ready";
+        return;
+    }
+
+    static int frameId = 0;
+    ++frameId;
+    if (frameId <= 5 || frameId % 120 == 0) {
+        qDebug() << "[HexSphereRenderer::renderScene] frame" << frameId
+                 << "terrainIdx=" << terrainIndexCount_
+                 << "wireVerts=" << lineVertexCount_
+                 << "selVerts=" << selLineVertexCount_
+                 << "pathVerts=" << pathVertexCount_
+                 << "waterIdx=" << waterIndexCount_;
+    }
 
     const float dpr = owner_->devicePixelRatioF();
     gl_->glViewport(0, 0, int(owner_->width() * dpr), int(owner_->height() * dpr));
@@ -401,9 +443,13 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
                       (camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D() };
 
     terrainRenderer_->render(ctx);
+    logGlError(gl_, "renderScene/terrain");
     waterRenderer_->render(ctx);
+    logGlError(gl_, "renderScene/water");
     entityRenderer_->renderEntities(ctx);
+    logGlError(gl_, "renderScene/entities");
     overlayRenderer_->render(ctx);
+    logGlError(gl_, "renderScene/overlay");
 
     // overlay ÷àñòî ðèñóåò ëèíèè/ïîäñâåòêó è ìîæåò ìåíÿòü state
     //gl_->glDisable(GL_BLEND);
@@ -414,6 +460,7 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     //gl_->glUseProgram(0);
 
     entityRenderer_->renderTrees(ctx);
+    logGlError(gl_, "renderScene/trees");
 
     if (stats_) stats_->stopGPUTimer();
 }
