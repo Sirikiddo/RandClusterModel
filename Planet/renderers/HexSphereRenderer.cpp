@@ -218,7 +218,14 @@ void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4&
 }
 
 void HexSphereRenderer::withContext(const std::function<void()>& task) {
-    if (!glReady_) return;
+    if (!glReady_ || !owner_) return;
+
+    // If any context is already current (typical inside paintGL), keep it attached
+    // and avoid doneCurrent() mid-frame.
+    if (QOpenGLContext::currentContext()) {
+        task();
+        return;
+    }
 
     QOpenGLContext* target = owner_ ? owner_->context() : nullptr;
     QOpenGLContext* current = QOpenGLContext::currentContext();
