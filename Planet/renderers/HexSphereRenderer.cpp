@@ -260,14 +260,15 @@ void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4&
 void HexSphereRenderer::withContext(const std::function<void()>& task) {
     if (!glReady_ || !owner_) return;
 
-    const bool shouldManageContext = !externalContextActive_;
-    if (shouldManageContext) {
+    QOpenGLContext* currentCtx = QOpenGLContext::currentContext();
+    const bool ownerContextAlreadyCurrent = (currentCtx && currentCtx == owner_->context());
+    if (!ownerContextAlreadyCurrent) {
         owner_->makeCurrent();
     }
 
     task();
 
-    if (shouldManageContext) {
+    if (!ownerContextAlreadyCurrent) {
         owner_->doneCurrent();
     }
 }
