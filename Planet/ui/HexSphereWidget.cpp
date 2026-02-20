@@ -75,17 +75,30 @@ void HexSphereWidget::paintGL() {
     frameTimer_.restart();
     float dt = float(ns) * 1e-9f;
 
+<<<<<<< codex/add-planetcore-and-command-queue-7ojbbx
     // 1) tick facade (пока только overlay/fps)
     engine_->tick(dt);
 
+=======
+    // NOTE: tick() can synchronously run legacy work in Boundary #1 and is not "free".
+    engine_->tick(dt);
+
+    // TODO(boundary-2): replace hasPendingWork check with explicit completion
+    // (e.g. executedWorkVersion >= oreInitRequestVersion or completion event).
+    if (oreInitPending_ && !engine_->overlay().hasPendingWork) {
+        initOreSystem();
+        oreInitPending_ = false;
+    }
+
+>>>>>>> main
     // 2) старый рендер как есть
     inputController_.render(); // или как у тебя называется
 
     // 3) рисуем текст поверх (после GL)
     const auto& o = engine_->overlay();
-    overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5")
+    overlayText_ = QString("v:%1  dirtyHeavy:%2  busy:%3  dt:%4ms  fps:%5")
         .arg(qulonglong(o.sceneVersion))
-        .arg(o.hasPlan ? "1" : "0")
+        .arg(o.hasPendingWork ? "1" : "0")
         .arg(o.asyncBusy ? "1" : "0")
         .arg(QString::number(o.dtMs, 'f', 2))
         .arg(QString::number(o.fps, 'f', 1));
@@ -105,7 +118,14 @@ void HexSphereWidget::paintEvent(QPaintEvent* e) {
 
 void HexSphereWidget::mousePressEvent(QMouseEvent* e) {
     setFocus(Qt::MouseFocusReason);
-    applyResponse(inputController_.mousePress(e));
+
+    auto response = inputController_.mousePress(e);
+    if (response.toggleCellId) {
+        engine_->handleUiCommand(CmdToggleCell{ *response.toggleCellId });
+        update();
+    }
+
+    applyResponse(response);
 }
 
 void HexSphereWidget::mouseMoveEvent(QMouseEvent* e) {
@@ -133,7 +153,8 @@ void HexSphereWidget::resetView() {
 }
 
 void HexSphereWidget::clearSelection() {
-    applyResponse(inputController_.clearSelection());
+    engine_->handleUiCommand(CmdClearSelection{});
+    update();
 }
 
 void HexSphereWidget::setTerrainParams(const TerrainParams& p) {
@@ -145,6 +166,7 @@ void HexSphereWidget::setGeneratorByIndex(int idx) {
 }
 
 void HexSphereWidget::regenerateTerrain() {
+<<<<<<< codex/add-planetcore-and-command-queue-7ojbbx
     engine_->handleUiCommand(CmdRegenerateTerrain{});
 
     // После регенерации мира переинициализируем систему руд
@@ -152,6 +174,13 @@ void HexSphereWidget::regenerateTerrain() {
     QTimer::singleShot(100, this, [this]() {
         initOreSystem();
         });
+=======
+    // Boundary #1: bind ore reinit to pending-work drain in the synchronous facade.
+    // TODO(Boundary #2): gate by completion event/version instead of hasPendingWork.
+    oreInitPending_ = true;
+    engine_->handleUiCommand(CmdRegenerateTerrain{});
+    update();
+>>>>>>> main
 }
 
 void HexSphereWidget::setSmoothOneStep(bool on) {
@@ -176,6 +205,11 @@ void HexSphereWidget::applyResponse(const InputController::Response& response) {
 }
 
 void HexSphereWidget::initOreSystem() {
+<<<<<<< codex/add-planetcore-and-command-queue-7ojbbx
+=======
+    // Acceptable in paintGL for now: initialization walks in-memory model data only
+    // (no disk I/O, no GL uploads). If it grows heavier, move off frame path.
+>>>>>>> main
     // Создаем систему руд
     oreSystem_ = std::make_unique<OreSystem>();
 

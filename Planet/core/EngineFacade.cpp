@@ -22,6 +22,7 @@ void EngineFacade::tick(float dtSeconds) {
     core_.applyQueuedInputs();
     overlay_.sceneVersion = core_.sceneVersion();
 
+<<<<<<< codex/add-planetcore-and-command-queue-7ojbbx
     if (const auto work = core_.peekWork()) {
         overlay_.hasPlan = true;
         executeWorkOrder(*work);
@@ -29,13 +30,46 @@ void EngineFacade::tick(float dtSeconds) {
     }
 
     overlay_.hasPlan = core_.peekWork().has_value();
+=======
+    if (const auto light = core_.peekLight()) {
+        // LightWork contract:
+        // - executes synchronously before heavy work in the same tick
+        // - uses legacy selection-outline uploads only (safe here: tick() runs from paintGL)
+        if (light->clearSelection) {
+            legacy_.clearSelection();
+        }
+
+        for (const int cellId : light->toggleCells) {
+            legacy_.toggleCellSelection(cellId);
+        }
+
+        // Same as heavy path: consume only after successful synchronous apply.
+        core_.consumeLight();
+    }
+
+    if (const auto work = core_.peekWork()) {
+        // consumeWork() must happen only after successful synchronous execution.
+        // If executeWorkOrder() throws, work remains pending and can be retried/diagnosed.
+        const bool executed = executeWorkOrder(*work);
+        if (executed) {
+            core_.consumeWork();
+        }
+    }
+
+    // Strictly mirrors PlanetCore pending heavy work (not async state).
+    overlay_.hasPendingWork = core_.peekWork().has_value();
+>>>>>>> main
 }
 
 void EngineFacade::handleUiCommand(UiCommand command) {
     core_.enqueue(std::move(command));
 }
 
+<<<<<<< codex/add-planetcore-and-command-queue-7ojbbx
 void EngineFacade::executeWorkOrder(const WorkOrder& work) {
+=======
+bool EngineFacade::executeWorkOrder(const WorkOrder& work) {
+>>>>>>> main
     if (work.newLevel) {
         legacy_.setSubdivisionLevel(*work.newLevel);
     }
@@ -60,6 +94,7 @@ void EngineFacade::executeWorkOrder(const WorkOrder& work) {
         legacy_.setOutlineBias(*work.outlineBias);
     }
 
+<<<<<<< codex/add-planetcore-and-command-queue-7ojbbx
     for (const int cellId : work.toggleCells) {
         (void)cellId;
     }
@@ -67,4 +102,11 @@ void EngineFacade::executeWorkOrder(const WorkOrder& work) {
     if (work.regenerateTerrain) {
         legacy_.regenerateTerrain();
     }
+=======
+    if (work.regenerateTerrain) {
+        legacy_.regenerateTerrain();
+    }
+
+    return true;
+>>>>>>> main
 }

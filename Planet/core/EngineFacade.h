@@ -17,7 +17,7 @@ public:
     const DebugOverlay& overlay() const { return overlay_; }
 
 private:
-    void executeWorkOrder(const WorkOrder& work);
+    bool executeWorkOrder(const WorkOrder& work);
 
     InputController& legacy_;
     PlanetCore core_;

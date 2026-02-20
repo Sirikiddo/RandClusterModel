@@ -14,6 +14,11 @@ struct CmdToggleCell {
     int cellId = -1;
 };
 
+<<<<<<< codex/add-planetcore-and-command-queue-7ojbbx
+=======
+struct CmdClearSelection {};
+
+>>>>>>> main
 struct CmdSetGenerator {
     int index = 0;
 };
@@ -38,6 +43,10 @@ using UiCommand = std::variant<
     CmdSetSubdivisionLevel,
     CmdRegenerateTerrain,
     CmdToggleCell,
+<<<<<<< codex/add-planetcore-and-command-queue-7ojbbx
+=======
+    CmdClearSelection,
+>>>>>>> main
     CmdSetGenerator,
     CmdSetParams,
     CmdSetSmoothOneStep,

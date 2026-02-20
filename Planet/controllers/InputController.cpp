@@ -113,8 +113,9 @@ InputController::Response InputController::mousePress(QMouseEvent* e) {
             selectEntity(hit->entityId, response);
         }
         else if (hit->cellId >= 0) {
-            scene_.toggleCellSelection(hit->cellId);
-            uploadSelection();
+            response.toggleCellId = hit->cellId;
+            // Current UX: the same click both toggles selection (via command path)
+            // and moves currently selected entity, if any.
             moveSelectedEntityToCell(hit->cellId, response);
         }
         response.requestUpdate = true;
@@ -305,6 +306,17 @@ InputController::Response InputController::setOutlineBias(float v) {
     Response response;
     scene_.setOutlineBias(v);
     rebuildModel(response);
+    return response;
+}
+
+InputController::Response InputController::toggleCellSelection(int cellId) {
+    Response response;
+    scene_.toggleCellSelection(cellId);
+
+    // Lightweight path: updates only selection-outline buffer (no full uploadScene).
+    uploadSelection();
+
+    response.requestUpdate = true;
     return response;
 }
 
@@ -523,7 +535,7 @@ bool InputController::isOreVisualizationEnabled() const {
 }
 
 HexSphereModel* InputController::getModel() {
-    // Получаем модель из сцены
+    // ГЏГ®Г«ГіГ·Г ГҐГ¬ Г¬Г®Г¤ГҐГ«Гј ГЁГ§ Г±Г¶ГҐГ­Г»
     return &scene_.modelMutable();
 }
 
