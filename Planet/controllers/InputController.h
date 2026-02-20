@@ -24,6 +24,7 @@ public:
     struct Response {
         bool requestUpdate = false;
         std::optional<QString> hudMessage{};
+        std::optional<int> toggleCellId{};
     };
 
     explicit InputController(CameraController& camera);

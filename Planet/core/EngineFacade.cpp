@@ -22,9 +22,23 @@ void EngineFacade::tick(float dtSeconds) {
     core_.applyQueuedInputs();
     overlay_.sceneVersion = core_.sceneVersion();
 
-    if (const auto work = core_.peekWork()) {
-        overlay_.hasPendingWork = true;
+    if (const auto light = core_.peekLight()) {
+        // LightWork contract:
+        // - executes synchronously before heavy work in the same tick
+        // - uses legacy selection-outline uploads only (safe here: tick() runs from paintGL)
+        if (light->clearSelection) {
+            legacy_.clearSelection();
+        }
 
+        for (const int cellId : light->toggleCells) {
+            legacy_.toggleCellSelection(cellId);
+        }
+
+        // Same as heavy path: consume only after successful synchronous apply.
+        core_.consumeLight();
+    }
+
+    if (const auto work = core_.peekWork()) {
         // consumeWork() must happen only after successful synchronous execution.
         // If executeWorkOrder() throws, work remains pending and can be retried/diagnosed.
         const bool executed = executeWorkOrder(*work);
@@ -33,7 +47,7 @@ void EngineFacade::tick(float dtSeconds) {
         }
     }
 
-    // Strictly mirrors PlanetCore pending work (not async state).
+    // Strictly mirrors PlanetCore pending heavy work (not async state).
     overlay_.hasPendingWork = core_.peekWork().has_value();
 }
 
@@ -66,13 +80,8 @@ bool EngineFacade::executeWorkOrder(const WorkOrder& work) {
         legacy_.setOutlineBias(*work.outlineBias);
     }
 
-    // Order is intentional: regeneration can reset selection, so replay toggles after it.
     if (work.regenerateTerrain) {
         legacy_.regenerateTerrain();
-    }
-
-    for (const int cellId : work.toggleCells) {
-        legacy_.toggleCellSelection(cellId);
     }
 
     return true;
