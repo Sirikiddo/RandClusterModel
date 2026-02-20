@@ -128,7 +128,10 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     owner_->makeCurrent();
     glContext_ = owner_->context();
 
-    qDebug() << "[HexSphereRenderer::initialize] context=" << glContext_
+    if (glContext_)
+		qDebug() << "[HexSphereRenderer::initialize] Failed to obtain OpenGL context from owner";
+    else
+        qDebug() << "[HexSphereRenderer::initialize] context=" << glContext_
              << "surface=" << glContext_->surface();
 
     glReady_ = true;

@@ -67,8 +67,12 @@ void InputController::initialize(QOpenGLWidget* owner) {
 
     renderer_ = std::make_unique<HexSphereRenderer>(owner_);
     renderer_->initialize(owner_, gl, &stats_);
-    qDebug() << "[InputController::initialize] renderer ready=" << renderer_->ready()
-             << "ownerContext=" << owner_->context();
+    if (renderer_)
+		qDebug() << "[InputController::initialize] renderer initialized successfully";
+    else
+        qDebug() << "[InputController::initialize] renderer ready=" << renderer_->ready()
+        << "ownerContext=" << owner_->context();
+
 
     auto& pyramid = ecs_.createEntity("Explorer");
     pyramid.currentCell = 0;
