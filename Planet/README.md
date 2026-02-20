@@ -149,24 +149,20 @@ core/main.cpp
 ### 5. Минимальный пример: что происходит при клике мышью по ячейке
 
 1. Qt вызывает `HexSphereWidget::mousePressEvent(QMouseEvent* e)`.
-2. `HexSphereWidget` передаёт событие в контроллер:
+2. `HexSphereWidget` передаёт событие в `InputController::mousePress(e)` и получает intent (`toggleCellId`) для выделения.
+3. `HexSphereWidget` отправляет intent в командный слой: `engine_->handleUiCommand(CmdToggleCell{cellId})`.
+4. На ближайшем кадре после `update()` (в `paintGL()`) вызывается `engine_->tick(dt)`, где выполняется фиксированный пайплайн кадра:
 
-   ```cpp
-   auto response = inputController_->mousePress(e);
-   ```
-3. В `InputController::mousePress`:
+   `UI events -> UiCommand(queue) -> PlanetCore::applyQueuedInputs -> apply LightWork -> execute WorkOrder`
 
-   * берётся позиция курсора `e->position()`;
-   * вызывается `pickSceneAt(...)`, чтобы понять, в какую ячейку или сущность попал луч;
-   * если попали в ячейку:
+   `sceneVersion` увеличивается на каждую принятую UI-команду, поэтому не следует слать в очередь шумные команды на каждый пиксель движения мыши.
 
-     * обновляется выделение в `HexSphereSceneController` (`scene_.toggleCellSelection(...)`);
-     * по возможности двигается выбранная сущность в эту ячейку (через ECS);
-     * при необходимости вызываются `uploadSelection()` / `rebuildModel()`;
-     * ставится флаг `response.requestUpdate = true`.
-4. `HexSphereWidget` по флагу вызывает `update()`.
-5. Qt вызывает `paintGL()`, который вызывает `InputController::render()`.
-6. В `render()` формируются структуры `RenderGraph`, `RenderCamera`, `SceneLighting` и вызывается `renderer_->renderScene(...)`, после чего на экране видна новая конфигурация планеты и объектов.
+5. `LightWork` (toggle/clear selection) применяется синхронно и только через лёгкий legacy API (`uploadSelectionOutline` без `uploadScene`).
+
+   Пример батча в одном кадре: `CmdClearSelection`, затем `CmdToggleCell{42}` ⇒ итог: selection очищается и после этого выбирается ячейка 42.
+6. Затем выполняется heavy `WorkOrder` (regenerate/rebuild/uploadScene и т.д.), после чего обычный рендер идёт через `InputController::render()` и `HexSphereRenderer::renderScene(...)`.
+
+   В debug-overlay поле `dirtyHeavy` показывает только pending heavy work; light-команды в этот флаг не попадают.
 
 После этого можно переходить к более детальному уровню.
 

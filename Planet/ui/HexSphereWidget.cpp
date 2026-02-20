@@ -90,7 +90,7 @@ void HexSphereWidget::paintGL() {
 
     // 3) рисуем текст поверх (после GL)
     const auto& o = engine_->overlay();
-    overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5")
+    overlayText_ = QString("v:%1  dirtyHeavy:%2  busy:%3  dt:%4ms  fps:%5")
         .arg(qulonglong(o.sceneVersion))
         .arg(o.hasPendingWork ? "1" : "0")
         .arg(o.asyncBusy ? "1" : "0")
@@ -112,7 +112,14 @@ void HexSphereWidget::paintEvent(QPaintEvent* e) {
 
 void HexSphereWidget::mousePressEvent(QMouseEvent* e) {
     setFocus(Qt::MouseFocusReason);
-    applyResponse(inputController_.mousePress(e));
+
+    auto response = inputController_.mousePress(e);
+    if (response.toggleCellId) {
+        engine_->handleUiCommand(CmdToggleCell{ *response.toggleCellId });
+        update();
+    }
+
+    applyResponse(response);
 }
 
 void HexSphereWidget::mouseMoveEvent(QMouseEvent* e) {
@@ -140,7 +147,8 @@ void HexSphereWidget::resetView() {
 }
 
 void HexSphereWidget::clearSelection() {
-    applyResponse(inputController_.clearSelection());
+    engine_->handleUiCommand(CmdClearSelection{});
+    update();
 }
 
 void HexSphereWidget::setTerrainParams(const TerrainParams& p) {

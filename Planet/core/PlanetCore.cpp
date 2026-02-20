@@ -1,7 +1,22 @@
 #include "PlanetCore.h"
 
+#include <algorithm>
 #include <type_traits>
 #include <utility>
+
+void PlanetCore::LightWork::queueToggleCell(int cellId) {
+    if (toggleCellsSet.find(cellId) != toggleCellsSet.end()) {
+        // last-wins for duplicates in one batch: move repeated cell to the back.
+        toggleCells.erase(std::remove(toggleCells.begin(), toggleCells.end(), cellId), toggleCells.end());
+    }
+
+    toggleCellsSet.insert(cellId);
+    toggleCells.push_back(cellId);
+}
+
+bool PlanetCore::LightWork::hasWork() const {
+    return clearSelection || !toggleCells.empty();
+}
 
 void PlanetCore::enqueue(UiCommand command) {
     queuedInputs_.push_back(std::move(command));
@@ -12,9 +27,22 @@ void PlanetCore::applyQueuedInputs() {
         const UiCommand command = std::move(queuedInputs_.front());
         queuedInputs_.pop_front();
 
+        // sceneVersion semantic: every accepted user intent command increments version.
+        // Do not enqueue per-pixel/noisy commands (e.g. mouse move streams).
         applyCommand(command);
         ++sceneVersion_;
     }
+}
+
+std::optional<PlanetCore::LightWork> PlanetCore::peekLight() const {
+    if (!light_.hasWork()) {
+        return std::nullopt;
+    }
+    return light_;
+}
+
+void PlanetCore::consumeLight() {
+    light_ = LightWork{};
 }
 
 std::optional<WorkOrder> PlanetCore::peekWork() const {
@@ -43,7 +71,15 @@ void PlanetCore::applyCommand(const UiCommand& command) {
             work_.uploadBuffers = true;
         }
         else if constexpr (std::is_same_v<T, CmdToggleCell>) {
-            work_.queueToggleCell(cmd.cellId);
+            // Batch contract: duplicate toggles for same cell in one frame are coalesced.
+            light_.queueToggleCell(cmd.cellId);
+        }
+        else if constexpr (std::is_same_v<T, CmdClearSelection>) {
+            // Batch contract: clear dominates all previously queued toggles in this frame.
+            // If clear is followed by toggles in same frame, toggles apply after clear.
+            light_.clearSelection = true;
+            light_.toggleCells.clear();
+            light_.toggleCellsSet.clear();
         }
         else if constexpr (std::is_same_v<T, CmdSetGenerator>) {
             work_.generatorIndex = cmd.index;

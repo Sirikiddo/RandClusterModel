@@ -4,8 +4,8 @@
 struct DebugOverlay {
     uint64_t sceneVersion = 0;
 
-    // Strict semantic: true only while PlanetCore has unconsumed WorkOrder.
-    // Does not represent future async execution state.
+    // Strict semantic: pending HEAVY work only (unconsumed WorkOrder).
+    // LightWork is applied synchronously in the same tick and is not tracked here.
     bool hasPendingWork = false;
 
     bool asyncBusy = false;

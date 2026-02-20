@@ -14,6 +14,8 @@ struct CmdToggleCell {
     int cellId = -1;
 };
 
+struct CmdClearSelection {};
+
 struct CmdSetGenerator {
     int index = 0;
 };
@@ -38,6 +40,7 @@ using UiCommand = std::variant<
     CmdSetSubdivisionLevel,
     CmdRegenerateTerrain,
     CmdToggleCell,
+    CmdClearSelection,
     CmdSetGenerator,
     CmdSetParams,
     CmdSetSmoothOneStep,
