@@ -16,6 +16,8 @@ class QMouseEvent;
 class QWheelEvent;
 class QKeyEvent;
 
+class EngineFacade;
+
 class HexSphereWidget : public QOpenGLWidget
 {
     Q_OBJECT
@@ -42,6 +44,7 @@ protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
     void paintGL() override;
+    void paintEvent(QPaintEvent* e) override;
 
     void mousePressEvent(QMouseEvent*) override;
     void mouseMoveEvent(QMouseEvent*) override;
@@ -61,5 +64,10 @@ private:
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
 
+    std::unique_ptr<EngineFacade> engine_;
+    QElapsedTimer frameTimer_;
+    bool timerStarted_ = false;
+
+    QString overlayText_;
     QTimer* waterTimer_ = nullptr;
 };

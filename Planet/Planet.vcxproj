@@ -125,6 +125,8 @@
     <ClInclude Include="controllers\HexSphereSceneController.h" />
     <ClInclude Include="controllers\InputController.h" />
     <ClInclude Include="controllers\PathBuilder.h" />
+    <ClInclude Include="core\DebugOverlay.h" />
+    <ClInclude Include="core\EngineFacade.h" />
     <ClInclude Include="generation\ClimateBiomeGenerator.h" />
     <ClInclude Include="generation\PerlinNoise.h" />
     <ClInclude Include="generation\TerrainGenerator.h" />
@@ -138,6 +140,7 @@
     <ClInclude Include="model\SceneEntity.h" />
     <ClInclude Include="model\SurfacePlacement.h" />
     <ClInclude Include="model\simple3d_parser.hpp" />
+    <ClInclude Include="OreSystem.h" />
     <ClInclude Include="renderers\EntityRenderer.h" />
     <ClInclude Include="renderers\HexSphereRenderer.h" />
     <ClInclude Include="renderers\TerrainRenderer.h" />
@@ -166,6 +169,7 @@
     <ClCompile Include="controllers\HexSphereSceneController.cpp" />
     <ClCompile Include="controllers\InputController.cpp" />
     <ClCompile Include="controllers\PathBuilder.cpp" />
+    <ClCompile Include="core\EngineFacade.cpp" />
     <ClCompile Include="core\main.cpp" />
     <ClCompile Include="generation\ClimateBiomeGenerator.cpp" />
     <ClCompile Include="generation\PerlinNoise.cpp" />
@@ -176,6 +180,7 @@
     <ClCompile Include="generation\MeshGenerators\WireMeshGenerator.cpp" />
     <ClCompile Include="model\HexSphereModel.cpp" />
     <ClCompile Include="model\ModelHandler.cpp" />
+    <ClCompile Include="OreSystem.cpp" />
     <ClCompile Include="renderers\EntityRenderer.cpp" />
     <ClCompile Include="renderers\HexSphereRenderer.cpp" />
     <ClCompile Include="renderers\TerrainRenderer.cpp" />

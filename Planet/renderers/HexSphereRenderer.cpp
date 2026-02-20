@@ -346,15 +346,38 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     gl_->glClearColor(0.05f, 0.06f, 0.08f, 1.0f);
     gl_->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // === BASELINE GL STATE (чтобы оверлей/вода не "текли" в террейн) ===
+    gl_->glDisable(GL_BLEND);
+    gl_->glDepthMask(GL_TRUE);
+    gl_->glEnable(GL_DEPTH_TEST);
+
+    gl_->glEnable(GL_CULL_FACE);
+    gl_->glCullFace(GL_BACK);
+    gl_->glFrontFace(GL_CCW);
+
+    gl_->glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    gl_->glBindVertexArray(0);
+    gl_->glUseProgram(0);
+
     if (stats_) stats_->startGPUTimer();
 
-    RenderContext ctx{graph, camera, lighting, camera.projection * camera.view,
-                      (camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D()};
+    RenderContext ctx{ graph, camera, lighting, camera.projection * camera.view,
+                      (camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D() };
 
     terrainRenderer_->render(ctx);
     waterRenderer_->render(ctx);
     entityRenderer_->renderEntities(ctx);
     overlayRenderer_->render(ctx);
+
+    // overlay часто рисует линии/подсветку и может менять state
+    //gl_->glDisable(GL_BLEND);
+    //gl_->glDepthMask(GL_TRUE);
+    //gl_->glEnable(GL_DEPTH_TEST);
+    //gl_->glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    //gl_->glBindVertexArray(0);
+    //gl_->glUseProgram(0);
+
     entityRenderer_->renderTrees(ctx);
 
     if (stats_) stats_->stopGPUTimer();

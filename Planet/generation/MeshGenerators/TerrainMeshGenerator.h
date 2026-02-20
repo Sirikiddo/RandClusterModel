@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TerrainTessellator.h"
+#include "renderers/TerrainTessellator.h"
 #include "model/HexSphereModel.h"
 
 struct TerrainMeshOptions {

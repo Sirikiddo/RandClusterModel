@@ -2,7 +2,7 @@
 #include "model/HexSphereModel.h"
 #include "generation/ClimateBiomeGenerator.h"
 #include "generation/PerlinNoise.h"
-#include "converters/DataAdapters.h"
+#include "tools/converters/DataAdapters.h"
 #include <cmath>
 #include <QString>
 

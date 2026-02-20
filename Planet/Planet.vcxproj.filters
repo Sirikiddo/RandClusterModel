@@ -141,6 +141,10 @@
     <ClCompile Include="tools\model_cache_test.cpp">
       <Filter>tools</Filter>
     </ClCompile>
+    <ClCompile Include="OreSystem.cpp" />
+    <ClCompile Include="core\EngineFacade.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="controllers\CameraController.h">
@@ -260,6 +264,13 @@
     <ClInclude Include="tools\converters\DataAdapters.h">
       <Filter>tools\converters</Filter>
     </ClInclude>
+    <ClInclude Include="OreSystem.h" />
+    <ClInclude Include="core\DebugOverlay.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\EngineFacade.h">
+      <Filter>core</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="resources\HexSphereWidget_shaders.h">
@@ -268,5 +279,10 @@
     <None Include="docs\rendering_refactor_task.md">
       <Filter>docs</Filter>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="ui\HexSphereWidget.h" />
+    <QtMoc Include="ui\MainWindow.h" />
+    <QtMoc Include="ui\PlanetSettingsPanel.h" />
   </ItemGroup>
 </Project>

@@ -5,6 +5,12 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QtDebug>
+#include <QElapsedTimer>
+#include <QPainter>
+#include <QPaintEvent>
+#include <memory>
+
+#include "core/EngineFacade.h"
 
 #include "controllers/CameraController.h"
 #include "controllers/InputController.h"
@@ -33,6 +39,8 @@ HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputContro
         inputController_.setOreAnimationTime(inputController_.getOreAnimationTime() + 0.016f * 0.1f);
         update(); // Запрашиваем перерисовку
         });
+
+    engine_ = std::make_unique<EngineFacade>(inputController_);
 }
 
 HexSphereWidget::~HexSphereWidget() = default;
@@ -54,7 +62,44 @@ void HexSphereWidget::resizeGL(int w, int h) {
 }
 
 void HexSphereWidget::paintGL() {
-    applyResponse(inputController_.render());
+    //applyResponse(inputController_.render());
+    if (!context() || !context()->isValid() || !isValid()) return;
+
+    // dt
+    if (!timerStarted_) {
+        frameTimer_.start();
+        timerStarted_ = true;
+    }
+    const qint64 ns = frameTimer_.nsecsElapsed();
+    frameTimer_.restart();
+    float dt = float(ns) * 1e-9f;
+
+    // 1) tick facade (пока только overlay/fps)
+    engine_->tick(dt);
+
+    // 2) старый рендер как есть
+    inputController_.render(); // или как у тебя называется
+
+    // 3) рисуем текст поверх (после GL)
+    const auto& o = engine_->overlay();
+    overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5")
+        .arg(qulonglong(o.sceneVersion))
+        .arg(o.hasPlan ? "1" : "0")
+        .arg(o.asyncBusy ? "1" : "0")
+        .arg(QString::number(o.dtMs, 'f', 2))
+        .arg(QString::number(o.fps, 'f', 1));
+}
+
+void HexSphereWidget::paintEvent(QPaintEvent* e) {
+    // 1) сначала пусть QOpenGLWidget нормально нарисует GL кадр
+    QOpenGLWidget::paintEvent(e);
+
+    // 2) теперь поверх кадра (уже в 2D) рисуем текст
+    if (overlayText_.isEmpty()) return;
+
+    QPainter p(this);
+    p.setRenderHint(QPainter::TextAntialiasing, true);
+    p.drawText(10, 20, overlayText_);
 }
 
 void HexSphereWidget::mousePressEvent(QMouseEvent* e) {

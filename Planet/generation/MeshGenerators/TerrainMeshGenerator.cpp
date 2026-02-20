@@ -1,7 +1,5 @@
 #include "TerrainMeshGenerator.h"
 
-#include "TerrainTessellator.h"
-
 TerrainMesh TerrainMeshGenerator::buildTerrainMesh(const HexSphereModel& model, const TerrainMeshOptions& options) {
     TerrainTessellator tt;
     tt.R = options.radius;
