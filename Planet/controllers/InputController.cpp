@@ -67,6 +67,9 @@ void InputController::initialize(QOpenGLWidget* owner) {
 
     renderer_ = std::make_unique<HexSphereRenderer>(owner_);
     renderer_->initialize(owner_, gl, &stats_);
+    qDebug() << "[InputController::initialize] renderer ready=" << renderer_->ready()
+             << "ownerContext=" << owner_->context()
+             << "currentContext=" << QOpenGLContext::currentContext();
 
     auto& pyramid = ecs_.createEntity("Explorer");
     pyramid.currentCell = 0;
@@ -341,6 +344,9 @@ void InputController::uploadSelection() {
 
 void InputController::uploadBuffers() {
     if (renderer_) {
+        if (!renderer_->ready()) {
+            qCritical() << "[InputController::uploadBuffers] renderer is not ready, uploads will be skipped";
+        }
         renderer_->uploadScene(scene_, uploadOptions_);
     }
 }
