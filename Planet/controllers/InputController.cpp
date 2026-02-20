@@ -68,8 +68,7 @@ void InputController::initialize(QOpenGLWidget* owner) {
     renderer_ = std::make_unique<HexSphereRenderer>(owner_);
     renderer_->initialize(owner_, gl, &stats_);
     qDebug() << "[InputController::initialize] renderer ready=" << renderer_->ready()
-             << "ownerContext=" << owner_->context()
-             << "currentContext=" << QOpenGLContext::currentContext();
+             << "ownerContext=" << owner_->context();
 
     auto& pyramid = ecs_.createEntity("Explorer");
     pyramid.currentCell = 0;
@@ -560,5 +559,4 @@ InputController::Response InputController::regenerateOreDeposits() {
     r.hudMessage = QString("Ore deposits regenerated");
     return r;
 }
-
 

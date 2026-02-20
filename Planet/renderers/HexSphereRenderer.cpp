@@ -120,25 +120,16 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         return;
     }
 
-    if (QOpenGLContext::currentContext() != owner_->context()) {
-        owner_->makeCurrent();
+    if (!gl_) {
+        qCritical() << "[HexSphereRenderer::initialize] OpenGL functions pointer is null";
+        return;
     }
 
-    glContext_ = QOpenGLContext::currentContext();
-    if (!glContext_) {
-        qCritical() << "[HexSphereRenderer::initialize] No current GL context";
-        return;
-    }
-    if (glContext_ != owner_->context()) {
-        qCritical() << "[HexSphereRenderer::initialize] Current context mismatch"
-                    << "current=" << glContext_
-                    << "ownerContext=" << owner_->context();
-        return;
-    }
+    owner_->makeCurrent();
+    glContext_ = owner_->context();
 
     qDebug() << "[HexSphereRenderer::initialize] context=" << glContext_
-             << "surface=" << glContext_->surface()
-             << "thread=" << QThread::currentThread();
+             << "surface=" << glContext_->surface();
 
     glReady_ = true;
 
@@ -269,29 +260,7 @@ void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4&
 void HexSphereRenderer::withContext(const std::function<void()>& task) {
     if (!glReady_ || !owner_) return;
 
-    // If any context is already current (typical inside paintGL), keep it attached
-    // and avoid doneCurrent() mid-frame.
-    if (QOpenGLContext::currentContext()) {
-        task();
-        return;
-    }
-
-    QOpenGLContext* target = owner_ ? owner_->context() : nullptr;
-    QOpenGLContext* current = QOpenGLContext::currentContext();
-
-    if (target && current == target) {
-        task();
-        return;
-    }
-
     owner_->makeCurrent();
-
-    if (QOpenGLContext::currentContext() != target) {
-        qCritical() << "[HexSphereRenderer::withContext] makeCurrent failed"
-                    << "current=" << QOpenGLContext::currentContext()
-                    << "target=" << target;
-    }
-
     task();
     owner_->doneCurrent();
 }
@@ -436,11 +405,6 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
 void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting) {
     if (!glReady_) {
         qCritical() << "[HexSphereRenderer::renderScene] skipped: renderer not ready";
-        return;
-    }
-
-    if (!QOpenGLContext::currentContext()) {
-        qCritical() << "[HexSphereRenderer::renderScene] skipped: no current context";
         return;
     }
 
