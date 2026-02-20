@@ -80,6 +80,7 @@ private:
     void generateEnvCubemap();
     void initPyramidGeometry();
     void withContext(const std::function<void()>& task);
+    void setExternalContextActive(bool active) { externalContextActive_ = active; }
     void uploadWireInternal(const std::vector<float>& vertices, GLenum usage);
     void uploadTerrainInternal(const TerrainMesh& mesh, GLenum usage);
     void uploadSelectionOutlineInternal(const std::vector<float>& vertices);
@@ -92,6 +93,7 @@ private:
     PerformanceStats* stats_ = nullptr;
 
     bool glReady_ = false;
+    bool externalContextActive_ = false;
 
     GLuint envCubemap_ = 0;
     GLint uEnvMap_ = -1;

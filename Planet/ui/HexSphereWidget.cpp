@@ -66,6 +66,8 @@ void HexSphereWidget::paintGL() {
     //applyResponse(inputController_.render());
     if (!context() || !context()->isValid() || !isValid()) return;
 
+    inputController_.beginFrameContext();
+
     // dt
     if (!timerStarted_) {
         frameTimer_.start();
@@ -87,6 +89,8 @@ void HexSphereWidget::paintGL() {
 
     // 2) старый рендер как есть
     inputController_.render(); // или как у тебя называется
+
+    inputController_.endFrameContext();
 
     // 3) рисуем текст поверх (после GL)
     const auto& o = engine_->overlay();
