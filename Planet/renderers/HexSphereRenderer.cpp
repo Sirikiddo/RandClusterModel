@@ -1,5 +1,6 @@
 #include "renderers/HexSphereRenderer.h"
 
+#include <QOpenGLContext>
 #include <QOpenGLWidget>
 #include <QtDebug>
 
@@ -218,6 +219,14 @@ void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4&
 
 void HexSphereRenderer::withContext(const std::function<void()>& task) {
     if (!glReady_) return;
+
+    QOpenGLContext* target = owner_ ? owner_->context() : nullptr;
+    QOpenGLContext* current = QOpenGLContext::currentContext();
+
+    if (target && current == target) {
+        task();
+        return;
+    }
 
     owner_->makeCurrent();
     task();
