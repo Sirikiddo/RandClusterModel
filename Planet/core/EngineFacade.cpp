@@ -22,15 +22,6 @@ void EngineFacade::tick(float dtSeconds) {
     core_.applyQueuedInputs();
     overlay_.sceneVersion = core_.sceneVersion();
 
-<<<<<<< codex/add-planetcore-and-command-queue-7ojbbx
-    if (const auto work = core_.peekWork()) {
-        overlay_.hasPlan = true;
-        executeWorkOrder(*work);
-        core_.consumeWork();
-    }
-
-    overlay_.hasPlan = core_.peekWork().has_value();
-=======
     if (const auto light = core_.peekLight()) {
         // LightWork contract:
         // - executes synchronously before heavy work in the same tick
@@ -58,18 +49,13 @@ void EngineFacade::tick(float dtSeconds) {
 
     // Strictly mirrors PlanetCore pending heavy work (not async state).
     overlay_.hasPendingWork = core_.peekWork().has_value();
->>>>>>> main
 }
 
 void EngineFacade::handleUiCommand(UiCommand command) {
     core_.enqueue(std::move(command));
 }
 
-<<<<<<< codex/add-planetcore-and-command-queue-7ojbbx
-void EngineFacade::executeWorkOrder(const WorkOrder& work) {
-=======
 bool EngineFacade::executeWorkOrder(const WorkOrder& work) {
->>>>>>> main
     if (work.newLevel) {
         legacy_.setSubdivisionLevel(*work.newLevel);
     }
@@ -94,19 +80,9 @@ bool EngineFacade::executeWorkOrder(const WorkOrder& work) {
         legacy_.setOutlineBias(*work.outlineBias);
     }
 
-<<<<<<< codex/add-planetcore-and-command-queue-7ojbbx
-    for (const int cellId : work.toggleCells) {
-        (void)cellId;
-    }
-
-    if (work.regenerateTerrain) {
-        legacy_.regenerateTerrain();
-    }
-=======
     if (work.regenerateTerrain) {
         legacy_.regenerateTerrain();
     }
 
     return true;
->>>>>>> main
 }
