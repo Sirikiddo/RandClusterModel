@@ -248,7 +248,7 @@ InputController::Response InputController::setSubdivisionLevel(int L) {
         scene_.setSubdivisionLevel(L);
         stats_.setSubdivisionLevel(L);
         updateBufferUsageStrategy();
-        rebuildModel(response);
+        //rebuildModel(response);
         response.requestUpdate = true;
     }
     return response;
@@ -570,4 +570,8 @@ InputController::Response InputController::regenerateOreDeposits() {
     return r;
 }
 
-
+void InputController::rebuildModel() {
+    DEBUG_CALL();
+    scene_.rebuildModel();  // это вызовет генерацию террейна и меша
+    uploadBuffers();        // загрузит в GPU
+}

@@ -74,7 +74,13 @@ void EngineFacade::executeWorkOrder(const WorkOrder& work) {
         legacy_.toggleCellSelection(cellId);
     }
 
-    if (work.regenerateTerrain) {
-        legacy_.regenerateTerrain();
+    // 2. ПОСЛЕ применения всех параметров - ОДИН раз перестраиваем модель
+    if (work.needsRebuild || work.regenerateTerrain) {
+        if (work.regenerateTerrain) {
+            legacy_.regenerateTerrain();  // это вызовет rebuildModel внутри
+        }
+        else {
+            legacy_.rebuildModel();  // <-- НУЖНО ДОБАВИТЬ ЭТОТ МЕТОД В InputController
+        }
     }
 }

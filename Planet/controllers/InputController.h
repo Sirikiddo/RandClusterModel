@@ -63,6 +63,8 @@ public:
     Response setOreAnimationSpeed(float speed);
     Response regenerateOreDeposits();
 
+    void rebuildModel();
+
 private:
     struct PickHit {
         int cellId;

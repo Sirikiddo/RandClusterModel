@@ -41,6 +41,7 @@ void PlanetCore::applyCommand(const UiCommand& command) {
 
         if constexpr (std::is_same_v<T, CmdSetSubdivisionLevel>) {
             work_.newLevel = cmd.level;
+            work_.needsRebuild = true;
         }
         else if constexpr (std::is_same_v<T, CmdRegenerateTerrain>) {
             work_.regenerateTerrain = true;
@@ -50,19 +51,24 @@ void PlanetCore::applyCommand(const UiCommand& command) {
         }
         else if constexpr (std::is_same_v<T, CmdSetGenerator>) {
             work_.generatorIndex = cmd.index;
+            work_.needsRebuild = true;
         }
         else if constexpr (std::is_same_v<T, CmdSetParams>) {
             work_.terrainParams = cmd.params;
+            work_.needsRebuild = true;
         }
         else if constexpr (std::is_same_v<T, CmdSetSmoothOneStep>) {
             work_.smoothOneStep = cmd.enabled;
+            work_.needsRebuild = true;
         }
         else if constexpr (std::is_same_v<T, CmdSetStripInset>) {
             DEBUG_CALL_PARAM("CmdSetStripInset value=" << cmd.value);
             work_.stripInset = cmd.value;
+            work_.needsRebuild = true;
         }
         else if constexpr (std::is_same_v<T, CmdSetOutlineBias>) {
             work_.outlineBias = cmd.value;
+            work_.needsRebuild = true;
         }
     }, command);
 }

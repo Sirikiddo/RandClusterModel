@@ -7,6 +7,7 @@
 
 struct WorkOrder {
     bool regenerateTerrain = false;
+    bool needsRebuild = false;
 
     std::optional<int> newLevel{};
     std::optional<int> generatorIndex{};
@@ -19,6 +20,6 @@ struct WorkOrder {
     bool hasWork() const {
         return regenerateTerrain || newLevel.has_value() || generatorIndex.has_value() ||
             terrainParams.has_value() || smoothOneStep.has_value() || stripInset.has_value() ||
-            outlineBias.has_value() || !toggleCells.empty();
+            outlineBias.has_value() || !toggleCells.empty() || needsRebuild;
     }
 };
