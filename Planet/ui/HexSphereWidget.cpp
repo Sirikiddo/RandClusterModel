@@ -147,9 +147,15 @@ void HexSphereWidget::setGeneratorByIndex(int idx) {
 void HexSphereWidget::regenerateTerrain() {
     engine_->handleUiCommand(CmdRegenerateTerrain{});
 
-    engine_->handleUiCommand(CmdSetSmoothOneStep{ on });
-    engine_->handleUiCommand(CmdSetStripInset{ v });
-    engine_->handleUiCommand(CmdSetOutlineBias{ v });
+    CmdSetSmoothOneStep command{};
+    command.enabled = on;
+    engine_->handleUiCommand(command);
+    CmdSetStripInset command{};
+    command.value = v;
+    engine_->handleUiCommand(command);
+    CmdSetOutlineBias command{};
+    command.value = v;
+    engine_->handleUiCommand(command);
         initOreSystem();
         });
 }
