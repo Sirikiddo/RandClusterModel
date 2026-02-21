@@ -287,6 +287,14 @@ InputController::Response InputController::regenerateTerrain() {
     return response;
 }
 
+InputController::Response InputController::toggleCellSelection(int cellId) {
+    Response response;
+    scene_.toggleCellSelection(cellId);
+    uploadSelection();
+    response.requestUpdate = true;
+    return response;
+}
+
 InputController::Response InputController::setSmoothOneStep(bool on) {
     Response response;
     scene_.setSmoothOneStep(on);
@@ -523,7 +531,7 @@ bool InputController::isOreVisualizationEnabled() const {
 }
 
 HexSphereModel* InputController::getModel() {
-    // Получаем модель из сцены
+    // ГЏГ®Г«ГіГ·Г ГҐГ¬ Г¬Г®Г¤ГҐГ«Гј ГЁГ§ Г±Г¶ГҐГ­Г»
     return &scene_.modelMutable();
 }
 
