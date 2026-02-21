@@ -36,9 +36,9 @@ HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputContro
     connect(waterTimer_, &QTimer::timeout, this, [this]() {
         applyResponse(inputController_.advanceWaterTime(0.016f));
 
-        // Îáíîâëÿåì àíèìàöèþ ðóäû
+        // Обновляем анимацию руды.
         inputController_.setOreAnimationTime(inputController_.getOreAnimationTime() + 0.016f * 0.1f);
-        update(); // Çàïðàøèâàåì ïåðåðèñîâêó
+        update(); // Запрашиваем перерисовку.
         });
 
     engine_ = std::make_unique<EngineFacade>(inputController_);
@@ -49,9 +49,9 @@ HexSphereWidget::~HexSphereWidget() = default;
 void HexSphereWidget::initializeGL() {
     inputController_.initialize(this);
 
-    // Èíèöèàëèçèðóåì ñèñòåìó ðóä ïîñëå çàãðóçêè ìîäåëè
-    // Îòëîæèì äî ïåðâîãî ðåíäåðà èëè ñîçäàíèÿ ìèðà
-    // initOreSystem() áóäåò âûçâàí ïîñëå ãåíåðàöèè ìèðà
+    // Инициализируем систему руд после загрузки модели.
+    // Отложим до первого рендера или создания мира.
+    // initOreSystem() будет вызван после генерации мира.
 
     waterTimer_->start(16);
 
@@ -75,13 +75,13 @@ void HexSphereWidget::paintGL() {
     frameTimer_.restart();
     float dt = float(ns) * 1e-9f;
 
-    // 1) tick facade (ïîêà òîëüêî overlay/fps)
+    // 1) Обновляем фасад (пока только overlay/fps).
     engine_->tick(dt);
 
-    // 2) ñòàðûé ðåíäåð êàê åñòü
-    inputController_.render(); // èëè êàê ó òåáÿ íàçûâàåòñÿ
+    // 2) Старый рендер как есть.
+    inputController_.render(); // Или как у тебя называется.
 
-    // 3) ðèñóåì òåêñò ïîâåðõ (ïîñëå GL)
+    // 3) Рисуем текст поверх (после GL).
     const auto& o = engine_->overlay();
     overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5")
         .arg(qulonglong(o.sceneVersion))
@@ -92,10 +92,10 @@ void HexSphereWidget::paintGL() {
 }
 
 void HexSphereWidget::paintEvent(QPaintEvent* e) {
-    // 1) ñíà÷àëà ïóñòü QOpenGLWidget íîðìàëüíî íàðèñóåò GL êàäð
+    // 1) Сначала пусть QOpenGLWidget нормально нарисует GL-кадр.
     QOpenGLWidget::paintEvent(e);
 
-    // 2) òåïåðü ïîâåðõ êàäðà (óæå â 2D) ðèñóåì òåêñò
+    // 2) Теперь поверх кадра (уже в 2D) рисуем текст.
     if (overlayText_.isEmpty()) return;
 
     QPainter p(this);
@@ -147,17 +147,8 @@ void HexSphereWidget::setGeneratorByIndex(int idx) {
 void HexSphereWidget::regenerateTerrain() {
     engine_->handleUiCommand(CmdRegenerateTerrain{});
 
-    CmdSetSmoothOneStep command{};
-    command.enabled = on;
-    engine_->handleUiCommand(command);
-    CmdSetStripInset command{};
-    command.value = v;
-    engine_->handleUiCommand(command);
-    CmdSetOutlineBias command{};
-    command.value = v;
-    engine_->handleUiCommand(command);
-        initOreSystem();
-        });
+    // После генерации обновляем систему руд на новой модели.
+    initOreSystem();
 }
 
 void HexSphereWidget::setSmoothOneStep(bool on) {
@@ -182,10 +173,10 @@ void HexSphereWidget::applyResponse(const InputController::Response& response) {
 }
 
 void HexSphereWidget::initOreSystem() {
-    // Ñîçäàåì ñèñòåìó ðóä
+    // Создаем систему руд.
     oreSystem_ = std::make_unique<OreSystem>();
 
-    // Ïîëó÷àåì ìîäåëü ÷åðåç InputController
+    // Получаем модель через InputController.
     HexSphereModel* model = inputController_.getModel();
     if (model) {
         oreSystem_->initialize(*model);
@@ -198,14 +189,14 @@ void HexSphereWidget::initOreSystem() {
     oreAnimationTime_ = 0.0f;
     oreVisualizationEnabled_ = true;
 
-    // Îáíîâëÿåì òåññåëÿòîð ñ âðåìåíåì àíèìàöèè
+    // Обновляем тесселятор с временем анимации.
     inputController_.setOreAnimationTime(oreAnimationTime_);
     inputController_.setOreVisualizationEnabled(oreVisualizationEnabled_);
 }
 
 void HexSphereWidget::updateOreAnimation(float deltaTime) {
-    oreAnimationTime_ += deltaTime * 0.1f; // Ñêîðîñòü àíèìàöèè
+    oreAnimationTime_ += deltaTime * 0.1f; // Скорость анимации.
 
-    // Îáíîâëÿåì âðåìÿ àíèìàöèè â InputController
+    // Обновляем время анимации в InputController.
     inputController_.setOreAnimationTime(oreAnimationTime_);
 }
