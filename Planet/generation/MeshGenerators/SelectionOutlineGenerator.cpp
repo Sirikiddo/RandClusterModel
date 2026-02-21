@@ -11,6 +11,7 @@ std::vector<float> SelectionOutlineGenerator::buildSelectionOutlineVertices(
     constexpr float R = 1.0f;
 
     std::vector<float> lineVerts;
+    // Complexity: O(sum(deg(cell)) for selected cells), independent from total cell count.
     lineVerts.reserve(selectedCells.size() * 12);
 
     auto liftBias = [&](const QVector3D& u, float h) { return u.normalized() * (R + h * heightStep + outlineBias); };

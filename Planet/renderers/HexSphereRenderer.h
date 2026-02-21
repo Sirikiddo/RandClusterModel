@@ -2,6 +2,7 @@
 
 #include <QMatrix4x4>
 #include <QOpenGLFunctions_3_3_Core>
+#include <QOpenGLContext>
 #include <QVector3D>
 #include <QOpenGLWidget>
 #include <QtOpenGL>
@@ -70,6 +71,8 @@ public:
     void uploadScene(const HexSphereSceneController& scene, const UploadOptions& options);
 
     void renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting);
+    void beginExternalContext();
+    void endExternalContext();
 
     bool ready() const { return glReady_; }
     GLuint envCubemap() const { return envCubemap_; }
@@ -79,6 +82,7 @@ private:
     void generateEnvCubemap();
     void initPyramidGeometry();
     void withContext(const std::function<void()>& task);
+    void setExternalContextActive(bool active) { externalContextActive_ = active; }
     void uploadWireInternal(const std::vector<float>& vertices, GLenum usage);
     void uploadTerrainInternal(const TerrainMesh& mesh, GLenum usage);
     void uploadSelectionOutlineInternal(const std::vector<float>& vertices);
@@ -86,10 +90,12 @@ private:
     void uploadWaterInternal(const WaterGeometryData& data);
 
     QOpenGLWidget* owner_ = nullptr;
+    QOpenGLContext* glContext_ = nullptr;
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
     PerformanceStats* stats_ = nullptr;
 
     bool glReady_ = false;
+    bool externalContextActive_ = false;
 
     GLuint envCubemap_ = 0;
     GLint uEnvMap_ = -1;

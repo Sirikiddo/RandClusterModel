@@ -11,6 +11,7 @@
 #include <memory>
 
 #include "core/EngineFacade.h"
+#include "core/UiCommands.h"
 
 #include "controllers/CameraController.h"
 #include "controllers/InputController.h"
@@ -35,9 +36,9 @@ HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputContro
     connect(waterTimer_, &QTimer::timeout, this, [this]() {
         applyResponse(inputController_.advanceWaterTime(0.016f));
 
-        // Обновляем анимацию руды
+        // РћР±РЅРѕРІР»СЏРµРј Р°РЅРёРјР°С†РёСЋ СЂСѓРґС‹
         inputController_.setOreAnimationTime(inputController_.getOreAnimationTime() + 0.016f * 0.1f);
-        update(); // Запрашиваем перерисовку
+        update(); // Р—Р°РїСЂР°С€РёРІР°РµРј РїРµСЂРµСЂРёСЃРѕРІРєСѓ
         });
 
     engine_ = std::make_unique<EngineFacade>(inputController_);
@@ -48,9 +49,9 @@ HexSphereWidget::~HexSphereWidget() = default;
 void HexSphereWidget::initializeGL() {
     inputController_.initialize(this);
 
-    // Инициализируем систему руд после загрузки модели
-    // Отложим до первого рендера или создания мира
-    // initOreSystem() будет вызван после генерации мира
+    // РРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј СЃРёСЃС‚РµРјСѓ СЂСѓРґ РїРѕСЃР»Рµ Р·Р°РіСЂСѓР·РєРё РјРѕРґРµР»Рё
+    // РћС‚Р»РѕР¶РёРј РґРѕ РїРµСЂРІРѕРіРѕ СЂРµРЅРґРµСЂР° РёР»Рё СЃРѕР·РґР°РЅРёСЏ РјРёСЂР°
+    // initOreSystem() Р±СѓРґРµС‚ РІС‹Р·РІР°РЅ РїРѕСЃР»Рµ РіРµРЅРµСЂР°С†РёРё РјРёСЂР°
 
     waterTimer_->start(16);
 
@@ -65,6 +66,8 @@ void HexSphereWidget::paintGL() {
     //applyResponse(inputController_.render());
     if (!context() || !context()->isValid() || !isValid()) return;
 
+    inputController_.beginFrameContext();
+
     // dt
     if (!timerStarted_) {
         frameTimer_.start();
@@ -74,27 +77,36 @@ void HexSphereWidget::paintGL() {
     frameTimer_.restart();
     float dt = float(ns) * 1e-9f;
 
-    // 1) tick facade (пока только overlay/fps)
+    // NOTE: tick() can synchronously run legacy work in Boundary #1 and is not "free".
     engine_->tick(dt);
 
-    // 2) старый рендер как есть
-    inputController_.render(); // или как у тебя называется
+    // TODO(boundary-2): replace hasPendingWork check with explicit completion
+    // (e.g. executedWorkVersion >= oreInitRequestVersion or completion event).
+    if (oreInitPending_ && !engine_->overlay().hasPendingWork) {
+        initOreSystem();
+        oreInitPending_ = false;
+    }
 
-    // 3) рисуем текст поверх (после GL)
+    // 2) СЃС‚Р°СЂС‹Р№ СЂРµРЅРґРµСЂ РєР°Рє РµСЃС‚СЊ
+    inputController_.render(); // РёР»Рё РєР°Рє Сѓ С‚РµР±СЏ РЅР°Р·С‹РІР°РµС‚СЃСЏ
+
+    inputController_.endFrameContext();
+
+    // 3) СЂРёСЃСѓРµРј С‚РµРєСЃС‚ РїРѕРІРµСЂС… (РїРѕСЃР»Рµ GL)
     const auto& o = engine_->overlay();
-    overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5")
+    overlayText_ = QString("v:%1  dirtyHeavy:%2  busy:%3  dt:%4ms  fps:%5")
         .arg(qulonglong(o.sceneVersion))
-        .arg(o.hasPlan ? "1" : "0")
+        .arg(o.hasPendingWork ? "1" : "0")
         .arg(o.asyncBusy ? "1" : "0")
         .arg(QString::number(o.dtMs, 'f', 2))
         .arg(QString::number(o.fps, 'f', 1));
 }
 
 void HexSphereWidget::paintEvent(QPaintEvent* e) {
-    // 1) сначала пусть QOpenGLWidget нормально нарисует GL кадр
+    // 1) СЃРЅР°С‡Р°Р»Р° РїСѓСЃС‚СЊ QOpenGLWidget РЅРѕСЂРјР°Р»СЊРЅРѕ РЅР°СЂРёСЃСѓРµС‚ GL РєР°РґСЂ
     QOpenGLWidget::paintEvent(e);
 
-    // 2) теперь поверх кадра (уже в 2D) рисуем текст
+    // 2) С‚РµРїРµСЂСЊ РїРѕРІРµСЂС… РєР°РґСЂР° (СѓР¶Рµ РІ 2D) СЂРёСЃСѓРµРј С‚РµРєСЃС‚
     if (overlayText_.isEmpty()) return;
 
     QPainter p(this);
@@ -104,7 +116,14 @@ void HexSphereWidget::paintEvent(QPaintEvent* e) {
 
 void HexSphereWidget::mousePressEvent(QMouseEvent* e) {
     setFocus(Qt::MouseFocusReason);
-    applyResponse(inputController_.mousePress(e));
+
+    auto response = inputController_.mousePress(e);
+    if (response.toggleCellId) {
+        engine_->handleUiCommand(CmdToggleCell{ *response.toggleCellId });
+        update();
+    }
+
+    applyResponse(response);
 }
 
 void HexSphereWidget::mouseMoveEvent(QMouseEvent* e) {
@@ -124,7 +143,7 @@ void HexSphereWidget::keyPressEvent(QKeyEvent* e) {
 }
 
 void HexSphereWidget::setSubdivisionLevel(int L) {
-    applyResponse(inputController_.setSubdivisionLevel(L));
+    engine_->handleUiCommand(CmdSetSubdivisionLevel{ L });
 }
 
 void HexSphereWidget::resetView() {
@@ -132,37 +151,36 @@ void HexSphereWidget::resetView() {
 }
 
 void HexSphereWidget::clearSelection() {
-    applyResponse(inputController_.clearSelection());
+    engine_->handleUiCommand(CmdClearSelection{});
+    update();
 }
 
 void HexSphereWidget::setTerrainParams(const TerrainParams& p) {
-    applyResponse(inputController_.setTerrainParams(p));
+    engine_->handleUiCommand(CmdSetParams{ p });
 }
 
 void HexSphereWidget::setGeneratorByIndex(int idx) {
-    applyResponse(inputController_.setGeneratorByIndex(idx));
+    engine_->handleUiCommand(CmdSetGenerator{ idx });
 }
 
 void HexSphereWidget::regenerateTerrain() {
-    applyResponse(inputController_.regenerateTerrain());
-
-    // После регенерации мира переинициализируем систему руд
-    // Нужно подождать, пока мир будет сгенерирован
-    QTimer::singleShot(100, this, [this]() {
-        initOreSystem();
-        });
+    // Boundary #1: bind ore reinit to pending-work drain in the synchronous facade.
+    // TODO(Boundary #2): gate by completion event/version instead of hasPendingWork.
+    oreInitPending_ = true;
+    engine_->handleUiCommand(CmdRegenerateTerrain{});
+    update();
 }
 
 void HexSphereWidget::setSmoothOneStep(bool on) {
-    applyResponse(inputController_.setSmoothOneStep(on));
+    engine_->handleUiCommand(CmdSetSmoothOneStep{ on });
 }
 
 void HexSphereWidget::setStripInset(float v) {
-    applyResponse(inputController_.setStripInset(v));
+    engine_->handleUiCommand(CmdSetStripInset{ v });
 }
 
 void HexSphereWidget::setOutlineBias(float v) {
-    applyResponse(inputController_.setOutlineBias(v));
+    engine_->handleUiCommand(CmdSetOutlineBias{ v });
 }
 
 void HexSphereWidget::applyResponse(const InputController::Response& response) {
@@ -175,10 +193,12 @@ void HexSphereWidget::applyResponse(const InputController::Response& response) {
 }
 
 void HexSphereWidget::initOreSystem() {
-    // Создаем систему руд
+    // Acceptable in paintGL for now: initialization walks in-memory model data only
+    // (no disk I/O, no GL uploads). If it grows heavier, move off frame path.
+    // РЎРѕР·РґР°РµРј СЃРёСЃС‚РµРјСѓ СЂСѓРґ
     oreSystem_ = std::make_unique<OreSystem>();
 
-    // Получаем модель через InputController
+    // РџРѕР»СѓС‡Р°РµРј РјРѕРґРµР»СЊ С‡РµСЂРµР· InputController
     HexSphereModel* model = inputController_.getModel();
     if (model) {
         oreSystem_->initialize(*model);
@@ -191,14 +211,14 @@ void HexSphereWidget::initOreSystem() {
     oreAnimationTime_ = 0.0f;
     oreVisualizationEnabled_ = true;
 
-    // Обновляем тесселятор с временем анимации
+    // РћР±РЅРѕРІР»СЏРµРј С‚РµСЃСЃРµР»СЏС‚РѕСЂ СЃ РІСЂРµРјРµРЅРµРј Р°РЅРёРјР°С†РёРё
     inputController_.setOreAnimationTime(oreAnimationTime_);
     inputController_.setOreVisualizationEnabled(oreVisualizationEnabled_);
 }
 
 void HexSphereWidget::updateOreAnimation(float deltaTime) {
-    oreAnimationTime_ += deltaTime * 0.1f; // Скорость анимации
+    oreAnimationTime_ += deltaTime * 0.1f; // РЎРєРѕСЂРѕСЃС‚СЊ Р°РЅРёРјР°С†РёРё
 
-    // Обновляем время анимации в InputController
+    // РћР±РЅРѕРІР»СЏРµРј РІСЂРµРјСЏ Р°РЅРёРјР°С†РёРё РІ InputController
     inputController_.setOreAnimationTime(oreAnimationTime_);
 }

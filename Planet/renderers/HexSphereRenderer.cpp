@@ -1,6 +1,8 @@
 #include "renderers/HexSphereRenderer.h"
 
+#include <QOpenGLContext>
 #include <QOpenGLWidget>
+#include <QThread>
 #include <QtDebug>
 
 #include "resources/HexSphereWidget_shaders.h"
@@ -9,6 +11,16 @@
 #include "ui/OverlayRenderer.h"
 #include "renderers/TerrainRenderer.h"
 #include "renderers/WaterRenderer.h"
+
+namespace {
+void logGlError(QOpenGLFunctions_3_3_Core* gl, const char* stage) {
+    if (!gl) return;
+    const GLenum err = gl->glGetError();
+    if (err != GL_NO_ERROR) {
+        qCritical() << "[HexSphereRenderer] GL error at" << stage << ":" << Qt::hex << int(err) << Qt::dec;
+    }
+}
+}
 
 HexSphereRenderer::HexSphereRenderer(QOpenGLWidget* owner)
     : owner_(owner) {}
@@ -96,6 +108,29 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     owner_ = owner;
     gl_ = gl;
     stats_ = stats;
+
+    if (!owner_) {
+        qCritical() << "[HexSphereRenderer::initialize] Owner widget is null";
+        return;
+    }
+
+    if (!owner_->context()) {
+        qCritical() << "[HexSphereRenderer::initialize] Owner has no context"
+                    << "isValid=" << owner_->isValid();
+        return;
+    }
+
+    if (!gl_) {
+        qCritical() << "[HexSphereRenderer::initialize] OpenGL functions pointer is null";
+        return;
+    }
+
+    owner_->makeCurrent();
+    glContext_ = owner_->context();
+
+    qDebug() << "[HexSphereRenderer::initialize] context=" << glContext_
+             << "surface=" << glContext_->surface();
+
     glReady_ = true;
 
     gl_->glEnable(GL_DEPTH_TEST);
@@ -135,6 +170,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     uUseTexture_ = gl_->glGetUniformLocation(progModel_, "uUseTexture");
 
     gl_->glUseProgram(0);
+    logGlError(gl_, "initialize/program setup");
 
     gl_->glGenBuffers(1, &vboPositions_);
     gl_->glGenVertexArrays(1, &vaoWire_);
@@ -206,6 +242,11 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     entityRenderer_ = std::make_unique<EntityRenderer>(gl_, progWire_, progSel_, progModel_, uMVP_Wire_, uMVP_Sel_, uMVP_Model_, uModel_Model_, uLightDir_Model_, uViewPos_Model_, uColor_Model_, uUseTexture_, vaoPyramid_, pyramidVertexCount_, treeModel_);
     overlayRenderer_ = std::make_unique<OverlayRenderer>(gl_, progWire_, progSel_, uMVP_Wire_, uMVP_Sel_, vaoWire_, vaoSel_, vaoPath_, lineVertexCount_, selLineVertexCount_, pathVertexCount_);
 
+    qDebug() << "[HexSphereRenderer::initialize] ready"
+             << "programs=" << progTerrain_ << progWire_ << progSel_ << progWater_ << progModel_
+             << "vaoTerrain=" << vaoTerrain_ << "vaoWire=" << vaoWire_ << "vaoWater=" << vaoWater_;
+    logGlError(gl_, "initialize/final");
+
     glReady_ = true;
 }
 
@@ -216,12 +257,28 @@ void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4&
     proj.perspective(50.0f, float(pw) / float(std::max(ph, 1)), 0.01f, 50.0f);
 }
 
-void HexSphereRenderer::withContext(const std::function<void()>& task) {
-    if (!glReady_) return;
+void HexSphereRenderer::beginExternalContext() {
+    setExternalContextActive(true);
+}
 
-    owner_->makeCurrent();
+void HexSphereRenderer::endExternalContext() {
+    setExternalContextActive(false);
+}
+
+void HexSphereRenderer::withContext(const std::function<void()>& task) {
+    if (!glReady_ || !owner_) return;
+
+    QOpenGLContext* currentCtx = QOpenGLContext::currentContext();
+    const bool ownerContextAlreadyCurrent = (currentCtx && currentCtx == owner_->context());
+    if (!ownerContextAlreadyCurrent && !externalContextActive_) {
+        owner_->makeCurrent();
+    }
+
     task();
-    owner_->doneCurrent();
+
+    if (!ownerContextAlreadyCurrent && !externalContextActive_) {
+        owner_->doneCurrent();
+    }
 }
 
 void HexSphereRenderer::uploadWireInternal(const std::vector<float>& vertices, GLenum usage) {
@@ -241,6 +298,10 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
     const GLsizeiptr vbNorm = GLsizeiptr(mesh.norm.size() * sizeof(float));
     const GLsizeiptr ib = GLsizeiptr(mesh.idx.size() * sizeof(uint32_t));
 
+    // GL_ELEMENT_ARRAY_BUFFER binding is VAO state. Bind terrain VAO explicitly,
+    // otherwise another currently bound VAO can steal this EBO binding.
+    gl_->glBindVertexArray(vaoTerrain_);
+
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
     gl_->glBufferData(GL_ARRAY_BUFFER, vbPos, mesh.pos.empty() ? nullptr : mesh.pos.data(), usage);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainCol_);
@@ -250,6 +311,8 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
 
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
     gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER, ib, mesh.idx.empty() ? nullptr : mesh.idx.data(), usage);
+
+    gl_->glBindVertexArray(0);
 
     terrainIndexCount_ = GLsizei(mesh.idx.size());
 
@@ -279,6 +342,8 @@ void HexSphereRenderer::uploadPathInternal(const std::vector<QVector3D>& points)
 }
 
 void HexSphereRenderer::uploadWaterInternal(const WaterGeometryData& data) {
+    gl_->glBindVertexArray(vaoWater_);
+
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboWaterPos_);
     gl_->glBufferData(GL_ARRAY_BUFFER, data.positions.size() * sizeof(float), data.positions.empty() ? nullptr : data.positions.data(), GL_STATIC_DRAW);
 
@@ -288,7 +353,6 @@ void HexSphereRenderer::uploadWaterInternal(const WaterGeometryData& data) {
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboWater_);
     gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER, data.indices.size() * sizeof(uint32_t), data.indices.empty() ? nullptr : data.indices.data(), GL_STATIC_DRAW);
 
-    gl_->glBindVertexArray(vaoWater_);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboWaterPos_);
     gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(0);
@@ -323,30 +387,60 @@ void HexSphereRenderer::uploadWater(const WaterGeometryData& data) {
 }
 
 void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const UploadOptions& options) {
+    const TerrainMesh& terrain = scene.terrain();
+    const auto wire = scene.buildWireVertices();
+    const auto selection = scene.buildSelectionOutlineVertices();
+    auto path = scene.buildPathPolyline();
+    const auto water = scene.buildWaterGeometry();
+
+    qDebug() << "[HexSphereRenderer::uploadScene] cpu mesh snapshot"
+             << "terrainPos=" << terrain.pos.size() / 3
+             << "terrainIdx=" << terrain.idx.size()
+             << "wireVerts=" << wire.size() / 3
+             << "selVerts=" << selection.size() / 3
+             << "pathVerts=" << (path ? path->size() : 0)
+             << "waterPos=" << water.positions.size() / 3
+             << "waterIdx=" << water.indices.size();
+
     withContext([&]() {
-        uploadWireInternal(scene.buildWireVertices(), options.wireUsage);
-        uploadTerrainInternal(scene.terrain(), options.terrainUsage);
-        uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
-        if (auto path = scene.buildPathPolyline()) {
+        uploadWireInternal(wire, options.wireUsage);
+        uploadTerrainInternal(terrain, options.terrainUsage);
+        uploadSelectionOutlineInternal(selection);
+        if (path) {
             uploadPathInternal(*path);
         } else {
             uploadPathInternal({});
         }
-        uploadWaterInternal(scene.buildWaterGeometry());
+        uploadWaterInternal(water);
+        logGlError(gl_, "uploadScene");
     });
     qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
              << "(terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
 }
 
 void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting) {
-    if (!glReady_) return;
+    if (!glReady_) {
+        qCritical() << "[HexSphereRenderer::renderScene] skipped: renderer not ready";
+        return;
+    }
+
+    static int frameId = 0;
+    ++frameId;
+    if (frameId <= 5 || frameId % 120 == 0) {
+        qDebug() << "[HexSphereRenderer::renderScene] frame" << frameId
+                 << "terrainIdx=" << terrainIndexCount_
+                 << "wireVerts=" << lineVertexCount_
+                 << "selVerts=" << selLineVertexCount_
+                 << "pathVerts=" << pathVertexCount_
+                 << "waterIdx=" << waterIndexCount_;
+    }
 
     const float dpr = owner_->devicePixelRatioF();
     gl_->glViewport(0, 0, int(owner_->width() * dpr), int(owner_->height() * dpr));
     gl_->glClearColor(0.05f, 0.06f, 0.08f, 1.0f);
     gl_->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // === BASELINE GL STATE (чтобы оверлей/вода не "текли" в террейн) ===
+    // === BASELINE GL STATE (Г·ГІГ®ГЎГ» Г®ГўГҐГ°Г«ГҐГ©/ГўГ®Г¤Г  Г­ГҐ "ГІГҐГЄГ«ГЁ" Гў ГІГҐГ°Г°ГҐГ©Г­) ===
     gl_->glDisable(GL_BLEND);
     gl_->glDepthMask(GL_TRUE);
     gl_->glEnable(GL_DEPTH_TEST);
@@ -366,11 +460,15 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
                       (camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D() };
 
     terrainRenderer_->render(ctx);
+    logGlError(gl_, "renderScene/terrain");
     waterRenderer_->render(ctx);
+    logGlError(gl_, "renderScene/water");
     entityRenderer_->renderEntities(ctx);
+    logGlError(gl_, "renderScene/entities");
     overlayRenderer_->render(ctx);
+    logGlError(gl_, "renderScene/overlay");
 
-    // overlay часто рисует линии/подсветку и может менять state
+    // overlay Г·Г Г±ГІГ® Г°ГЁГ±ГіГҐГІ Г«ГЁГ­ГЁГЁ/ГЇГ®Г¤Г±ГўГҐГІГЄГі ГЁ Г¬Г®Г¦ГҐГІ Г¬ГҐГ­ГїГІГј state
     //gl_->glDisable(GL_BLEND);
     //gl_->glDepthMask(GL_TRUE);
     //gl_->glEnable(GL_DEPTH_TEST);
@@ -379,6 +477,7 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     //gl_->glUseProgram(0);
 
     entityRenderer_->renderTrees(ctx);
+    logGlError(gl_, "renderScene/trees");
 
     if (stats_) stats_->stopGPUTimer();
 }
@@ -450,10 +549,10 @@ void HexSphereRenderer::initPyramidGeometry() {
 
 void HexSphereRenderer::setOreAnimationTime(float time) {
     oreAnimationTime_ = time;
-    // Здесь можно передать время в тесселятор, если нужно
+    // Г‡Г¤ГҐГ±Гј Г¬Г®Г¦Г­Г® ГЇГҐГ°ГҐГ¤Г ГІГј ГўГ°ГҐГ¬Гї Гў ГІГҐГ±Г±ГҐГ«ГїГІГ®Г°, ГҐГ±Г«ГЁ Г­ГіГ¦Г­Г®
 }
 
 void HexSphereRenderer::setOreVisualizationEnabled(bool enabled) {
     oreVisualizationEnabled_ = enabled;
-    // Здесь можно обновить состояние рендерера
+    // Г‡Г¤ГҐГ±Гј Г¬Г®Г¦Г­Г® Г®ГЎГ­Г®ГўГЁГІГј Г±Г®Г±ГІГ®ГїГ­ГЁГҐ Г°ГҐГ­Г¤ГҐГ°ГҐГ°Г 
 }

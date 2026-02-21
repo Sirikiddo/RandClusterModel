@@ -1,15 +1,16 @@
 #include "EngineFacade.h"
-#include "controllers/InputController.h" // или твой путь
+
+#include <utility>
+
+#include "controllers/InputController.h"
 
 EngineFacade::EngineFacade(InputController& legacy)
     : legacy_(legacy) {
 }
 
 void EngineFacade::tick(float dtSeconds) {
-    // dt -> overlay
     overlay_.dtMs = dtSeconds * 1000.0f;
 
-    // fps сглаженный по окну ~0.5-1 сек
     fpsAccum_ += dtSeconds;
     ++fpsFrames_;
     if (fpsAccum_ >= 0.5f) {
@@ -18,6 +19,70 @@ void EngineFacade::tick(float dtSeconds) {
         fpsFrames_ = 0;
     }
 
-    // важный момент: никаких вызовов legacy тут пока нет
-    (void)legacy_;
+    core_.applyQueuedInputs();
+    overlay_.sceneVersion = core_.sceneVersion();
+
+    if (const auto light = core_.peekLight()) {
+        // LightWork contract:
+        // - executes synchronously before heavy work in the same tick
+        // - uses legacy selection-outline uploads only (safe here: tick() runs from paintGL)
+        if (light->clearSelection) {
+            legacy_.clearSelection();
+        }
+
+        for (const int cellId : light->toggleCells) {
+            legacy_.toggleCellSelection(cellId);
+        }
+
+        // Same as heavy path: consume only after successful synchronous apply.
+        core_.consumeLight();
+    }
+
+    if (const auto work = core_.peekWork()) {
+        // consumeWork() must happen only after successful synchronous execution.
+        // If executeWorkOrder() throws, work remains pending and can be retried/diagnosed.
+        const bool executed = executeWorkOrder(*work);
+        if (executed) {
+            core_.consumeWork();
+        }
+    }
+
+    // Strictly mirrors PlanetCore pending heavy work (not async state).
+    overlay_.hasPendingWork = core_.peekWork().has_value();
+}
+
+void EngineFacade::handleUiCommand(UiCommand command) {
+    core_.enqueue(std::move(command));
+}
+
+bool EngineFacade::executeWorkOrder(const WorkOrder& work) {
+    if (work.newLevel) {
+        legacy_.setSubdivisionLevel(*work.newLevel);
+    }
+
+    if (work.generatorIndex) {
+        legacy_.setGeneratorByIndex(*work.generatorIndex);
+    }
+
+    if (work.terrainParams) {
+        legacy_.setTerrainParams(*work.terrainParams);
+    }
+
+    if (work.smoothOneStep) {
+        legacy_.setSmoothOneStep(*work.smoothOneStep);
+    }
+
+    if (work.stripInset) {
+        legacy_.setStripInset(*work.stripInset);
+    }
+
+    if (work.outlineBias) {
+        legacy_.setOutlineBias(*work.outlineBias);
+    }
+
+    if (work.regenerateTerrain) {
+        legacy_.regenerateTerrain();
+    }
+
+    return true;
 }
