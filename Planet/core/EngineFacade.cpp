@@ -3,12 +3,14 @@
 #include <utility>
 
 #include "controllers/InputController.h"
+#include "DebugMacros.h"
 
 EngineFacade::EngineFacade(InputController& legacy)
     : legacy_(legacy) {
 }
 
 void EngineFacade::tick(float dtSeconds) {
+    DEBUG_CALL_PARAM("dt=" << dtSeconds);
     overlay_.dtMs = dtSeconds * 1000.0f;
 
     fpsAccum_ += dtSeconds;
@@ -23,19 +25,26 @@ void EngineFacade::tick(float dtSeconds) {
     overlay_.sceneVersion = core_.sceneVersion();
 
     if (const auto work = core_.peekWork()) {
+        DEBUG_CALL_PARAM("has work: true");
         overlay_.hasPlan = true;
         executeWorkOrder(*work);
         core_.consumeWork();
+    }
+    else
+    {
+        DEBUG_CALL_PARAM("has work: false");
     }
 
     overlay_.hasPlan = core_.peekWork().has_value();
 }
 
 void EngineFacade::handleUiCommand(UiCommand command) {
+    DEBUG_CALL();
     core_.enqueue(std::move(command));
 }
 
 void EngineFacade::executeWorkOrder(const WorkOrder& work) {
+    DEBUG_CALL();
     if (work.newLevel) {
         legacy_.setSubdivisionLevel(*work.newLevel);
     }
@@ -53,6 +62,7 @@ void EngineFacade::executeWorkOrder(const WorkOrder& work) {
     }
 
     if (work.stripInset) {
+        DEBUG_CALL_PARAM("stripInset=" << *work.stripInset);
         legacy_.setStripInset(*work.stripInset);
     }
 

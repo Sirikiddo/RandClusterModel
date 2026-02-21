@@ -11,6 +11,7 @@
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QToolBar>
+#include "../DebugMacros.h"
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     cameraController_ = std::make_unique<CameraController>();
@@ -57,6 +58,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     connect(panel, &PlanetSettingsPanel::visualizeChanged,
         this, [this](bool smooth, double inset, double outline) {
+            DEBUG_CALL_PARAM("smooth=" << smooth << "inset=" << inset << "outline=" << outline);
             glw_->setSmoothOneStep(smooth);
             glw_->setStripInset(float(inset));
             glw_->setOutlineBias(float(outline));

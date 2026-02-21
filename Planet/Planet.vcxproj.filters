@@ -283,6 +283,7 @@
     <ClInclude Include="core\WorkOrder.h">
       <Filter>core</Filter>
     </ClInclude>
+    <ClInclude Include="DebugMacros.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="resources\HexSphereWidget_shaders.h">

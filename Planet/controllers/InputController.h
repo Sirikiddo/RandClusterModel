@@ -109,4 +109,8 @@ private:
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
     float oreAnimationSpeed_ = 0.1f;
+
+    bool needRebuild_ = false;
+    void markDirty() { needRebuild_ = true; }
+    void checkRebuild();
 };

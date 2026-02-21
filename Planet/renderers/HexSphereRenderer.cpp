@@ -9,6 +9,7 @@
 #include "ui/OverlayRenderer.h"
 #include "renderers/TerrainRenderer.h"
 #include "renderers/WaterRenderer.h"
+#include "../DebugMacros.h"
 
 HexSphereRenderer::HexSphereRenderer(QOpenGLWidget* owner)
     : owner_(owner) {}
@@ -234,12 +235,26 @@ void HexSphereRenderer::uploadWireInternal(const std::vector<float>& vertices, G
 }
 
 void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum usage) {
+    DEBUG_CALL_PARAM("vertices=" << mesh.pos.size() / 3
+        << "triangles=" << mesh.idx.size() / 3
+        << "usage=" << (usage == GL_STATIC_DRAW ? "STATIC" : "DYNAMIC"));
     if (stats_) stats_->startGPUTimer();
+
+    // Проверка консистентности данных
+    if (mesh.pos.size() != mesh.col.size() || mesh.pos.size() != mesh.norm.size()) {
+        DEBUG_CALL_PARAM("ERROR: Size mismatch! pos=" << mesh.pos.size()
+            << "col=" << mesh.col.size()
+            << "norm=" << mesh.norm.size());
+        return;
+    }
 
     const GLsizeiptr vbPos = GLsizeiptr(mesh.pos.size() * sizeof(float));
     const GLsizeiptr vbCol = GLsizeiptr(mesh.col.size() * sizeof(float));
     const GLsizeiptr vbNorm = GLsizeiptr(mesh.norm.size() * sizeof(float));
     const GLsizeiptr ib = GLsizeiptr(mesh.idx.size() * sizeof(uint32_t));
+
+    DEBUG_CALL_PARAM("buffer sizes: pos=" << vbPos << " col=" << vbCol
+        << " norm=" << vbNorm << " idx=" << ib);
 
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
     gl_->glBufferData(GL_ARRAY_BUFFER, vbPos, mesh.pos.empty() ? nullptr : mesh.pos.data(), usage);
@@ -252,10 +267,17 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
     gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER, ib, mesh.idx.empty() ? nullptr : mesh.idx.data(), usage);
 
     terrainIndexCount_ = GLsizei(mesh.idx.size());
+    DEBUG_CALL_PARAM("terrainIndexCount_ set to " << terrainIndexCount_);
 
     if (stats_) {
         stats_->updateMemoryStats(GLsizei(mesh.pos.size() / 3), terrainIndexCount_, terrainIndexCount_ / 3);
         stats_->stopGPUTimer();
+    }
+
+    // Проверка ошибок OpenGL
+    GLenum err;
+    while ((err = gl_->glGetError()) != GL_NO_ERROR) {
+        DEBUG_CALL_PARAM("OpenGL Error: " << err);
     }
 }
 
@@ -323,19 +345,25 @@ void HexSphereRenderer::uploadWater(const WaterGeometryData& data) {
 }
 
 void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const UploadOptions& options) {
+    DEBUG_CALL_PARAM("terrainUsage=" << options.terrainUsage << "wireUsage=" << options.wireUsage);
     withContext([&]() {
+        DEBUG_CALL_PARAM("context current");
         uploadWireInternal(scene.buildWireVertices(), options.wireUsage);
+        DEBUG_CALL_PARAM("uploading terrain...");
         uploadTerrainInternal(scene.terrain(), options.terrainUsage);
+        DEBUG_CALL_PARAM("uploading selection...");
         uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
         if (auto path = scene.buildPathPolyline()) {
+            DEBUG_CALL_PARAM("uploading path...");
             uploadPathInternal(*path);
         } else {
+            DEBUG_CALL_PARAM("no path to upload");
             uploadPathInternal({});
         }
+        DEBUG_CALL_PARAM("uploading water...");
         uploadWaterInternal(scene.buildWaterGeometry());
     });
-    qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
-             << "(terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
+    DEBUG_CALL_PARAM("upload complete");
 }
 
 void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting) {
@@ -364,6 +392,8 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
 
     RenderContext ctx{ graph, camera, lighting, camera.projection * camera.view,
                       (camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D() };
+
+    debugTerrainMeshSizes(ctx.graph.scene.terrain());
 
     terrainRenderer_->render(ctx);
     waterRenderer_->render(ctx);

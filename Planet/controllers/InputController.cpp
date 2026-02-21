@@ -14,6 +14,7 @@
 #include "controllers/CameraController.h"
 #include "ECS/Transform.h"
 #include "model/SurfacePlacement.h"
+#include "../DebugMacros.h"
 
 namespace {
 bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
@@ -298,21 +299,24 @@ InputController::Response InputController::toggleCellSelection(int cellId) {
 InputController::Response InputController::setSmoothOneStep(bool on) {
     Response response;
     scene_.setSmoothOneStep(on);
-    rebuildModel(response);
+    //rebuildModel(response);
+    markDirty();  // просто помечаем, что нужно перестроить
+    response.requestUpdate = true;
     return response;
 }
 
 InputController::Response InputController::setStripInset(float v) {
+    DEBUG_CALL_PARAM("v=" << v);
     Response response;
     scene_.setStripInset(v);
-    rebuildModel(response);
+    //rebuildModel(response);
     return response;
 }
 
 InputController::Response InputController::setOutlineBias(float v) {
     Response response;
     scene_.setOutlineBias(v);
-    rebuildModel(response);
+    //rebuildModel(response);
     return response;
 }
 
@@ -324,20 +328,27 @@ InputController::Response InputController::advanceWaterTime(float dt) {
 }
 
 void InputController::rebuildModel(Response& response) {
+    DEBUG_CALL();
     scene_.rebuildModel();
     uploadBuffers();
     response.requestUpdate = true;
+    DEBUG_CALL_PARAM("requestUpdate set to true");
 }
 
 void InputController::uploadSelection() {
-    if (renderer_) {
-        renderer_->uploadSelectionOutline(scene_.buildSelectionOutlineVertices());
-    }
+    checkRebuild();  // перестраиваем только если нужно
+    //if (renderer_) {
+    //    renderer_->uploadSelectionOutline(scene_.buildSelectionOutlineVertices());
+    //}
 }
 
 void InputController::uploadBuffers() {
+    DEBUG_CALL();
     if (renderer_) {
         renderer_->uploadScene(scene_, uploadOptions_);
+    }
+    else {
+        DEBUG_CALL_PARAM("renderer_ is null!");
     }
 }
 
@@ -360,18 +371,19 @@ void InputController::clearPath(Response& response) {
 }
 
 void InputController::updateBufferUsageStrategy() {
+    DEBUG_CALL_PARAM("L=" << scene_.subdivisionLevel());
     const int L = scene_.subdivisionLevel();
-    if (L >= 4) {
-        uploadOptions_.terrainUsage = GL_DYNAMIC_DRAW;
-        uploadOptions_.wireUsage = GL_DYNAMIC_DRAW;
-        uploadOptions_.useStaticBuffers = false;
-    }
-    else {
-        uploadOptions_.terrainUsage = GL_STATIC_DRAW;
-        uploadOptions_.wireUsage = GL_STATIC_DRAW;
-        uploadOptions_.useStaticBuffers = true;
-    }
-    qDebug() << "Buffer strategy:" << (uploadOptions_.useStaticBuffers ? "STATIC" : "DYNAMIC") << "for L =" << L;
+    //if (L >= 4) {
+    //    uploadOptions_.terrainUsage = GL_DYNAMIC_DRAW;
+    //    uploadOptions_.wireUsage = GL_DYNAMIC_DRAW;
+    //    uploadOptions_.useStaticBuffers = false;
+    //}
+    //else {
+    uploadOptions_.terrainUsage = GL_STATIC_DRAW;
+    uploadOptions_.wireUsage = GL_STATIC_DRAW;
+    uploadOptions_.useStaticBuffers = true;
+    //}
+    DEBUG_CALL_PARAM("strategy=" << (uploadOptions_.useStaticBuffers ? "STATIC" : "DYNAMIC"));
 }
 
 std::optional<int> InputController::pickCellAt(int sx, int sy) const {
@@ -499,6 +511,13 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     response.requestUpdate = true;
 }
 
+void InputController::checkRebuild() {
+    if (needRebuild_) {
+        Response r;
+        rebuildModel(r);
+        needRebuild_ = false;
+    }
+}
 
 InputController::Response InputController::toggleOreVisualization() {
     oreVisualizationEnabled_ = !oreVisualizationEnabled_;

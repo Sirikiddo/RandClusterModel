@@ -130,6 +130,7 @@
     <ClInclude Include="core\PlanetCore.h" />
     <ClInclude Include="core\UiCommands.h" />
     <ClInclude Include="core\WorkOrder.h" />
+    <ClInclude Include="DebugMacros.h" />
     <ClInclude Include="generation\ClimateBiomeGenerator.h" />
     <ClInclude Include="generation\PerlinNoise.h" />
     <ClInclude Include="generation\TerrainGenerator.h" />

@@ -17,6 +17,7 @@
 #include "controllers/InputController.h"
 
 #include "OreSystem.h"
+#include "../DebugMacros.h"
 
 HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputController& inputController, QWidget* parent)
     : QOpenGLWidget(parent)
@@ -64,7 +65,12 @@ void HexSphereWidget::resizeGL(int w, int h) {
 
 void HexSphereWidget::paintGL() {
     //applyResponse(inputController_.render());
-    if (!context() || !context()->isValid() || !isValid()) return;
+    DEBUG_CALL();
+
+    if (!context() || !context()->isValid() || !isValid()) {
+        DEBUG_CALL_PARAM("invalid context");
+        return;
+    }
 
     // dt
     if (!timerStarted_) {
@@ -74,11 +80,13 @@ void HexSphereWidget::paintGL() {
     const qint64 ns = frameTimer_.nsecsElapsed();
     frameTimer_.restart();
     float dt = float(ns) * 1e-9f;
+    DEBUG_CALL_PARAM("dt=" << dt);
 
     // 1) Обновляем фасад (пока только overlay/fps).
     engine_->tick(dt);
 
     // 2) Старый рендер как есть.
+    DEBUG_CALL_PARAM("calling inputController_.render()");
     inputController_.render(); // Или как у тебя называется.
 
     // 3) Рисуем текст поверх (после GL).
@@ -89,6 +97,8 @@ void HexSphereWidget::paintGL() {
         .arg(o.asyncBusy ? "1" : "0")
         .arg(QString::number(o.dtMs, 'f', 2))
         .arg(QString::number(o.fps, 'f', 1));
+
+    DEBUG_CALL_PARAM("paint complete");
 }
 
 void HexSphereWidget::paintEvent(QPaintEvent* e) {
@@ -152,18 +162,23 @@ void HexSphereWidget::regenerateTerrain() {
 }
 
 void HexSphereWidget::setSmoothOneStep(bool on) {
-    applyResponse(inputController_.setSmoothOneStep(on));
+    //applyResponse(inputController_.setSmoothOneStep(on));
+    engine_->handleUiCommand(CmdSetSmoothOneStep{ on });
 }
 
 void HexSphereWidget::setStripInset(float v) {
-    applyResponse(inputController_.setStripInset(v));
+    DEBUG_CALL_PARAM("v=" << v);
+    //applyResponse(inputController_.setStripInset(v));
+    engine_->handleUiCommand(CmdSetStripInset{ v });
 }
 
 void HexSphereWidget::setOutlineBias(float v) {
-    applyResponse(inputController_.setOutlineBias(v));
+    //applyResponse(inputController_.setOutlineBias(v));
+    engine_->handleUiCommand(CmdSetOutlineBias{ v });
 }
 
 void HexSphereWidget::applyResponse(const InputController::Response& response) {
+    DEBUG_CALL_PARAM("requestUpdate=" << response.requestUpdate << "hud=" << response.hudMessage.has_value());
     if (response.hudMessage) {
         emit hudTextChanged(*response.hudMessage);
     }

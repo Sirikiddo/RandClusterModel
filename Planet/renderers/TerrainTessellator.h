@@ -1,6 +1,7 @@
 #pragma once
 #include "model/HexSphereModel.h"
 #include <QVector3D>
+#include <QDebug>
 #include <vector>
 #include <cstdint>
 #include <unordered_map>
@@ -16,6 +17,8 @@ struct TerrainMesh {
     std::vector<uint32_t> idx; // indices
     std::vector<int> triOwner;   // владелец треугольника
 };
+
+void debugTerrainMeshSizes(const TerrainMesh& mesh, const QString& name = "TerrainMesh");
 
 class TerrainTessellator {
 public:

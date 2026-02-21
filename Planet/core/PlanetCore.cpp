@@ -3,17 +3,23 @@
 #include <type_traits>
 #include <utility>
 
+#include "../DebugMacros.h"
+
 void PlanetCore::enqueue(UiCommand command) {
+    DEBUG_CALL();
     queuedInputs_.push_back(std::move(command));
 }
 
 void PlanetCore::applyQueuedInputs() {
+    DEBUG_CALL_PARAM("queue size=" << queuedInputs_.size());
     while (!queuedInputs_.empty()) {
+        DEBUG_CALL_PARAM("processing command");
         UiCommand command = std::move(queuedInputs_.front());
         queuedInputs_.pop_front();
 
         applyCommand(command);
         ++sceneVersion_;
+        DEBUG_CALL_PARAM("sceneVersion=" << sceneVersion_);
     }
 }
 
@@ -29,6 +35,7 @@ void PlanetCore::consumeWork() {
 }
 
 void PlanetCore::applyCommand(const UiCommand& command) {
+    DEBUG_CALL();
     std::visit([this](const auto& cmd) {
         using T = std::decay_t<decltype(cmd)>;
 
@@ -51,6 +58,7 @@ void PlanetCore::applyCommand(const UiCommand& command) {
             work_.smoothOneStep = cmd.enabled;
         }
         else if constexpr (std::is_same_v<T, CmdSetStripInset>) {
+            DEBUG_CALL_PARAM("CmdSetStripInset value=" << cmd.value);
             work_.stripInset = cmd.value;
         }
         else if constexpr (std::is_same_v<T, CmdSetOutlineBias>) {

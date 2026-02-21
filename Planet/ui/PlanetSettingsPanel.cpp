@@ -9,6 +9,7 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QGroupBox>
+#include "../DebugMacros.h"
 
 PlanetSettingsPanel::PlanetSettingsPanel(QWidget* parent) : QWidget(parent) {
     genBox_ = new QComboBox(this);
@@ -105,6 +106,7 @@ void PlanetSettingsPanel::emitParams() {
 }
 
 void PlanetSettingsPanel::emitVisuals() {
+    DEBUG_CALL_PARAM("inset=" << insetBox_->value() << "outline=" << outlineBox_->value());
     emit visualizeChanged(smoothChk_->isChecked(),
         insetBox_->value(),
         outlineBox_->value());
