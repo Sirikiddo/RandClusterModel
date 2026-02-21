@@ -77,8 +77,9 @@ void InputController::initialize(QOpenGLWidget* owner) {
     transform.position = ecs::localToWorldPoint(transform, ecs::CoordinateFrame{}, surfacePosition);
     ecs_.emplace<ecs::Collider>(pyramid.id).radius = 0.08f;
 
-    Response initResponse;
-    rebuildModel(initResponse);
+    //Response initResponse;
+    //rebuildModel(initResponse);
+    needInitialBuild_ = true;
 }
 
 void InputController::resize(int w, int h, float devicePixelRatio) {
@@ -88,6 +89,21 @@ void InputController::resize(int w, int h, float devicePixelRatio) {
 InputController::Response InputController::render() {
     Response response;
     if (!renderer_) return response;
+
+    static bool isRendering = false;
+    if (isRendering) {
+        DEBUG_CALL_PARAM("RECURSIVE RENDER DETECTED - SKIPPING");
+        return response;
+    }
+
+    isRendering = true;
+
+    // Проверяем, нужно ли перестроить модель перед рендером
+    if (needRebuild_) {
+        DEBUG_CALL_PARAM("rebuilding before render");
+        rebuildModel(response);  // Этот вызов НЕ должен ставить requestUpdate
+        needRebuild_ = false;
+    }
 
     HexSphereRenderer::RenderGraph graph{scene_, ecs_, scene_.heightStep()};
     HexSphereRenderer::RenderCamera camera{camera_.view(), camera_.projection()};
@@ -154,42 +170,25 @@ InputController::Response InputController::wheel(QWheelEvent* e) {
 
 InputController::Response InputController::keyPress(QKeyEvent* e) {
     Response response;
+    bool needRebuild = false;
+    bool needUpdate = false;
+    QString message;
+
+    // Обработка клавиш, которые не требуют перестройки модели
     switch (e->key()) {
     case Qt::Key_C:
         clearPath(response);
+        // clearPath уже выставляет флаги в своем response, возвращаем сразу
         return response;
+
     case Qt::Key_O:
-        return toggleOreVisualization();
-    case Qt::Key_S:
-        scene_.setSmoothOneStep(!scene_.smoothOneStep());
-        rebuildModel(response);
-        response.hudMessage = QString("Smooth mode: ") + (scene_.smoothOneStep() ? "ON" : "OFF");
-        return response;
-    case Qt::Key_P:
-        buildAndShowSelectedPath(response);
-        return response;
-    case Qt::Key_W:
-    {
-        auto sel = ecs_.selectedEntity();
-        if (!sel) return response;
-        ecs::Entity& ent = sel->get();
-        const auto& cells = scene_.model().cells();
-        if (ent.currentCell < 0 || ent.currentCell >= (int)cells.size()) return response;
-        const auto& c = cells[(size_t)ent.currentCell];
-        if (c.neighbors.empty()) return response;
-        int next = c.neighbors[0];
-        if (next < 0) return response;
-        ent.currentCell = next;
-        if (auto* transform = ecs_.get<ecs::Transform>(ent.id)) {
-            transform->position = computeSurfacePoint(scene_, next);
-        }
-        response.requestUpdate = true;
-        break;
-    }
+        return toggleOreVisualization();  // тоже возвращает готовый response
+
     case Qt::Key_Escape:
         deselectEntity();
         response.requestUpdate = true;
         return response;
+
     case Qt::Key_Delete:
         if (selectedEntityId_ != -1) {
             ecs_.destroyEntity(selectedEntityId_);
@@ -197,48 +196,150 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
             response.requestUpdate = true;
         }
         return response;
-    default: break;
+
+    case Qt::Key_P:
+        buildAndShowSelectedPath(response);
+        return response;
+
+    default:
+        break;
     }
 
-    if (scene_.selectedCells().empty()) return response;
-
-    auto apply = [&](auto fn) { for (int cid : scene_.selectedCells()) fn(cid); };
+    // Обработка клавиш, которые могут потребовать перестройки
     switch (e->key()) {
-    case Qt::Key_Plus:
-    case Qt::Key_Equal:
-        apply([&](int cid) { scene_.modelMutable().addHeight(cid, +1); });
+    case Qt::Key_S:
+    {
+        bool newState = !scene_.smoothOneStep();
+        scene_.setSmoothOneStep(newState);
+        message = QString("Smooth mode: ") + (newState ? "ON" : "OFF");
+        needRebuild = true;
+        needUpdate = true;
         break;
-    case Qt::Key_Minus:
-    case Qt::Key_Underscore:
-        apply([&](int cid) { scene_.modelMutable().addHeight(cid, -1); });
-        break;
-    case Qt::Key_1:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Sea); });
-        break;
-    case Qt::Key_2:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Grass); });
-        break;
-    case Qt::Key_3:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Rock); });
-        break;
-    case Qt::Key_4:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Snow); });
-        break;
-    case Qt::Key_5:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Tundra); });
-        break;
-    case Qt::Key_6:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Desert); });
-        break;
-    case Qt::Key_7:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Savanna); });
-        break;
-    case Qt::Key_8:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Jungle); });
-        break;
-    default: return response;
     }
-    rebuildModel(response);
+
+    case Qt::Key_W:
+    {
+        auto sel = ecs_.selectedEntity();
+        if (sel) {
+            ecs::Entity& ent = sel->get();
+            const auto& cells = scene_.model().cells();
+            if (ent.currentCell >= 0 && ent.currentCell < (int)cells.size()) {
+                const auto& c = cells[(size_t)ent.currentCell];
+                if (!c.neighbors.empty()) {
+                    int next = c.neighbors[0];
+                    if (next >= 0) {
+                        ent.currentCell = next;
+                        if (auto* transform = ecs_.get<ecs::Transform>(ent.id)) {
+                            transform->position = computeSurfacePoint(scene_, next);
+                        }
+                        needUpdate = true;
+                    }
+                }
+            }
+        }
+        break;
+    }
+
+    default:
+        // Если нет выбранных ячеек, выходим
+        if (scene_.selectedCells().empty()) {
+            return response;
+        }
+
+        // Обработка изменений высоты и биомов
+        auto apply = [&](auto fn) {
+            for (int cid : scene_.selectedCells()) fn(cid);
+            };
+
+        switch (e->key()) {
+        case Qt::Key_Plus:
+        case Qt::Key_Equal:
+            apply([&](int cid) { scene_.modelMutable().addHeight(cid, +1); });
+            needRebuild = true;
+            needUpdate = true;
+            break;
+
+        case Qt::Key_Minus:
+        case Qt::Key_Underscore:
+            apply([&](int cid) { scene_.modelMutable().addHeight(cid, -1); });
+            needRebuild = true;
+            needUpdate = true;
+            break;
+
+        case Qt::Key_1:
+            apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Sea); });
+            needRebuild = true;
+            needUpdate = true;
+            message = "Biome: Sea";
+            break;
+
+        case Qt::Key_2:
+            apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Grass); });
+            needRebuild = true;
+            needUpdate = true;
+            message = "Biome: Grass";
+            break;
+
+        case Qt::Key_3:
+            apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Rock); });
+            needRebuild = true;
+            needUpdate = true;
+            message = "Biome: Rock";
+            break;
+
+        case Qt::Key_4:
+            apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Snow); });
+            needRebuild = true;
+            needUpdate = true;
+            message = "Biome: Snow";
+            break;
+
+        case Qt::Key_5:
+            apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Tundra); });
+            needRebuild = true;
+            needUpdate = true;
+            message = "Biome: Tundra";
+            break;
+
+        case Qt::Key_6:
+            apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Desert); });
+            needRebuild = true;
+            needUpdate = true;
+            message = "Biome: Desert";
+            break;
+
+        case Qt::Key_7:
+            apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Savanna); });
+            needRebuild = true;
+            needUpdate = true;
+            message = "Biome: Savanna";
+            break;
+
+        case Qt::Key_8:
+            apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Jungle); });
+            needRebuild = true;
+            needUpdate = true;
+            message = "Biome: Jungle";
+            break;
+
+        default:
+            return response;
+        }
+        break;
+    }
+
+    // Единая точка выхода - здесь применяем все накопленные изменения
+    if (needRebuild) {
+        rebuildModel(response);
+        needUpdate = true;  // rebuildModel может не выставить флаг,所以 явно указываем
+    }
+
+    if (!message.isEmpty()) {
+        response.hudMessage = message;
+    }
+
+    response.requestUpdate = needUpdate;
+
     return response;
 }
 
@@ -331,8 +432,8 @@ void InputController::rebuildModel(Response& response) {
     DEBUG_CALL();
     scene_.rebuildModel();
     uploadBuffers();
-    response.requestUpdate = true;
-    DEBUG_CALL_PARAM("requestUpdate set to true");
+    //response.requestUpdate = true;
+    DEBUG_CALL_PARAM("model rebuilt and buffers uploaded");
 }
 
 void InputController::uploadSelection() {
@@ -572,6 +673,6 @@ InputController::Response InputController::regenerateOreDeposits() {
 
 void InputController::rebuildModel() {
     DEBUG_CALL();
-    scene_.rebuildModel();  // это вызовет генерацию террейна и меша
-    uploadBuffers();        // загрузит в GPU
+    Response dummy;
+    rebuildModel(dummy);
 }

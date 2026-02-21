@@ -27,6 +27,23 @@ public:
     void renderEntities(const HexSphereRenderer::RenderContext& ctx) const;
     void renderTrees(const HexSphereRenderer::RenderContext& ctx) const;
 
+    void updatePrograms(GLuint progWire, GLuint progSel, GLuint progModel,
+        GLint uMvpWire, GLint uMvpSel, GLint uMvpModel,
+        GLint uModel, GLint uLightDir, GLint uViewPos,
+        GLint uColor, GLint uUseTexture) {
+        progWire_ = progWire;
+        progSel_ = progSel;
+        progModel_ = progModel;
+        uMvpWire_ = uMvpWire;
+        uMvpSel_ = uMvpSel;
+        uMvpModel_ = uMvpModel;
+        uModel_ = uModel;
+        uLightDir_ = uLightDir;
+        uViewPos_ = uViewPos;
+        uColor_ = uColor;
+        uUseTexture_ = uUseTexture;
+    }
+
 private:
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
     GLuint progWire_ = 0;

@@ -115,4 +115,6 @@ private:
     bool needRebuild_ = false;
     void markDirty() { needRebuild_ = true; }
     void checkRebuild();
+
+    bool needInitialBuild_ = true;
 };

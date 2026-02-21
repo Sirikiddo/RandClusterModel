@@ -15,11 +15,24 @@ public:
                     GLuint vaoWire,
                     GLuint vaoSel,
                     GLuint vaoPath,
-                    const GLsizei& lineVertexCount,
-                    const GLsizei& selLineVertexCount,
-                    const GLsizei& pathVertexCount);
+                    GLsizei lineVertexCount,
+                    GLsizei selLineVertexCount,
+                    GLsizei pathVertexCount);
 
     void render(const HexSphereRenderer::RenderContext& ctx) const;
+
+    void updatePrograms(GLuint progWire, GLuint progSel, GLint uMvpWire, GLint uMvpSel) {
+        progWire_ = progWire;
+        progSel_ = progSel;
+        uMvpWire_ = uMvpWire;
+        uMvpSel_ = uMvpSel;
+    }
+
+    void updateCounts(GLsizei lineCount, GLsizei selCount, GLsizei pathCount) {
+        lineVertexCount_ = lineCount;
+        selLineVertexCount_ = selCount;
+        pathVertexCount_ = pathCount;
+    }
 
 private:
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
@@ -30,8 +43,8 @@ private:
     GLuint vaoWire_ = 0;
     GLuint vaoSel_ = 0;
     GLuint vaoPath_ = 0;
-    const GLsizei& lineVertexCount_;
-    const GLsizei& selLineVertexCount_;
-    const GLsizei& pathVertexCount_;
+    GLsizei lineVertexCount_;
+    GLsizei selLineVertexCount_;
+    GLsizei pathVertexCount_;
 };
 

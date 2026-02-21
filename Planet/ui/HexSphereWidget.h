@@ -70,4 +70,6 @@ private:
 
     QString overlayText_;
     QTimer* waterTimer_ = nullptr;
+
+    bool isInitialized_ = false;
 };

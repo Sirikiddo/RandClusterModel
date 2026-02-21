@@ -13,9 +13,18 @@ public:
                     GLint uModel,
                     GLint uLightDir,
                     GLuint vao,
-                    const GLsizei& indexCount);
+                    GLsizei indexCount);
 
     void render(const HexSphereRenderer::RenderContext& ctx) const;
+
+    void updateIndexCount(GLsizei newCount) { indexCount_ = newCount; }
+
+    void updateProgram(GLuint program, GLint uMvp, GLint uModel, GLint uLightDir) {
+        program_ = program;
+        uMvp_ = uMvp;
+        uModel_ = uModel;
+        uLightDir_ = uLightDir;
+    }
 
 private:
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
@@ -24,6 +33,6 @@ private:
     GLint uModel_ = -1;
     GLint uLightDir_ = -1;
     GLuint vao_ = 0;
-    const GLsizei& indexCount_;
+    GLsizei indexCount_;
 };
 

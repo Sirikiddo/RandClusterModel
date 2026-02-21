@@ -56,6 +56,13 @@ void HexSphereWidget::initializeGL() {
 
     waterTimer_->start(16);
 
+    // Один раз инициализируем модель после создания контекста
+    if (!isInitialized_) {
+        InputController::Response initResponse;
+        // Здесь может быть специальная инициализация, если нужна
+        isInitialized_ = true;
+    }
+
     emit hudTextChanged("Controls: [LMB] select | [C] clear path | [P] path between selected | [+/-] height | [1-8] biomes | [S] smooth toggle | [W] move entity | [O] toggle ore visualization");
 }
 
@@ -64,6 +71,10 @@ void HexSphereWidget::resizeGL(int w, int h) {
 }
 
 void HexSphereWidget::paintGL() {
+    if (!isInitialized_) {
+        DEBUG_CALL_PARAM("widget not initialized, skipping paint");
+        return;
+    }
     //applyResponse(inputController_.render());
     DEBUG_CALL();
 
@@ -79,7 +90,8 @@ void HexSphereWidget::paintGL() {
     }
     const qint64 ns = frameTimer_.nsecsElapsed();
     frameTimer_.restart();
-    float dt = float(ns) * 1e-9f;
+    //float dt = float(ns) * 1e-9f;
+    float dt = float(ns) * 1e-3f;
     DEBUG_CALL_PARAM("dt=" << dt);
 
     // 1) Обновляем фасад (пока только overlay/fps).
