@@ -16,7 +16,7 @@ public:
                   GLint uEnvMap,
                   GLuint& envCubemap,
                   GLuint vao,
-                  const GLsizei indexCount);
+                  GLsizei indexCount);
 
     void render(const HexSphereRenderer::RenderContext& ctx) const;
 

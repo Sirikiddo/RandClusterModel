@@ -19,10 +19,18 @@ HexSphereRenderer::~HexSphereRenderer() {
         return;
     }
 
+    if (!owner_ || !owner_->context() || !owner_->context()->isValid()) {
+        return;
+    }
+
     owner_->makeCurrent();
 
-    if (treeModel_.use_count() == 1 && treeModel_) {
-        treeModel_->clearGPUResources();
+    if (treeModel_) {
+        // Проверяем, что это последний владелец И контекст все еще валиден
+        if (treeModel_.use_count() == 1 && QOpenGLContext::currentContext()) {
+            treeModel_->clearGPUResources();
+        }
+        treeModel_.reset();
     }
 
     if (progWire_)    gl_->glDeleteProgram(progWire_);
@@ -156,12 +164,33 @@ void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4&
     proj.perspective(50.0f, float(pw) / float(std::max(ph, 1)), 0.01f, 50.0f);
 }
 
+//void HexSphereRenderer::withContext(const std::function<void()>& task) {
+//    if (!glReady_) return;
+//
+//    owner_->makeCurrent();
+//    task();
+//    owner_->doneCurrent();
+//}
+
 void HexSphereRenderer::withContext(const std::function<void()>& task) {
     if (!glReady_) return;
 
-    owner_->makeCurrent();
+    // Проверяем, активен ли уже наш контекст
+    QOpenGLContext* currentCtx = QOpenGLContext::currentContext();
+    bool needDone = false;
+
+    // Если контекст не текущий (или это другой контекст), делаем makeCurrent
+    if (currentCtx != owner_->context()) {
+        owner_->makeCurrent();
+        needDone = true;
+    }
+
     task();
-    owner_->doneCurrent();
+
+    // Делаем doneCurrent только если мы сами делали makeCurrent
+    if (needDone) {
+        owner_->doneCurrent();
+    }
 }
 
 void HexSphereRenderer::uploadWireInternal(const std::vector<float>& vertices, GLenum usage) {
@@ -732,7 +761,7 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
 
     DEBUG_CALL_PARAM("Starting trees render...");
     if (entityRenderer_) {
-        entityRenderer_->renderTrees(ctx);
+        //entityRenderer_->renderTrees(ctx);
     }
 
     // ============== ФИНАЛЬНАЯ ПРОВЕРКА ОШИБОК ==============

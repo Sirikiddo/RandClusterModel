@@ -23,6 +23,11 @@ void TerrainRenderer::render(const HexSphereRenderer::RenderContext& ctx) const 
         return;
     }
 
+    if (!gl_) {
+        DEBUG_CALL_PARAM("ERROR: gl_ is null!");
+        return;
+    }
+
     DEBUG_CALL_PARAM("indexCount=" << indexCount_ << " program=" << program_);
 
     // ============== ÏÐÎÂÅÐÊÀ ÏÐÎÃÐÀÌÌÛ ==============

@@ -98,8 +98,8 @@ void HexSphereWidget::paintGL() {
     engine_->tick(dt);
 
     // 2) Старый рендер как есть.
-    DEBUG_CALL_PARAM("calling inputController_.render()");
-    inputController_.render(); // Или как у тебя называется.
+    //DEBUG_CALL_PARAM("calling inputController_.render()");
+    //inputController_.render(); // Или как у тебя называется.
 
     // 3) Рисуем текст поверх (после GL).
     const auto& o = engine_->overlay();
