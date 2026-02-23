@@ -16,12 +16,14 @@ HexSphereRenderer::HexSphereRenderer(QOpenGLWidget* owner)
     : owner_(owner) {}
 
 HexSphereRenderer::~HexSphereRenderer() {
-    if (!glReady_) {
+    if (!glReady_ || !owner_ || !gl_) {
         return;
     }
 
-    // Проверяем, что контекст ещё существует
-    if (!owner_ || !gl_) {
+    // Проверяем, существует ли ещё контекст OpenGL
+    if (!QOpenGLContext::currentContext()) {
+        // Контекст уже уничтожен - ничего не делаем
+        glReady_ = false;
         return;
     }
 
@@ -71,7 +73,11 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (iboWater_)       gl_->glDeleteBuffers(1, &iboWater_);
     if (vboWaterEdgeFlags_) gl_->glDeleteBuffers(1, &vboWaterEdgeFlags_);
 
-    owner_->doneCurrent();
+    if (QOpenGLContext::currentContext()) {
+        owner_->doneCurrent();
+    }
+
+    glReady_ = false;
 }
 
 GLuint HexSphereRenderer::makeProgram(const char* vs, const char* fs) {
@@ -258,86 +264,69 @@ void HexSphereRenderer::uploadWireInternal(const std::vector<float>& vertices, G
 void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum usage) {
     qDebug() << "uploadTerrainInternal - original indices:" << mesh.idx.size();
 
-    // Загружаем вершины
-    const GLsizeiptr vbPos = GLsizeiptr(mesh.pos.size() * sizeof(float));
-    const GLsizeiptr vbCol = GLsizeiptr(mesh.col.size() * sizeof(float));
-    const GLsizeiptr vbNorm = GLsizeiptr(mesh.norm.size() * sizeof(float));
-
+    // Загружаем вершины (это не меняется)
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
-    gl_->glBufferData(GL_ARRAY_BUFFER, vbPos, mesh.pos.data(), usage);
+    gl_->glBufferData(GL_ARRAY_BUFFER, mesh.pos.size() * sizeof(float), mesh.pos.data(), usage);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainCol_);
-    gl_->glBufferData(GL_ARRAY_BUFFER, vbCol, mesh.col.data(), usage);
+    gl_->glBufferData(GL_ARRAY_BUFFER, mesh.col.size() * sizeof(float), mesh.col.data(), usage);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainNorm_);
-    gl_->glBufferData(GL_ARRAY_BUFFER, vbNorm, mesh.norm.data(), usage);
+    gl_->glBufferData(GL_ARRAY_BUFFER, mesh.norm.size() * sizeof(float), mesh.norm.data(), usage);
 
-    // Получаем индексы из сцены (с фильтрацией)
-    std::vector<uint32_t> indicesToUse;
-
-    if (lastScene_) {
-        qDebug() << "Getting visible indices from scene";
-        QVector3D cameraPos = lastScene_->getCameraPosition();
-        indicesToUse = lastScene_->getVisibleIndices(cameraPos);
-        qDebug() << "Visible indices:" << indicesToUse.size();
-    }
-    else {
-        qDebug() << "No scene, using all indices from mesh";
-        indicesToUse = mesh.idx;
-    }
-
-    // Загружаем индексы
-    const GLsizeiptr ib = GLsizeiptr(indicesToUse.size() * sizeof(uint32_t));
+    // НЕ ФИЛЬТРУЕМ здесь - сохраняем все индексы
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
-    gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER, ib,
-        indicesToUse.empty() ? nullptr : indicesToUse.data(),
-        GL_DYNAMIC_DRAW);
+    gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+        mesh.idx.size() * sizeof(uint32_t),
+        mesh.idx.data(),
+        GL_DYNAMIC_DRAW);  // Всегда DYNAMIC, так как будем менять
 
-    terrainIndexCount_ = GLsizei(indicesToUse.size());
+    terrainIndexCount_ = GLsizei(mesh.idx.size());
+    totalIndexCount_ = mesh.idx.size();  // Сохраняем для статистики
 
-    // ВАЖНО: Пересоздаём VAO после загрузки всех данных!
-    recreateTerrainVAO();
-
-    qDebug() << "uploadTerrainInternal - final indexCount:" << terrainIndexCount_;
-
-    if (stats_) {
-        stats_->updateMemoryStats(GLsizei(mesh.pos.size() / 3),
-            terrainIndexCount_,
-            terrainIndexCount_ / 3);
+    // Создаем VAO один раз
+    if (!vaoTerrain_.isCreated()) {
+        recreateTerrainVAO();
     }
+
+    qDebug() << "uploadTerrainInternal - total indexCount:" << terrainIndexCount_;
 }
 
 // ========== НОВЫЙ МЕТОД ДЛЯ ОБНОВЛЕНИЯ ВИДИМОСТИ ==========
 void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
     if (!glReady_ || !lastScene_) return;
 
+    // Обновляем позицию камеры в сцене
     lastScene_->setCameraPosition(cameraPos);
 
-    if (lastScene_->hasCameraMoved()) {
-        TerrainMesh visibleMesh = lastScene_->getVisibleTerrainMesh();
+    // Наглядно убедиться, что треугольников реально меньше
+  /*  static QElapsedTimer timer;
+    if (!timer.hasExpired(500)) return;
+    timer.start();*/
 
-        if (visibleMesh.idx.empty()) {
+    // Проверяем, двигалась ли камера
+    if (lastScene_->hasCameraMoved()) {
+        // Получаем только видимые индексы
+        std::vector<uint32_t> visibleIndices = lastScene_->getVisibleIndices(cameraPos);
+
+        if (visibleIndices.empty()) {
             qDebug() << "No visible triangles!";
             return;
         }
 
-        qDebug() << "Updating visibility - new indices:" << visibleMesh.idx.size()
-            << "camera dist:" << cameraPos.length();
+        qDebug() << "Updating visibility - visible indices:" << visibleIndices.size();
 
-        withContext([&]() {
-            // Обновляем индексный буфер
-            gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
-            gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                visibleMesh.idx.size() * sizeof(uint32_t),
-                visibleMesh.idx.data(),
-                GL_DYNAMIC_DRAW);
+        // Обновляем ТОЛЬКО индексный буфер
+        gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
+        gl_->glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
+            visibleIndices.size() * sizeof(uint32_t),
+            visibleIndices.data());
 
-            // Пересоздаём VAO
-            recreateTerrainVAO();
-            });
+        // Обновляем счетчик для отрисовки
+        terrainIndexCount_ = GLsizei(visibleIndices.size());
 
-        terrainIndexCount_ = GLsizei(visibleMesh.idx.size());
+        // Отмечаем, что камера обработана
         lastScene_->updateLastCameraPosition();
 
-        qDebug() << "Visibility updated, new index count:" << terrainIndexCount_;
+        qDebug() << "Visibility updated, drawing" << terrainIndexCount_ << "indices";
     }
 }
 
@@ -347,52 +336,46 @@ void HexSphereRenderer::recreateTerrainVAO() {
         return;
     }
 
-    qDebug() << "Recreating terrain VAO - START";
-
-    // Удаляем старый VAO если есть
+    // Если VAO уже создан, не создаем заново
     if (vaoTerrain_.isCreated()) {
-        gl_->glBindVertexArray(0);
-        vaoTerrain_.destroy();
+        qDebug() << "VAO already created, skipping recreation";
+        return;
     }
 
-    // Создаём новый VAO
+    qDebug() << "Creating terrain VAO - START";
+
+    // Создаем новый VAO
     if (!vaoTerrain_.create()) {
         qDebug() << "Failed to create VAO!";
         return;
     }
 
-    // bind() не возвращает значение, просто вызываем его
     vaoTerrain_.bind();
 
-    // Привязываем буферы
+    // Настраиваем атрибуты
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
     gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(0);
-    qDebug() << "Position attribute set";
 
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainCol_);
     gl_->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(1);
-    qDebug() << "Color attribute set";
 
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainNorm_);
     gl_->glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(2);
-    qDebug() << "Normal attribute set";
 
+    // Привязываем индексный буфер
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
-    qDebug() << "Index buffer bound";
 
     vaoTerrain_.release();
 
-    // Обновляем VAO в TerrainRenderer
+    // Обновляем VAO в рендерере
     if (terrainRenderer_) {
-        GLuint vaoId = vaoTerrain_.objectId();
-        terrainRenderer_->updateVAO(vaoId);
-        qDebug() << "Updated TerrainRenderer VAO to:" << vaoId;
+        terrainRenderer_->updateVAO(vaoTerrain_.objectId());
     }
 
-    qDebug() << "Recreating terrain VAO - END";
+    qDebug() << "Creating terrain VAO - END, ID:" << vaoTerrain_.objectId();
 }
 
 void HexSphereRenderer::uploadSelectionOutlineInternal(const std::vector<float>& vertices) {

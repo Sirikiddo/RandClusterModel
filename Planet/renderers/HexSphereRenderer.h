@@ -136,4 +136,6 @@ private:
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
     bool firstRenderDone_ = false;
+
+    size_t totalIndexCount_ = 0;
 };

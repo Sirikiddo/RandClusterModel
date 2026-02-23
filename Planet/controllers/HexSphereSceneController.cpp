@@ -144,49 +144,42 @@ static std::vector<QVector3D> convertToQVector3D(const std::vector<float>& posit
 
 // ОСНОВНАЯ ФУНКЦИЯ: фильтрация треугольников по видимости
 std::vector<uint32_t> HexSphereSceneController::getVisibleIndices(const QVector3D& cameraPos) const {
-    // Если камера не задана или mesh пустой, возвращаем все индексы
     if (terrainCPU_.idx.empty() || terrainCPU_.pos.empty()) {
         return terrainCPU_.idx;
     }
 
-    // Конвертируем позиции в QVector3D для удобства
+    // Конвертируем позиции в QVector3D
     std::vector<QVector3D> positions = convertToQVector3D(terrainCPU_.pos);
 
-    // Центр планеты (всегда в начале координат)
     QVector3D planetCenter(0, 0, 0);
 
-    // Нормализованное направление от центра планеты к камере
+    // ПРАВИЛЬНО: направление от центра планеты к камере
     QVector3D toCam = (cameraPos - planetCenter).normalized();
 
-    // Результирующий буфер индексов (резервируем примерно половину)
     std::vector<uint32_t> visibleIndices;
     visibleIndices.reserve(terrainCPU_.idx.size() / 2);
 
-    // Проходим по всем треугольникам (каждые 3 индекса)
     for (size_t i = 0; i + 2 < terrainCPU_.idx.size(); i += 3) {
         uint32_t i0 = terrainCPU_.idx[i];
         uint32_t i1 = terrainCPU_.idx[i + 1];
         uint32_t i2 = terrainCPU_.idx[i + 2];
 
-        // Центр треугольника (среднее арифметическое вершин)
         QVector3D triCenter = (positions[i0] + positions[i1] + positions[i2]) * (1.0f / 3.0f);
-
-        // Внешняя нормаль в центре треугольника (от центра планеты к центру треугольника)
         QVector3D normal = (triCenter - planetCenter).normalized();
 
-        // Проверка видимости: если нормаль смотрит в сторону камеры (угол < 90°)
-        float visibility = QVector3D::dotProduct(normal, toCam);
+        // Видим, если нормаль смотрит В СТОРОНУ камеры (угол < 90°)
+        float dot = QVector3D::dotProduct(normal, toCam);
 
-        // Эпсилон для численной стабильности (0.0f - строгое отсечение)
-        const float eps = 0.0f;
-
-        if (visibility > eps) {
-            // Треугольник видим - добавляем его индексы
+        // Добавляем небольшой эпсилон для граничных случаев
+        if (dot > 0.01f) {  // Строго больше 0, с небольшим запасом
             visibleIndices.push_back(i0);
             visibleIndices.push_back(i1);
             visibleIndices.push_back(i2);
         }
     }
+
+    qDebug() << "Visible triangles:" << visibleIndices.size() / 3
+        << "out of" << terrainCPU_.idx.size() / 3;
 
     return visibleIndices;
 }

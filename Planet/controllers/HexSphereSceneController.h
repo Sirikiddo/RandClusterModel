@@ -67,9 +67,13 @@ public:
 
     bool hasCameraMoved() const {
         float distSq = (cameraPos_ - lastCameraPos_).lengthSquared();
-        bool moved = distSq > 0.00001f;
+        bool moved = distSq > 0.1f;
         if (moved) {
-            qDebug() << "Distance since last move:" << distSq;
+            auto stats = getVisibilityStats();
+            qDebug() << "Camera moved. Dist:" << sqrt(distSq)
+                << "Visible triangles:" << stats.first
+                << "/" << stats.second
+                << "(" << (stats.first * 100 / stats.second) << "%)";
         }
         return moved;
     }
