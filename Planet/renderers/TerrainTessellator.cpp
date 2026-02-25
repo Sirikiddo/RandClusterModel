@@ -493,3 +493,22 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
     if (doEdgeCliffs) finalizeCliffs(reg, mb, cells);
     return M;
 }
+
+void debugTerrainMeshSizes(const TerrainMesh& mesh, const QString& name)
+{
+    qDebug().noquote() << QString("\n=== %1 Array Sizes ===").arg(name);
+    qDebug().noquote() << QString("pos       : %1 элементов (%2 вершин)")
+        .arg(mesh.pos.size())
+        .arg(mesh.pos.size() / 3);
+    qDebug().noquote() << QString("col       : %1 элементов (%2 вершин)")
+        .arg(mesh.col.size())
+        .arg(mesh.col.size() / 3);
+    qDebug().noquote() << QString("norm      : %1 элементов (%2 вершин)")
+        .arg(mesh.norm.size())
+        .arg(mesh.norm.size() / 3);
+    qDebug().noquote() << QString("idx       : %1 элементов (%2 треугольников)")
+        .arg(mesh.idx.size())
+        .arg(mesh.idx.size() / 3);
+    qDebug().noquote() << QString("triOwner  : %1 элементов")
+        .arg(mesh.triOwner.size());
+}

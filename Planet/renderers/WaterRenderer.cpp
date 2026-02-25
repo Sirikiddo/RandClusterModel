@@ -9,7 +9,7 @@ WaterRenderer::WaterRenderer(QOpenGLFunctions_3_3_Core* gl,
                              GLint uEnvMap,
                              GLuint& envCubemap,
                              GLuint vao,
-                             const GLsizei& indexCount)
+                             GLsizei indexCount)
     : gl_(gl)
     , program_(program)
     , uMvp_(uMvp)

@@ -74,6 +74,8 @@ public:
     bool ready() const { return glReady_; }
     GLuint envCubemap() const { return envCubemap_; }
 
+    void updateIndexCounts(const TerrainMesh& mesh, const WaterGeometryData& water);
+
 private:
     GLuint makeProgram(const char* vs, const char* fs);
     void generateEnvCubemap();
@@ -84,6 +86,20 @@ private:
     void uploadSelectionOutlineInternal(const std::vector<float>& vertices);
     void uploadPathInternal(const std::vector<QVector3D>& points);
     void uploadWaterInternal(const WaterGeometryData& data);
+    bool checkShaderStatus(GLuint shader, const char* name);
+    bool checkProgramStatus(GLuint program, const char* name);
+
+    bool createShaders();
+    void setupUniformLocations();
+    void createBuffersAndVAOs();
+    void setupWireVAO();
+    void setupTerrainVAO();
+    void setupSelectionVAO();
+    void setupPathVAO();
+    void setupWaterVAO();
+    void createRenderers();
+    void loadTreeModel();
+    void logShaderInfo(GLuint program, const char* name);
 
     QOpenGLWidget* owner_ = nullptr;
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;

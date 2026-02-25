@@ -16,9 +16,21 @@ public:
                   GLint uEnvMap,
                   GLuint& envCubemap,
                   GLuint vao,
-                  const GLsizei& indexCount);
+                  GLsizei indexCount);
 
     void render(const HexSphereRenderer::RenderContext& ctx) const;
+
+    void updateIndexCount(GLsizei newCount) { indexCount_ = newCount; }
+
+    void updateProgram(GLuint program, GLint uMvp, GLint uTime, GLint uLightDir,
+        GLint uViewPos, GLint uEnvMap) {
+        program_ = program;
+        uMvp_ = uMvp;
+        uTime_ = uTime;
+        uLightDir_ = uLightDir;
+        uViewPos_ = uViewPos;
+        uEnvMap_ = uEnvMap;
+    }
 
 private:
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
@@ -30,6 +42,6 @@ private:
     GLint uEnvMap_ = -1;
     GLuint& envCubemap_;
     GLuint vao_ = 0;
-    const GLsizei& indexCount_;
+    GLsizei indexCount_;
 };
 

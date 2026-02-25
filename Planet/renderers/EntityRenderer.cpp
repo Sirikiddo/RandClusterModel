@@ -1,6 +1,7 @@
 #include "renderers/EntityRenderer.h"
 
 #include "model/SurfacePlacement.h"
+#include "../DebugMacros.h"
 
 namespace {
 
@@ -88,7 +89,30 @@ void EntityRenderer::renderEntities(const HexSphereRenderer::RenderContext& ctx)
 }
 
 void EntityRenderer::renderTrees(const HexSphereRenderer::RenderContext& ctx) const {
-    if (!treeModel_ || !treeModel_->isInitialized() || progModel_ == 0 || treeModel_->isEmpty()) return;
+    if (!treeModel_) {
+        DEBUG_CALL_PARAM("SKIP - treeModel_ is null");
+        return;
+    }
+
+    if (!treeModel_->isInitialized()) {
+        DEBUG_CALL_PARAM("SKIP - treeModel_ not initialized");
+        return;
+    }
+
+    if (treeModel_->isEmpty()) {
+        DEBUG_CALL_PARAM("SKIP - treeModel_ is empty");
+        return;
+    }
+
+    if (progModel_ == 0) {
+        DEBUG_CALL_PARAM("SKIP - progModel_ is 0");
+        return;
+    }
+
+    if (!gl_->glIsProgram(progModel_)) {
+        DEBUG_CALL_PARAM("SKIP - progModel_ is not a valid program");
+        return;
+    }
 
     gl_->glUseProgram(progModel_);
 

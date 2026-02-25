@@ -8,9 +8,9 @@ OverlayRenderer::OverlayRenderer(QOpenGLFunctions_3_3_Core* gl,
                                  GLuint vaoWire,
                                  GLuint vaoSel,
                                  GLuint vaoPath,
-                                 const GLsizei& lineVertexCount,
-                                 const GLsizei& selLineVertexCount,
-                                 const GLsizei& pathVertexCount)
+                                 GLsizei lineVertexCount,
+                                 GLsizei selLineVertexCount,
+                                 GLsizei pathVertexCount)
     : gl_(gl)
     , progWire_(progWire)
     , progSel_(progSel)

@@ -6,6 +6,7 @@
 #include "generation/MeshGenerators/TerrainMeshGenerator.h"
 #include "generation/MeshGenerators/WaterMeshGenerator.h"
 #include "generation/MeshGenerators/WireMeshGenerator.h"
+#include "../DebugMacros.h"
 
 HexSphereSceneController::HexSphereSceneController()
     : generator_(std::make_unique<ClimateBiomeTerrainGenerator>()) {
@@ -45,6 +46,7 @@ void HexSphereSceneController::setSmoothOneStep(bool on) {
 }
 
 void HexSphereSceneController::setStripInset(float value) {
+    DEBUG_CALL_PARAM("value=" << value << "old=" << stripInset_);
     stripInset_ = std::clamp(value, 0.0f, 0.49f);
 }
 
@@ -53,12 +55,15 @@ void HexSphereSceneController::setOutlineBias(float value) {
 }
 
 void HexSphereSceneController::rebuildModel() {
+    DEBUG_CALL_PARAM("L=" << L_);
     ico_ = icoBuilder_.build(L_);
     model_.rebuildFromIcosphere(ico_);
     regenerateTerrain();
+    DEBUG_CALL_PARAM("model rebuilt");
 }
 
 void HexSphereSceneController::regenerateTerrain() {
+    DEBUG_CALL();
     if (generator_) {
         generator_->generate(model_, genParams_);
     }
@@ -115,6 +120,7 @@ float HexSphereSceneController::autoHeightStep() const {
 }
 
 void HexSphereSceneController::updateTerrainMesh() {
+    DEBUG_CALL_PARAM("stripInset=" << stripInset_ << "smoothOneStep=" << smoothOneStep_);
     heightStep_ = autoHeightStep();
     TerrainMeshOptions options;
     options.heightStep = heightStep_;
@@ -127,4 +133,6 @@ void HexSphereSceneController::updateTerrainMesh() {
     options.doEdgeCliffs = true;
 
     terrainCPU_ = TerrainMeshGenerator::buildTerrainMesh(model_, options);
+    DEBUG_CALL_PARAM("generated mesh: vertices=" << terrainCPU_.pos.size() / 3
+        << "triangles=" << terrainCPU_.idx.size() / 3);
 }

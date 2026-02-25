@@ -44,13 +44,14 @@ public:
     Response setTerrainParams(const TerrainParams& p);
     Response setGeneratorByIndex(int idx);
     Response regenerateTerrain();
+    Response toggleCellSelection(int cellId);
     Response setSmoothOneStep(bool on);
     Response setStripInset(float v);
     Response setOutlineBias(float v);
 
     Response advanceWaterTime(float dt);
 
-    // Для системы руд - новые методы
+    // Г„Г«Гї Г±ГЁГ±ГІГҐГ¬Г» Г°ГіГ¤ - Г­Г®ГўГ»ГҐ Г¬ГҐГІГ®Г¤Г»
     Response toggleOreVisualization();
     void setOreAnimationTime(float time);
     void setOreVisualizationEnabled(bool enabled);
@@ -58,9 +59,11 @@ public:
     bool isOreVisualizationEnabled() const;
     HexSphereModel* getModel();
 
-    // Дополнительные методы для управления системой руд
+    // Г„Г®ГЇГ®Г«Г­ГЁГІГҐГ«ГјГ­Г»ГҐ Г¬ГҐГІГ®Г¤Г» Г¤Г«Гї ГіГЇГ°Г ГўГ«ГҐГ­ГЁГї Г±ГЁГ±ГІГҐГ¬Г®Г© Г°ГіГ¤
     Response setOreAnimationSpeed(float speed);
     Response regenerateOreDeposits();
+
+    void rebuildModel();
 
 private:
     struct PickHit {
@@ -104,8 +107,14 @@ private:
     float waterTime_ = 0.0f;
     QVector3D lightDir_ = QVector3D(1, 1, 1).normalized();
 
-    // Параметры для системы руд
+    // ГЏГ Г°Г Г¬ГҐГІГ°Г» Г¤Г«Гї Г±ГЁГ±ГІГҐГ¬Г» Г°ГіГ¤
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
     float oreAnimationSpeed_ = 0.1f;
+
+    bool needRebuild_ = false;
+    void markDirty() { needRebuild_ = true; }
+    void checkRebuild();
+
+    bool needInitialBuild_ = true;
 };
