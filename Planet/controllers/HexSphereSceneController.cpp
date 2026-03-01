@@ -56,6 +56,7 @@ void HexSphereSceneController::rebuildModel() {
     ico_ = icoBuilder_.build(L_);
     model_.rebuildFromIcosphere(ico_);
     regenerateTerrain();
+    heightStep_ = autoHeightStep();
 }
 
 void HexSphereSceneController::regenerateTerrain() {

@@ -72,8 +72,24 @@ void InputController::initialize(QOpenGLWidget* owner) {
     pyramid.currentCell = 0;
     ecs_.emplace<ecs::Mesh>(pyramid.id).meshId = "pyramid";
     ecs::Transform& transform = ecs_.emplace<ecs::Transform>(pyramid.id);
-    QVector3D surfacePosition = computeSurfacePoint(scene_, 0);
-    transform.position = ecs::localToWorldPoint(transform, ecs::CoordinateFrame{}, surfacePosition);
+
+    // !!! »—ѕ–ј¬Ћ≈Ќќ: используем ту же логику, что и в пути
+    const auto& cells = scene_.model().cells();
+    if (!cells.empty() && cells[0].height != 0) {
+        const Cell& cell = cells[0];
+        // “ќ„Ќќ “ј  ∆≈ как в PathBuilder::polylineOnSphere
+        float R = 1.0f + cell.height * scene_.heightStep() + 0.03f; // bias = offset
+        transform.position = cell.centroid.normalized() * R;
+
+        qDebug() << "Pyramid position:" << transform.position
+            << "height:" << cell.height
+            << "heightStep:" << scene_.heightStep()
+            << "R:" << R;
+    }
+    else {
+        transform.position = QVector3D(0, 0, 1.03f);
+    }
+
     ecs_.emplace<ecs::Collider>(pyramid.id).radius = 0.08f;
 
     Response initResponse;
@@ -180,7 +196,10 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         if (next < 0) return response;
         ent.currentCell = next;
         if (auto* transform = ecs_.get<ecs::Transform>(ent.id)) {
-            transform->position = computeSurfacePoint(scene_, next);
+            // !!! »—ѕ–ј¬Ћ≈Ќќ: та же формула
+            const Cell& nextCell = cells[next];
+            float R = 1.0f + nextCell.height * scene_.heightStep() + 0.03f;
+            transform->position = nextCell.centroid.normalized() * R;
         }
         response.requestUpdate = true;
         break;
@@ -477,14 +496,29 @@ void InputController::deselectEntity() {
     }
 }
 
+
 void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     if (selectedEntityId_ == -1) return;
     auto* entity = ecs_.getEntity(selectedEntityId_);
     if (!entity) return;
+
+    int oldCell = entity->currentCell;
+
     if (cellId >= 0 && cellId < scene_.model().cellCount()) {
         entity->currentCell = cellId;
         if (auto* transform = ecs_.get<ecs::Transform>(entity->id)) {
-            transform->position = computeSurfacePoint(scene_, cellId);
+            // !!! »—ѕ–ј¬Ћ≈Ќќ: используем ту же формулу, что и в пути
+            const auto& cells = scene_.model().cells();
+            const Cell& cell = cells[cellId];
+            float R = 1.0f + cell.height * scene_.heightStep() + 0.03f;
+            transform->position = cell.centroid.normalized() * R;
+        }
+
+        if (oldCell >= 0 && oldCell != cellId) {
+            scene_.clearSelection();
+            scene_.toggleCellSelection(oldCell);
+            scene_.toggleCellSelection(cellId);
+            buildAndShowSelectedPath(response);
         }
     }
     deselectEntity();
