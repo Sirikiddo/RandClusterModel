@@ -1,4 +1,4 @@
-#include "controllers/InputController.h"
+ï»¿#include "controllers/InputController.h"
 
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -16,39 +16,40 @@
 #include "model/SurfacePlacement.h"
 
 namespace {
-bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
-    const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
-    float& tOut) {
-    const float EPS = 1e-6f;
-    const QVector3D e1 = v1 - v0;
-    const QVector3D e2 = v2 - v0;
-    const QVector3D p = QVector3D::crossProduct(d, e2);
-    const float det = QVector3D::dotProduct(e1, p);
-    if (std::fabs(det) < EPS) return false;
-    const float invDet = 1.0f / det;
-    const QVector3D t = o - v0;
-    const float u = QVector3D::dotProduct(t, p) * invDet; if (u < -EPS || u > 1.0f + EPS) return false;
-    const QVector3D q = QVector3D::crossProduct(t, e1);
-    const float v = QVector3D::dotProduct(d, q) * invDet; if (v < -EPS || u + v > 1.0f + EPS) return false;
-    const float tt = QVector3D::dotProduct(e2, q) * invDet; if (tt <= EPS) return false;
-    tOut = tt; return true;
-}
+    bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
+        const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
+        float& tOut) {
+        const float EPS = 1e-6f;
+        const QVector3D e1 = v1 - v0;
+        const QVector3D e2 = v2 - v0;
+        const QVector3D p = QVector3D::crossProduct(d, e2);
+        const float det = QVector3D::dotProduct(e1, p);
+        if (std::fabs(det) < EPS) return false;
+        const float invDet = 1.0f / det;
+        const QVector3D t = o - v0;
+        const float u = QVector3D::dotProduct(t, p) * invDet; if (u < -EPS || u > 1.0f + EPS) return false;
+        const QVector3D q = QVector3D::crossProduct(t, e1);
+        const float v = QVector3D::dotProduct(d, q) * invDet; if (v < -EPS || u + v > 1.0f + EPS) return false;
+        const float tt = QVector3D::dotProduct(e2, q) * invDet; if (tt <= EPS) return false;
+        tOut = tt; return true;
+    }
 
-static void printGlInfo(QOpenGLFunctions_3_3_Core* gl) {
-    const GLubyte* vendor = gl->glGetString(GL_VENDOR);
-    const GLubyte* renderer = gl->glGetString(GL_RENDERER);
-    const GLubyte* version = gl->glGetString(GL_VERSION);
+    static void printGlInfo(QOpenGLFunctions_3_3_Core* gl) {
+        const GLubyte* vendor = gl->glGetString(GL_VENDOR);
+        const GLubyte* renderer = gl->glGetString(GL_RENDERER);
+        const GLubyte* version = gl->glGetString(GL_VERSION);
 
-    qDebug() << "=== OpenGL Device Info ===";
-    qDebug() << "GPU Vendor:   " << reinterpret_cast<const char*>(vendor);
-    qDebug() << "GPU Renderer: " << reinterpret_cast<const char*>(renderer);
-    qDebug() << "GL Version:   " << reinterpret_cast<const char*>(version);
-    qDebug() << "===========================";
-}
+        qDebug() << "=== OpenGL Device Info ===";
+        qDebug() << "GPU Vendor:   " << reinterpret_cast<const char*>(vendor);
+        qDebug() << "GPU Renderer: " << reinterpret_cast<const char*>(renderer);
+        qDebug() << "GL Version:   " << reinterpret_cast<const char*>(version);
+        qDebug() << "===========================";
+    }
 }
 
 InputController::InputController(CameraController& camera)
-    : camera_(camera) {}
+    : camera_(camera) {
+}
 
 void InputController::initialize(QOpenGLWidget* owner) {
     owner_ = owner;
@@ -72,24 +73,8 @@ void InputController::initialize(QOpenGLWidget* owner) {
     pyramid.currentCell = 0;
     ecs_.emplace<ecs::Mesh>(pyramid.id).meshId = "pyramid";
     ecs::Transform& transform = ecs_.emplace<ecs::Transform>(pyramid.id);
-
-    // !!! ÈÑÏĞÀÂËÅÍÎ: èñïîëüçóåì òó æå ëîãèêó, ÷òî è â ïóòè
-    const auto& cells = scene_.model().cells();
-    if (!cells.empty() && cells[0].height != 0) {
-        const Cell& cell = cells[0];
-        // ÒÎ×ÍÎ ÒÀÊ ÆÅ êàê â PathBuilder::polylineOnSphere
-        float R = 1.0f + cell.height * scene_.heightStep() + 0.03f; // bias = offset
-        transform.position = cell.centroid.normalized() * R;
-
-        qDebug() << "Pyramid position:" << transform.position
-            << "height:" << cell.height
-            << "heightStep:" << scene_.heightStep()
-            << "R:" << R;
-    }
-    else {
-        transform.position = QVector3D(0, 0, 1.03f);
-    }
-
+    QVector3D surfacePosition = computeSurfacePoint(scene_, 0);
+    transform.position = ecs::localToWorldPoint(transform, ecs::CoordinateFrame{}, surfacePosition);
     ecs_.emplace<ecs::Collider>(pyramid.id).radius = 0.08f;
 
     Response initResponse;
@@ -104,9 +89,9 @@ InputController::Response InputController::render() {
     Response response;
     if (!renderer_) return response;
 
-    HexSphereRenderer::RenderGraph graph{scene_, ecs_, scene_.heightStep()};
-    HexSphereRenderer::RenderCamera camera{camera_.view(), camera_.projection()};
-    HexSphereRenderer::SceneLighting lighting{lightDir_, waterTime_};
+    HexSphereRenderer::RenderGraph graph{ scene_, ecs_, scene_.heightStep() };
+    HexSphereRenderer::RenderCamera camera{ camera_.view(), camera_.projection() };
+    HexSphereRenderer::SceneLighting lighting{ lightDir_, waterTime_ };
     renderer_->renderScene(graph, camera, lighting);
     stats_.frameRendered();
     return response;
@@ -196,10 +181,7 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         if (next < 0) return response;
         ent.currentCell = next;
         if (auto* transform = ecs_.get<ecs::Transform>(ent.id)) {
-            // !!! ÈÑÏĞÀÂËÅÍÎ: òà æå ôîğìóëà
-            const Cell& nextCell = cells[next];
-            float R = 1.0f + nextCell.height * scene_.heightStep() + 0.03f;
-            transform->position = nextCell.centroid.normalized() * R;
+            transform->position = computeSurfacePoint(scene_, next);
         }
         response.requestUpdate = true;
         break;
@@ -356,7 +338,8 @@ void InputController::buildAndShowSelectedPath(Response& response) {
     if (renderer_) {
         if (auto poly = scene_.buildPathPolyline()) {
             renderer_->uploadPath(*poly);
-        } else {
+        }
+        else {
             renderer_->uploadPath({});
         }
     }
@@ -455,7 +438,7 @@ std::optional<InputController::PickHit> InputController::pickEntityAt(int sx, in
             bestEntityId = e.id;
             bestPos = ro + rd * t;
         }
-    });
+        });
 
     if (bestEntityId != -1) {
         return PickHit{ -1, bestEntityId, bestPos, bestT, true };
@@ -502,23 +485,37 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     auto* entity = ecs_.getEntity(selectedEntityId_);
     if (!entity) return;
 
+    // Ğ—Ğ°Ğ¿Ğ¾Ğ¼Ğ¸Ğ½Ğ°ĞµĞ¼ ÑÑ‚Ğ°Ñ€ÑƒÑ Ğ¿Ğ¾Ğ·Ğ¸Ñ†Ğ¸Ñ
     int oldCell = entity->currentCell;
 
     if (cellId >= 0 && cellId < scene_.model().cellCount()) {
         entity->currentCell = cellId;
         if (auto* transform = ecs_.get<ecs::Transform>(entity->id)) {
-            // !!! ÈÑÏĞÀÂËÅÍÎ: èñïîëüçóåì òó æå ôîğìóëó, ÷òî è â ïóòè
-            const auto& cells = scene_.model().cells();
-            const Cell& cell = cells[cellId];
-            float R = 1.0f + cell.height * scene_.heightStep() + 0.03f;
-            transform->position = cell.centroid.normalized() * R;
+            transform->position = computeSurfacePoint(scene_, cellId);
         }
 
+        // Ğ¡Ğ½Ğ°Ñ‡Ğ°Ğ»Ğ° ĞĞ§Ğ˜Ğ©ĞĞ•Ğœ Ğ²ÑĞµ Ğ²Ñ‹Ğ´ĞµĞ»ĞµĞ½Ğ¸Ñ
+        scene_.clearSelection();
+
+        // Ğ•ÑĞ»Ğ¸ ĞµÑÑ‚ÑŒ ÑÑ‚Ğ°Ñ€Ğ°Ñ ÑÑ‡ĞµĞ¹ĞºĞ° Ğ¸ Ğ¾Ğ½Ğ° Ğ¾Ñ‚Ğ»Ğ¸Ñ‡Ğ°ĞµÑ‚ÑÑ Ğ¾Ñ‚ Ğ½Ğ¾Ğ²Ğ¾Ğ¹
         if (oldCell >= 0 && oldCell != cellId) {
-            scene_.clearSelection();
+            // Ğ’Ñ‹Ğ´ĞµĞ»ÑĞµĞ¼ ÑÑ‚Ğ°Ñ€ÑƒÑ ÑÑ‡ĞµĞ¹ĞºÑƒ
             scene_.toggleCellSelection(oldCell);
-            scene_.toggleCellSelection(cellId);
+        }
+
+        // Ğ’ÑĞµĞ³Ğ´Ğ° Ğ²Ñ‹Ğ´ĞµĞ»ÑĞµĞ¼ Ğ½Ğ¾Ğ²ÑƒÑ ÑÑ‡ĞµĞ¹ĞºÑƒ
+        scene_.toggleCellSelection(cellId);
+
+        // ĞĞ±Ğ½Ğ¾Ğ²Ğ»ÑĞµĞ¼ Ğ²Ñ‹Ğ´ĞµĞ»ĞµĞ½Ğ¸Ğµ Ğ² Ñ€ĞµĞ½Ğ´ĞµÑ€Ğµ
+        uploadSelection();
+
+        // Ğ•ÑĞ»Ğ¸ ĞµÑÑ‚ÑŒ ÑÑ‚Ğ°Ñ€Ğ°Ñ Ğ¸ Ğ½Ğ¾Ğ²Ğ°Ñ (Ñ€Ğ°Ğ·Ğ½Ñ‹Ğµ) - ÑÑ‚Ñ€Ğ¾Ğ¸Ğ¼ Ğ¿ÑƒÑ‚ÑŒ
+        if (oldCell >= 0 && oldCell != cellId) {
             buildAndShowSelectedPath(response);
+        }
+        else {
+            // Ğ•ÑĞ»Ğ¸ ÑÑ‚Ğ°Ñ€Ğ°Ñ Ğ¸ Ğ½Ğ¾Ğ²Ğ°Ñ ÑĞ¾Ğ²Ğ¿Ğ°Ğ´Ğ°ÑÑ‚ - Ğ¾Ñ‡Ğ¸Ñ‰Ğ°ĞµĞ¼ Ğ¿ÑƒÑ‚ÑŒ
+            clearPath(response);
         }
     }
     deselectEntity();
@@ -557,7 +554,7 @@ bool InputController::isOreVisualizationEnabled() const {
 }
 
 HexSphereModel* InputController::getModel() {
-    // Ïîëó÷àåì ìîäåëü èç ñöåíû
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½
     return &scene_.modelMutable();
 }
 
@@ -576,5 +573,3 @@ InputController::Response InputController::regenerateOreDeposits() {
     r.hudMessage = QString("Ore deposits regenerated");
     return r;
 }
-
-

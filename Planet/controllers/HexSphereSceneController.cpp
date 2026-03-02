@@ -56,7 +56,6 @@ void HexSphereSceneController::rebuildModel() {
     ico_ = icoBuilder_.build(L_);
     model_.rebuildFromIcosphere(ico_);
     regenerateTerrain();
-    heightStep_ = autoHeightStep();
 }
 
 void HexSphereSceneController::regenerateTerrain() {
@@ -78,6 +77,9 @@ void HexSphereSceneController::toggleCellSelection(int cellId) {
         selectedCells_.insert(cellId);
     }
 }
+
+
+
 
 std::optional<std::vector<QVector3D>> HexSphereSceneController::buildPathPolyline() const {
     if (selectedCells_.size() != 2) {

@@ -85,6 +85,8 @@ void EntityRenderer::renderEntities(const HexSphereRenderer::RenderContext& ctx)
         gl_->glBindVertexArray(vaoPyramid_);
         gl_->glDrawArrays(GL_TRIANGLES, 0, pyramidVertexCount_);
     });
+
+
 }
 
 void EntityRenderer::renderTrees(const HexSphereRenderer::RenderContext& ctx) const {
