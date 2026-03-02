@@ -89,9 +89,30 @@ InputController::Response InputController::render() {
     Response response;
     if (!renderer_) return response;
 
+    // Базовое направление света в координатах камеры (от камеры вперед)
+    static const QVector3D LIGHT_IN_CAMERA_SPACE = QVector3D(0.0f, 0.0f, -1.0f); // вперед в OpenGL (по Z)
+
+    // Получаем матрицу поворота камеры из view matrix
+    QMatrix4x4 viewMatrix = camera_.view();
+
+    // Извлекаем чистую матрицу поворота (без трансляции)
+    QMatrix4x4 rotationMatrix;
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            rotationMatrix(i, j) = viewMatrix(i, j);
+        }
+    }
+
+    // Транспонируем, потому что view matrix содержит обратный поворот
+    rotationMatrix = rotationMatrix.transposed();
+
+    // Преобразуем свет из координат камеры в мировые координаты
+    QVector3D lightDir = rotationMatrix.mapVector(LIGHT_IN_CAMERA_SPACE).normalized();
+
     HexSphereRenderer::RenderGraph graph{ scene_, ecs_, scene_.heightStep() };
-    HexSphereRenderer::RenderCamera camera{ camera_.view(), camera_.projection() };
-    HexSphereRenderer::SceneLighting lighting{ lightDir_, waterTime_ };
+    HexSphereRenderer::RenderCamera camera{ viewMatrix, camera_.projection() };
+    HexSphereRenderer::SceneLighting lighting{ lightDir, waterTime_ };
+
     renderer_->renderScene(graph, camera, lighting);
     stats_.frameRendered();
     return response;
