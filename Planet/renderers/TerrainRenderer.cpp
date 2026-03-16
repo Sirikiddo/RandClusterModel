@@ -1,19 +1,20 @@
 #include "renderers/TerrainRenderer.h"
 
 TerrainRenderer::TerrainRenderer(QOpenGLFunctions_3_3_Core* gl,
-                                 GLuint program,
-                                 GLint uMvp,
-                                 GLint uModel,
-                                 GLint uLightDir,
-                                 GLuint vao,
-                                 const GLsizei& indexCount)
+    GLuint program,
+    GLint uMvp,
+    GLint uModel,
+    GLint uLightDir,
+    GLuint vao,
+    const GLsizei& indexCount)
     : gl_(gl)
     , program_(program)
     , uMvp_(uMvp)
     , uModel_(uModel)
     , uLightDir_(uLightDir)
     , vao_(vao)
-    , indexCount_(indexCount) {}
+    , indexCount_(indexCount) {
+}
 
 void TerrainRenderer::render(const HexSphereRenderer::RenderContext& ctx) const {
     if (indexCount_ == 0 || program_ == 0) return;

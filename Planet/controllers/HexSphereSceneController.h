@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <QSet>
 #include <QVector3D>
@@ -49,9 +49,18 @@ public:
     bool smoothOneStep() const { return smoothOneStep_; }
     float pathBias() const { return pathBias_; }
 
+    // Новые методы для работы с деревьями (только здесь, один раз!)
+    float cellSize() const;
+    bool isCellOccupiedByTree(int cellId) const;
+    const std::vector<TreePlacement>& getTreePlacements() const { return treePlacements_; }
+    void generateTreePlacements();
+
 private:
     float autoHeightStep() const;
     void updateTerrainMesh();
+
+    // Новые приватные методы (только здесь, один раз!)
+    void updateTreeOccupiedCells();
 
     IcosphereBuilder icoBuilder_;
     IcoMesh ico_;
@@ -69,4 +78,8 @@ private:
     float pathBias_ = 0.01f;
 
     QSet<int> selectedCells_;
+
+    // Новые данные для деревьев
+    std::vector<TreePlacement> treePlacements_;
+    QSet<int> treeOccupiedCells_;
 };

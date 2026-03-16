@@ -1,11 +1,13 @@
-#include "controllers/HexSphereSceneController.h"
+﻿#include "controllers/HexSphereSceneController.h"
 
 #include <QtGlobal>
 #include <algorithm>
-#include "generation/MeshGenerators/SelectionOutlineGenerator.h"
-#include "generation/MeshGenerators/TerrainMeshGenerator.h"
-#include "generation/MeshGenerators/WaterMeshGenerator.h"
+#include <random>
+#include <cmath>
+
+// Добавляем нужные include
 #include "generation/MeshGenerators/WireMeshGenerator.h"
+#include "generation/MeshGenerators/SelectionOutlineGenerator.h"
 
 HexSphereSceneController::HexSphereSceneController()
     : generator_(std::make_unique<ClimateBiomeTerrainGenerator>()) {
@@ -56,6 +58,7 @@ void HexSphereSceneController::rebuildModel() {
     ico_ = icoBuilder_.build(L_);
     model_.rebuildFromIcosphere(ico_);
     regenerateTerrain();
+    generateTreePlacements();
 }
 
 void HexSphereSceneController::regenerateTerrain() {
@@ -63,6 +66,7 @@ void HexSphereSceneController::regenerateTerrain() {
         generator_->generate(model_, genParams_);
     }
     updateTerrainMesh();
+    generateTreePlacements();
 }
 
 void HexSphereSceneController::clearSelection() {
@@ -96,10 +100,12 @@ std::optional<std::vector<QVector3D>> HexSphereSceneController::buildPathPolylin
 }
 
 std::vector<float> HexSphereSceneController::buildWireVertices() const {
+    // WireMeshGenerator ожидает const HexSphereModel&
     return WireMeshGenerator::buildWireVertices(model_);
 }
 
 std::vector<float> HexSphereSceneController::buildSelectionOutlineVertices() const {
+    // SelectionOutlineGenerator ожидает: const HexSphereModel&, const QSet<int>&, float, float, bool
     return SelectionOutlineGenerator::buildSelectionOutlineVertices(
         model_, selectedCells_, heightStep_, outlineBias_, smoothOneStep_);
 }
@@ -127,4 +133,66 @@ void HexSphereSceneController::updateTerrainMesh() {
     options.doEdgeCliffs = true;
 
     terrainCPU_ = TerrainMeshGenerator::buildTerrainMesh(model_, options);
+}
+
+float HexSphereSceneController::cellSize() const {
+    const float baseForL2 = 1.0f;
+    const float factor = 0.7f;
+
+    if (L_ == 2) return baseForL2;
+    else if (L_ < 2) return baseForL2 * std::pow(1.0f / factor, 2 - L_);
+    else return baseForL2 * std::pow(factor, L_ - 2);
+}
+
+bool HexSphereSceneController::isCellOccupiedByTree(int cellId) const {
+    return std::any_of(treePlacements_.begin(), treePlacements_.end(),
+        [cellId](const TreePlacement& p) { return p.cellId == cellId; });
+}
+
+void HexSphereSceneController::updateTreeOccupiedCells() {
+    treeOccupiedCells_.clear();
+    for (const auto& placement : treePlacements_) {
+        treeOccupiedCells_.insert(placement.cellId);
+    }
+}
+
+void HexSphereSceneController::generateTreePlacements() {
+    treePlacements_.clear();
+    const auto& cells = model_.cells();
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<float> distBary(0.1f, 0.8f);
+    std::uniform_real_distribution<float> distScale(0.8f, 1.2f);
+    std::uniform_real_distribution<float> distRot(0.0f, 2.0f * 3.14159f);
+
+    // ВРЕМЕННО: ставим деревья на все клетки с биомом Grass
+    for (size_t i = 0; i < cells.size(); ++i) {
+        if (cells[i].biome == Biome::Grass) {  // Убрали условие i % 3 == 0
+            TreePlacement placement;
+            placement.cellId = static_cast<int>(i);
+
+            if (!cells[i].poly.empty()) {
+                std::uniform_int_distribution<int> distTri(0, cells[i].poly.size() - 1);
+                placement.triangleIdx = distTri(gen);
+            }
+
+            float u = distBary(gen);
+            float v = distBary(gen);
+            if (u + v > 1.0f) {
+                u = 1.0f - u;
+                v = 1.0f - v;
+            }
+            placement.baryU = u;
+            placement.baryV = v;
+            placement.baryW = 1.0f - u - v;
+
+            placement.scale = distScale(gen);
+            placement.rotation = distRot(gen);
+
+            treePlacements_.push_back(placement);
+        }
+    }
+
+    qDebug() << "Generated" << treePlacements_.size() << "tree placements (simple mode)";
 }

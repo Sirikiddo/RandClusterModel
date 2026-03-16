@@ -1,0 +1,214 @@
+/****************************************************************************
+** Meta object code from reading C++ file 'HexSphereWidget.h'
+**
+** Created by: The Qt Meta Object Compiler version 68 (Qt 6.8.0)
+**
+** WARNING! All changes made in this file will be lost!
+*****************************************************************************/
+
+#include "../../../../ui/HexSphereWidget.h"
+#include <QtGui/qtextcursor.h>
+#include <QtGui/qscreen.h>
+#include <QtCore/qmetatype.h>
+
+#include <QtCore/qtmochelpers.h>
+
+#include <memory>
+
+
+#include <QtCore/qxptype_traits.h>
+#if !defined(Q_MOC_OUTPUT_REVISION)
+#error "The header file 'HexSphereWidget.h' doesn't include <QObject>."
+#elif Q_MOC_OUTPUT_REVISION != 68
+#error "This file was generated using the moc from 6.8.0. It"
+#error "cannot be used with the include files from this version of Qt."
+#error "(The moc has changed too much.)"
+#endif
+
+#ifndef Q_CONSTINIT
+#define Q_CONSTINIT
+#endif
+
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
+QT_WARNING_DISABLE_GCC("-Wuseless-cast")
+namespace {
+
+#ifdef QT_MOC_HAS_STRINGDATA
+struct qt_meta_stringdata_CLASSHexSphereWidgetENDCLASS_t {};
+constexpr auto qt_meta_stringdata_CLASSHexSphereWidgetENDCLASS = QtMocHelpers::stringData(
+    "HexSphereWidget",
+    "hudTextChanged",
+    "",
+    "setSubdivisionLevel",
+    "L",
+    "resetView",
+    "clearSelection",
+    "setTerrainParams",
+    "TerrainParams",
+    "p",
+    "setGeneratorByIndex",
+    "idx",
+    "regenerateTerrain",
+    "setSmoothOneStep",
+    "on",
+    "setStripInset",
+    "v",
+    "setOutlineBias"
+);
+#else  // !QT_MOC_HAS_STRINGDATA
+#error "qtmochelpers.h not found or too old."
+#endif // !QT_MOC_HAS_STRINGDATA
+} // unnamed namespace
+
+Q_CONSTINIT static const uint qt_meta_data_CLASSHexSphereWidgetENDCLASS[] = {
+
+ // content:
+      12,       // revision
+       0,       // classname
+       0,    0, // classinfo
+      10,   14, // methods
+       0,    0, // properties
+       0,    0, // enums/sets
+       0,    0, // constructors
+       0,       // flags
+       1,       // signalCount
+
+ // signals: name, argc, parameters, tag, flags, initial metatype offsets
+       1,    1,   74,    2, 0x06,    1 /* Public */,
+
+ // slots: name, argc, parameters, tag, flags, initial metatype offsets
+       3,    1,   77,    2, 0x0a,    3 /* Public */,
+       5,    0,   80,    2, 0x0a,    5 /* Public */,
+       6,    0,   81,    2, 0x0a,    6 /* Public */,
+       7,    1,   82,    2, 0x0a,    7 /* Public */,
+      10,    1,   85,    2, 0x0a,    9 /* Public */,
+      12,    0,   88,    2, 0x0a,   11 /* Public */,
+      13,    1,   89,    2, 0x0a,   12 /* Public */,
+      15,    1,   92,    2, 0x0a,   14 /* Public */,
+      17,    1,   95,    2, 0x0a,   16 /* Public */,
+
+ // signals: parameters
+    QMetaType::Void, QMetaType::QString,    2,
+
+ // slots: parameters
+    QMetaType::Void, QMetaType::Int,    4,
+    QMetaType::Void,
+    QMetaType::Void,
+    QMetaType::Void, 0x80000000 | 8,    9,
+    QMetaType::Void, QMetaType::Int,   11,
+    QMetaType::Void,
+    QMetaType::Void, QMetaType::Bool,   14,
+    QMetaType::Void, QMetaType::Float,   16,
+    QMetaType::Void, QMetaType::Float,   16,
+
+       0        // eod
+};
+
+Q_CONSTINIT const QMetaObject HexSphereWidget::staticMetaObject = { {
+    QMetaObject::SuperData::link<QOpenGLWidget::staticMetaObject>(),
+    qt_meta_stringdata_CLASSHexSphereWidgetENDCLASS.offsetsAndSizes,
+    qt_meta_data_CLASSHexSphereWidgetENDCLASS,
+    qt_static_metacall,
+    nullptr,
+    qt_incomplete_metaTypeArray<qt_meta_stringdata_CLASSHexSphereWidgetENDCLASS_t,
+        // Q_OBJECT / Q_GADGET
+        QtPrivate::TypeAndForceComplete<HexSphereWidget, std::true_type>,
+        // method 'hudTextChanged'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        QtPrivate::TypeAndForceComplete<const QString &, std::false_type>,
+        // method 'setSubdivisionLevel'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        QtPrivate::TypeAndForceComplete<int, std::false_type>,
+        // method 'resetView'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        // method 'clearSelection'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        // method 'setTerrainParams'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        QtPrivate::TypeAndForceComplete<const TerrainParams &, std::false_type>,
+        // method 'setGeneratorByIndex'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        QtPrivate::TypeAndForceComplete<int, std::false_type>,
+        // method 'regenerateTerrain'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        // method 'setSmoothOneStep'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        QtPrivate::TypeAndForceComplete<bool, std::false_type>,
+        // method 'setStripInset'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        QtPrivate::TypeAndForceComplete<float, std::false_type>,
+        // method 'setOutlineBias'
+        QtPrivate::TypeAndForceComplete<void, std::false_type>,
+        QtPrivate::TypeAndForceComplete<float, std::false_type>
+    >,
+    nullptr
+} };
+
+void HexSphereWidget::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, void **_a)
+{
+    if (_c == QMetaObject::InvokeMetaMethod) {
+        auto *_t = static_cast<HexSphereWidget *>(_o);
+        (void)_t;
+        switch (_id) {
+        case 0: _t->hudTextChanged((*reinterpret_cast< std::add_pointer_t<QString>>(_a[1]))); break;
+        case 1: _t->setSubdivisionLevel((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 2: _t->resetView(); break;
+        case 3: _t->clearSelection(); break;
+        case 4: _t->setTerrainParams((*reinterpret_cast< std::add_pointer_t<TerrainParams>>(_a[1]))); break;
+        case 5: _t->setGeneratorByIndex((*reinterpret_cast< std::add_pointer_t<int>>(_a[1]))); break;
+        case 6: _t->regenerateTerrain(); break;
+        case 7: _t->setSmoothOneStep((*reinterpret_cast< std::add_pointer_t<bool>>(_a[1]))); break;
+        case 8: _t->setStripInset((*reinterpret_cast< std::add_pointer_t<float>>(_a[1]))); break;
+        case 9: _t->setOutlineBias((*reinterpret_cast< std::add_pointer_t<float>>(_a[1]))); break;
+        default: ;
+        }
+    } else if (_c == QMetaObject::IndexOfMethod) {
+        int *result = reinterpret_cast<int *>(_a[0]);
+        {
+            using _t = void (HexSphereWidget::*)(const QString & );
+            if (_t _q_method = &HexSphereWidget::hudTextChanged; *reinterpret_cast<_t *>(_a[1]) == _q_method) {
+                *result = 0;
+                return;
+            }
+        }
+    }
+}
+
+const QMetaObject *HexSphereWidget::metaObject() const
+{
+    return QObject::d_ptr->metaObject ? QObject::d_ptr->dynamicMetaObject() : &staticMetaObject;
+}
+
+void *HexSphereWidget::qt_metacast(const char *_clname)
+{
+    if (!_clname) return nullptr;
+    if (!strcmp(_clname, qt_meta_stringdata_CLASSHexSphereWidgetENDCLASS.stringdata0))
+        return static_cast<void*>(this);
+    return QOpenGLWidget::qt_metacast(_clname);
+}
+
+int HexSphereWidget::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
+{
+    _id = QOpenGLWidget::qt_metacall(_c, _id, _a);
+    if (_id < 0)
+        return _id;
+    if (_c == QMetaObject::InvokeMetaMethod) {
+        if (_id < 10)
+            qt_static_metacall(this, _c, _id, _a);
+        _id -= 10;
+    } else if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
+        if (_id < 10)
+            *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
+        _id -= 10;
+    }
+    return _id;
+}
+
+// SIGNAL 0
+void HexSphereWidget::hudTextChanged(const QString & _t1)
+{
+    void *_a[] = { nullptr, const_cast<void*>(reinterpret_cast<const void*>(std::addressof(_t1))) };
+    QMetaObject::activate(this, &staticMetaObject, 0, _a);
+}
+QT_WARNING_POP

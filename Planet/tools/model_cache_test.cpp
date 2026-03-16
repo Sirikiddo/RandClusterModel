@@ -5,11 +5,11 @@
 #include <fstream>
 #include "model/ModelHandler.h"
 
-// --- ????????? RSS ??? Windows ---
+// --- Ïîëó÷åíèå RSS ïîä Windows ---
 static size_t currentRSSBytes() {
     PROCESS_MEMORY_COUNTERS info;
     if (GetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info))) {
-        return static_cast<size_t>(info.WorkingSetSize); // RSS ??????
+        return static_cast<size_t>(info.WorkingSetSize); // RSS àíàëîã
     }
     return 0;
 }

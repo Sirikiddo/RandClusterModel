@@ -1,4 +1,4 @@
-#include "renderers/HexSphereRenderer.h"
+п»ї#include "renderers/HexSphereRenderer.h"
 
 #include <QOpenGLWidget>
 #include <QtDebug>
@@ -11,7 +11,8 @@
 #include "renderers/WaterRenderer.h"
 
 HexSphereRenderer::HexSphereRenderer(QOpenGLWidget* owner)
-    : owner_(owner) {}
+    : owner_(owner) {
+}
 
 HexSphereRenderer::~HexSphereRenderer() {
     if (!glReady_) {
@@ -195,7 +196,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
 
     initPyramidGeometry();
 
-    const QString modelPath = "Planet/tree.obj";
+    const QString modelPath = "resources/tree.obj";
     treeModel_ = ModelHandler::loadShared(modelPath);
     if (treeModel_) {
         treeModel_->uploadToGPU();
@@ -329,13 +330,14 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
         uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
         if (auto path = scene.buildPathPolyline()) {
             uploadPathInternal(*path);
-        } else {
+        }
+        else {
             uploadPathInternal({});
         }
         uploadWaterInternal(scene.buildWaterGeometry());
-    });
+        });
     qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
-             << "(terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
+        << "(terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
 }
 
 void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting) {
@@ -346,7 +348,7 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     gl_->glClearColor(0.05f, 0.06f, 0.08f, 1.0f);
     gl_->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // === BASELINE GL STATE (чтобы оверлей/вода не "текли" в террейн) ===
+    // === BASELINE GL STATE ===
     gl_->glDisable(GL_BLEND);
     gl_->glDepthMask(GL_TRUE);
     gl_->glEnable(GL_DEPTH_TEST);
@@ -370,7 +372,7 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     entityRenderer_->renderEntities(ctx);
     overlayRenderer_->render(ctx);
 
-    // overlay часто рисует линии/подсветку и может менять state
+    // overlay пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ/пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ state
     //gl_->glDisable(GL_BLEND);
     //gl_->glDepthMask(GL_TRUE);
     //gl_->glEnable(GL_DEPTH_TEST);
@@ -450,10 +452,8 @@ void HexSphereRenderer::initPyramidGeometry() {
 
 void HexSphereRenderer::setOreAnimationTime(float time) {
     oreAnimationTime_ = time;
-    // Здесь можно передать время в тесселятор, если нужно
 }
 
 void HexSphereRenderer::setOreVisualizationEnabled(bool enabled) {
     oreVisualizationEnabled_ = enabled;
-    // Здесь можно обновить состояние рендерера
 }

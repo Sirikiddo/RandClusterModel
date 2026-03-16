@@ -3,9 +3,9 @@
 
 namespace ecs {
 
-struct Material {
-    QVector3D albedo{1.0f, 1.0f, 1.0f};
-    bool useTexture = false;
-};
+    struct Material {
+        QVector3D albedo{ 1.0f, 1.0f, 1.0f };
+        bool useTexture = false;
+    };
 
 } // namespace ecs

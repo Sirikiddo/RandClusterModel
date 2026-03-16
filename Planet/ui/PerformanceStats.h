@@ -33,7 +33,7 @@ private:
     GLsizei currentVertices_ = 0;
     GLsizei currentIndices_ = 0;
     GLsizei currentTriangles_ = 0;
-    int L_ = 2; // Уровень подразделения
+    int L_ = 2;
 };
 
 #endif // PERFORMANCESTATS_H

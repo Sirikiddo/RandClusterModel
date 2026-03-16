@@ -1,16 +1,16 @@
 #include "ui/OverlayRenderer.h"
 
 OverlayRenderer::OverlayRenderer(QOpenGLFunctions_3_3_Core* gl,
-                                 GLuint progWire,
-                                 GLuint progSel,
-                                 GLint uMvpWire,
-                                 GLint uMvpSel,
-                                 GLuint vaoWire,
-                                 GLuint vaoSel,
-                                 GLuint vaoPath,
-                                 const GLsizei& lineVertexCount,
-                                 const GLsizei& selLineVertexCount,
-                                 const GLsizei& pathVertexCount)
+    GLuint progWire,
+    GLuint progSel,
+    GLint uMvpWire,
+    GLint uMvpSel,
+    GLuint vaoWire,
+    GLuint vaoSel,
+    GLuint vaoPath,
+    const GLsizei& lineVertexCount,
+    const GLsizei& selLineVertexCount,
+    const GLsizei& pathVertexCount)
     : gl_(gl)
     , progWire_(progWire)
     , progSel_(progSel)
@@ -21,7 +21,8 @@ OverlayRenderer::OverlayRenderer(QOpenGLFunctions_3_3_Core* gl,
     , vaoPath_(vaoPath)
     , lineVertexCount_(lineVertexCount)
     , selLineVertexCount_(selLineVertexCount)
-    , pathVertexCount_(pathVertexCount) {}
+    , pathVertexCount_(pathVertexCount) {
+}
 
 void OverlayRenderer::render(const HexSphereRenderer::RenderContext& ctx) const {
     if (selLineVertexCount_ > 0 && progSel_) {

@@ -8,12 +8,12 @@
 class TerrainRenderer {
 public:
     TerrainRenderer(QOpenGLFunctions_3_3_Core* gl,
-                    GLuint program,
-                    GLint uMvp,
-                    GLint uModel,
-                    GLint uLightDir,
-                    GLuint vao,
-                    const GLsizei& indexCount);
+        GLuint program,
+        GLint uMvp,
+        GLint uModel,
+        GLint uLightDir,
+        GLuint vao,
+        const GLsizei& indexCount);
 
     void render(const HexSphereRenderer::RenderContext& ctx) const;
 

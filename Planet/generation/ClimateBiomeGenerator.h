@@ -10,8 +10,8 @@ public:
         float humidityScale = 2.5f;
         float seaLevel = 0.3f;
         uint32_t seed = 12345;
-        float pressureScale = 1.8f;    // Новый параметр
-        float oreScale = 4.0f;         // Новый параметр
+        float pressureScale = 1.8f;
+        float oreScale = 4.0f;
     };
 
     void generate(HexSphereModel& model, const ClimateParams& params);

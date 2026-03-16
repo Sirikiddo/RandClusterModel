@@ -8,15 +8,15 @@
 class WaterRenderer {
 public:
     WaterRenderer(QOpenGLFunctions_3_3_Core* gl,
-                  GLuint program,
-                  GLint uMvp,
-                  GLint uTime,
-                  GLint uLightDir,
-                  GLint uViewPos,
-                  GLint uEnvMap,
-                  GLuint& envCubemap,
-                  GLuint vao,
-                  const GLsizei& indexCount);
+        GLuint program,
+        GLint uMvp,
+        GLint uTime,
+        GLint uLightDir,
+        GLint uViewPos,
+        GLint uEnvMap,
+        GLuint& envCubemap,
+        GLuint vao,
+        const GLsizei& indexCount);
 
     void render(const HexSphereRenderer::RenderContext& ctx) const;
 

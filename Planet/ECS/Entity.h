@@ -3,13 +3,13 @@
 
 namespace ecs {
 
-using EntityId = int;
+    using EntityId = int;
 
-struct Entity {
-    EntityId id = -1;
-    QString name{};
-    int currentCell = -1;
-    bool selected = false;
-};
+    struct Entity {
+        EntityId id = -1;
+        QString name{};
+        int currentCell = -1;
+        bool selected = false;
+    };
 
 } // namespace ecs
