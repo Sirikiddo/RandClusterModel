@@ -12,43 +12,45 @@
 #include <limits>
 
 #include "controllers/CameraController.h"
+#include "controllers/PathBuilder.h"
 #include "ECS/Transform.h"
 #include "model/SurfacePlacement.h"
 
 namespace {
-bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
-    const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
-    float& tOut) {
-    const float EPS = 1e-6f;
-    const QVector3D e1 = v1 - v0;
-    const QVector3D e2 = v2 - v0;
-    const QVector3D p = QVector3D::crossProduct(d, e2);
-    const float det = QVector3D::dotProduct(e1, p);
-    if (std::fabs(det) < EPS) return false;
-    const float invDet = 1.0f / det;
-    const QVector3D t = o - v0;
-    const float u = QVector3D::dotProduct(t, p) * invDet; if (u < -EPS || u > 1.0f + EPS) return false;
-    const QVector3D q = QVector3D::crossProduct(t, e1);
-    const float v = QVector3D::dotProduct(d, q) * invDet; if (v < -EPS || u + v > 1.0f + EPS) return false;
-    const float tt = QVector3D::dotProduct(e2, q) * invDet; if (tt <= EPS) return false;
-    tOut = tt; return true;
-}
+    bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
+        const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
+        float& tOut) {
+        const float EPS = 1e-6f;
+        const QVector3D e1 = v1 - v0;
+        const QVector3D e2 = v2 - v0;
+        const QVector3D p = QVector3D::crossProduct(d, e2);
+        const float det = QVector3D::dotProduct(e1, p);
+        if (std::fabs(det) < EPS) return false;
+        const float invDet = 1.0f / det;
+        const QVector3D t = o - v0;
+        const float u = QVector3D::dotProduct(t, p) * invDet; if (u < -EPS || u > 1.0f + EPS) return false;
+        const QVector3D q = QVector3D::crossProduct(t, e1);
+        const float v = QVector3D::dotProduct(d, q) * invDet; if (v < -EPS || u + v > 1.0f + EPS) return false;
+        const float tt = QVector3D::dotProduct(e2, q) * invDet; if (tt <= EPS) return false;
+        tOut = tt; return true;
+    }
 
-static void printGlInfo(QOpenGLFunctions_3_3_Core* gl) {
-    const GLubyte* vendor = gl->glGetString(GL_VENDOR);
-    const GLubyte* renderer = gl->glGetString(GL_RENDERER);
-    const GLubyte* version = gl->glGetString(GL_VERSION);
+    static void printGlInfo(QOpenGLFunctions_3_3_Core* gl) {
+        const GLubyte* vendor = gl->glGetString(GL_VENDOR);
+        const GLubyte* renderer = gl->glGetString(GL_RENDERER);
+        const GLubyte* version = gl->glGetString(GL_VERSION);
 
-    qDebug() << "=== OpenGL Device Info ===";
-    qDebug() << "GPU Vendor:   " << reinterpret_cast<const char*>(vendor);
-    qDebug() << "GPU Renderer: " << reinterpret_cast<const char*>(renderer);
-    qDebug() << "GL Version:   " << reinterpret_cast<const char*>(version);
-    qDebug() << "===========================";
-}
+        qDebug() << "=== OpenGL Device Info ===";
+        qDebug() << "GPU Vendor:   " << reinterpret_cast<const char*>(vendor);
+        qDebug() << "GPU Renderer: " << reinterpret_cast<const char*>(renderer);
+        qDebug() << "GL Version:   " << reinterpret_cast<const char*>(version);
+        qDebug() << "===========================";
+    }
 }
 
 InputController::InputController(CameraController& camera)
-    : camera_(camera) {}
+    : camera_(camera) {
+}
 
 void InputController::initialize(QOpenGLWidget* owner) {
     owner_ = owner;
@@ -72,7 +74,7 @@ void InputController::initialize(QOpenGLWidget* owner) {
     pyramid.currentCell = 0;
     ecs_.emplace<ecs::Mesh>(pyramid.id).meshId = "pyramid";
     ecs::Transform& transform = ecs_.emplace<ecs::Transform>(pyramid.id);
-    QVector3D surfacePosition = computeSurfacePoint(scene_, 0);
+    QVector3D surfacePosition = computeSurfacePoint(scene_, 0, scene_.heightStep(), scene_.pathBias());
     transform.position = ecs::localToWorldPoint(transform, ecs::CoordinateFrame{}, surfacePosition);
     ecs_.emplace<ecs::Collider>(pyramid.id).radius = 0.08f;
 
@@ -88,9 +90,9 @@ InputController::Response InputController::render() {
     Response response;
     if (!renderer_) return response;
 
-    HexSphereRenderer::RenderGraph graph{scene_, ecs_, scene_.heightStep()};
-    HexSphereRenderer::RenderCamera camera{camera_.view(), camera_.projection()};
-    HexSphereRenderer::SceneLighting lighting{lightDir_, waterTime_};
+    HexSphereRenderer::RenderGraph graph{ scene_, ecs_, scene_.heightStep() };
+    HexSphereRenderer::RenderCamera camera{ camera_.view(), camera_.projection() };
+    HexSphereRenderer::SceneLighting lighting{ lightDir_, waterTime_ };
     renderer_->renderScene(graph, camera, lighting);
     stats_.frameRendered();
     return response;
@@ -180,7 +182,7 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         if (next < 0) return response;
         ent.currentCell = next;
         if (auto* transform = ecs_.get<ecs::Transform>(ent.id)) {
-            transform->position = computeSurfacePoint(scene_, next);
+            transform->position = computeSurfacePoint(scene_, next, scene_.heightStep(), scene_.pathBias());
         }
         response.requestUpdate = true;
         break;
@@ -337,7 +339,24 @@ void InputController::buildAndShowSelectedPath(Response& response) {
     if (renderer_) {
         if (auto poly = scene_.buildPathPolyline()) {
             renderer_->uploadPath(*poly);
-        } else {
+        }
+        else {
+            renderer_->uploadPath({});
+        }
+    }
+    response.requestUpdate = true;
+}
+
+void InputController::buildAndShowPathBetween(int startCell, int targetCell, Response& response) {
+    if (renderer_) {
+        PathBuilder pb(scene_.model());
+        pb.build();
+        const auto ids = pb.astar(startCell, targetCell);
+        if (!ids.empty()) {
+            const auto poly = pb.polylineOnSphere(ids, /*segmentsPerEdge=*/8, scene_.pathBias(), scene_.heightStep());
+            renderer_->uploadPath(poly);
+        }
+        else {
             renderer_->uploadPath({});
         }
     }
@@ -436,7 +455,7 @@ std::optional<InputController::PickHit> InputController::pickEntityAt(int sx, in
             bestEntityId = e.id;
             bestPos = ro + rd * t;
         }
-    });
+        });
 
     if (bestEntityId != -1) {
         return PickHit{ -1, bestEntityId, bestPos, bestT, true };
@@ -477,14 +496,42 @@ void InputController::deselectEntity() {
     }
 }
 
+
 void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     if (selectedEntityId_ == -1) return;
     auto* entity = ecs_.getEntity(selectedEntityId_);
     if (!entity) return;
+
+    // Запоминаем старую позицию
+    int oldCell = entity->currentCell;
+
     if (cellId >= 0 && cellId < scene_.model().cellCount()) {
-        entity->currentCell = cellId;
-        if (auto* transform = ecs_.get<ecs::Transform>(entity->id)) {
-            transform->position = computeSurfacePoint(scene_, cellId);
+        // Запускаем анимацию перемещения
+        applyAnimation(selectedEntityId_, cellId, /*speed=*/1.2f, /*bounceHeight=*/0.03f);
+
+        // Сначала ОЧИЩАЕМ все выделения
+        scene_.clearSelection();
+
+        // Если есть старая ячейка и она отличается от новой
+        if (oldCell >= 0 && oldCell != cellId) {
+            // Выделяем старую ячейку
+            scene_.toggleCellSelection(oldCell);
+        }
+
+        // Всегда выделяем новую ячейку
+        scene_.toggleCellSelection(cellId);
+
+        // Обновляем выделение в рендере
+        uploadSelection();
+
+        // Если есть старая и новая (разные) - строим путь
+        if (oldCell >= 0 && oldCell != cellId) {
+            // Важно: рисуем путь строго oldCell -> cellId, чтобы совпадал с анимацией
+            buildAndShowPathBetween(oldCell, cellId, response);
+        }
+        else {
+            // Если старая и новая совпадают - очищаем путь
+            clearPath(response);
         }
     }
     deselectEntity();
@@ -523,7 +570,7 @@ bool InputController::isOreVisualizationEnabled() const {
 }
 
 HexSphereModel* InputController::getModel() {
-    // �������� ������ �� �����
+    // �������� ������ �� �����
     return &scene_.modelMutable();
 }
 
@@ -543,4 +590,98 @@ InputController::Response InputController::regenerateOreDeposits() {
     return r;
 }
 
+void InputController::applyAnimation(int entityId, int targetCell, float speed, float bounceHeight) {
+    auto* entity = ecs_.getEntity(entityId);
+    if (!entity) {
+        qDebug() << "Entity" << entityId << "not found for animation";
+        return;
+    }
 
+    auto* transform = ecs_.get<ecs::Transform>(entityId);
+    if (!transform) {
+        qDebug() << "Entity" << entityId << "has no transform component";
+        return;
+    }
+
+    // Получаем текущую ячейку
+    int startCell = entity->currentCell;
+    if (startCell < 0 || startCell >= scene_.model().cellCount()) {
+        qDebug() << "Entity" << entityId << "has invalid current cell:" << startCell;
+        return;
+    }
+
+    // Вычисляем начальную и целевую позиции
+    QVector3D startPos = computeSurfacePoint(scene_, startCell, scene_.heightStep(), scene_.pathBias());
+    QVector3D targetPos = computeSurfacePoint(scene_, targetCell, scene_.heightStep(), scene_.pathBias());
+
+    // Строим путь по тем же правилам, что и визуализация (A* + polylineOnSphere).
+    // Если путь не построился — fallback на прямую интерполяцию start->target.
+    std::vector<QVector3D> pathPoints;
+    {
+        PathBuilder pb(scene_.model());
+        pb.build();
+        const auto ids = pb.astar(startCell, targetCell);
+        if (!ids.empty()) {
+            pathPoints = pb.polylineOnSphere(ids, /*segmentsPerEdge=*/8, scene_.pathBias(), scene_.heightStep());
+        }
+    }
+
+    // Важно: пока идёт анимация, рендерер должен брать позицию из Transform, а не из currentCell.
+    // В EntityRenderer::renderEntities() позиция берётся из currentCell, если он >= 0.
+    // Поэтому на время анимации переключаемся в режим "позиция задаётся Transform".
+    entity->currentCell = -1;
+    transform->position = !pathPoints.empty() ? pathPoints.front() : startPos;
+
+    // Создаём анимацию через emplace (публичный метод ComponentStorage)
+    ecs::Animation& anim = ecs_.emplace<ecs::Animation>(entityId);
+    anim.type = ecs::Animation::Type::MoveTo;
+    // duration теперь считается от длины пути (или расстояния), чтобы скорость была стабильной
+    speed = std::max(0.01f, speed);
+    anim.duration = 0.0f; // установим ниже, когда будет известна длина
+    anim.elapsed = 0.0f;
+    anim.startPos = startPos;
+    anim.targetPos = targetPos;
+    anim.startCell = startCell;
+    anim.targetCell = targetCell;
+    anim.bounceHeight = bounceHeight;
+    anim.pathPoints = std::move(pathPoints);
+    anim.pathCumulative.clear();
+    anim.pathTotalLength = 0.0f;
+    if (!anim.pathPoints.empty()) {
+        anim.pathCumulative.resize(anim.pathPoints.size(), 0.0f);
+        for (size_t i = 1; i < anim.pathPoints.size(); ++i) {
+            anim.pathTotalLength += (anim.pathPoints[i] - anim.pathPoints[i - 1]).length();
+            anim.pathCumulative[i] = anim.pathTotalLength;
+        }
+        // Чтобы финальная точка совпадала с расчётной поверхностью, используем последнюю точку пути, если она есть.
+        targetPos = anim.pathPoints.back();
+        anim.targetPos = targetPos;
+    }
+    else {
+        anim.pathTotalLength = (targetPos - startPos).length();
+    }
+
+    anim.duration = std::max(0.05f, anim.pathTotalLength / speed);
+
+    // Коллбек по завершению анимации
+    anim.onComplete = [this, targetCell, targetPos](int id) {
+        auto* e = ecs_.getEntity(id);
+        if (e) {
+            e->currentCell = targetCell;
+            qDebug() << "Animation complete: entity" << id << "reached cell" << targetCell;
+
+            // Удаляем компонент анимации после завершения
+            // (можно оставить, если хочешь, чтобы он удалился автоматически в update)
+        }
+        if (auto* t = ecs_.get<ecs::Transform>(id)) {
+            t->position = targetPos;
+        }
+        };
+
+    qDebug() << "Animation started for entity" << entityId
+        << "from cell" << startCell << "to cell" << targetCell;
+}
+
+void InputController::updateAnimations(float dt) {
+    ecs_.update(dt);
+}

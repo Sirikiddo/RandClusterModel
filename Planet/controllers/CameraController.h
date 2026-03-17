@@ -20,6 +20,7 @@ public:
 
     QVector3D rayOrigin() const;
     QVector3D rayDirectionFromScreen(int sx, int sy, int width, int height, float devicePixelRatio) const;
+    QQuaternion sphereRotation() const { return sphereRotation_; }
 
 private:
     void updateView();

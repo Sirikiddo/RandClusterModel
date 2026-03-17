@@ -62,7 +62,7 @@ void EntityRenderer::renderEntities(const HexSphereRenderer::RenderContext& ctx)
     const QMatrix4x4 vp = proj * view;
     ctx.graph.ecs.each<ecs::Mesh, ecs::Transform>([&](const ecs::Entity& e, const ecs::Mesh&, const ecs::Transform& transform) {
         QVector3D surfacePos = (e.currentCell >= 0)
-            ? computeSurfacePoint(ctx.graph.scene, e.currentCell, ctx.graph.heightStep)
+            ? computeSurfacePoint(ctx.graph.scene, e.currentCell, ctx.graph.heightStep, ctx.graph.scene.pathBias())
             : transform.position;
 
         QMatrix4x4 model;
@@ -85,6 +85,8 @@ void EntityRenderer::renderEntities(const HexSphereRenderer::RenderContext& ctx)
         gl_->glBindVertexArray(vaoPyramid_);
         gl_->glDrawArrays(GL_TRIANGLES, 0, pyramidVertexCount_);
     });
+
+
 }
 
 void EntityRenderer::renderTrees(const HexSphereRenderer::RenderContext& ctx) const {
@@ -106,7 +108,7 @@ void EntityRenderer::renderTrees(const HexSphereRenderer::RenderContext& ctx) co
 
     for (size_t i = 0; i < cells.size() && treesRendered < maxTrees; ++i) {
         if (cells[i].biome == Biome::Grass && (i % 3 == 0)) {
-            QVector3D treePos = computeSurfacePoint(ctx.graph.scene, static_cast<int>(i), ctx.graph.heightStep);
+            QVector3D treePos = computeSurfacePoint(ctx.graph.scene, static_cast<int>(i), ctx.graph.heightStep, ctx.graph.scene.pathBias());
 
             QMatrix4x4 model;
             model.translate(treePos);
