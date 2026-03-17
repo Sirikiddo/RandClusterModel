@@ -1,4 +1,4 @@
-﻿#include "controllers/InputController.h"
+#include "controllers/InputController.h"
 
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -12,6 +12,7 @@
 #include <limits>
 
 #include "controllers/CameraController.h"
+#include "controllers/PathBuilder.h"
 #include "ECS/Transform.h"
 #include "model/SurfacePlacement.h"
 
@@ -73,7 +74,7 @@ void InputController::initialize(QOpenGLWidget* owner) {
     pyramid.currentCell = 0;
     ecs_.emplace<ecs::Mesh>(pyramid.id).meshId = "pyramid";
     ecs::Transform& transform = ecs_.emplace<ecs::Transform>(pyramid.id);
-    QVector3D surfacePosition = computeSurfacePoint(scene_, 0);
+    QVector3D surfacePosition = computeSurfacePoint(scene_, 0, scene_.heightStep(), scene_.pathBias());
     transform.position = ecs::localToWorldPoint(transform, ecs::CoordinateFrame{}, surfacePosition);
     ecs_.emplace<ecs::Collider>(pyramid.id).radius = 0.08f;
 
@@ -89,30 +90,9 @@ InputController::Response InputController::render() {
     Response response;
     if (!renderer_) return response;
 
-    // Базовое направление света в координатах камеры (от камеры вперед)
-    static const QVector3D LIGHT_IN_CAMERA_SPACE = QVector3D(0.0f, 0.0f, -1.0f); // вперед в OpenGL (по Z)
-
-    // Получаем матрицу поворота камеры из view matrix
-    QMatrix4x4 viewMatrix = camera_.view();
-
-    // Извлекаем чистую матрицу поворота (без трансляции)
-    QMatrix4x4 rotationMatrix;
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) {
-            rotationMatrix(i, j) = viewMatrix(i, j);
-        }
-    }
-
-    // Транспонируем, потому что view matrix содержит обратный поворот
-    rotationMatrix = rotationMatrix.transposed();
-
-    // Преобразуем свет из координат камеры в мировые координаты
-    QVector3D lightDir = rotationMatrix.mapVector(LIGHT_IN_CAMERA_SPACE).normalized();
-
     HexSphereRenderer::RenderGraph graph{ scene_, ecs_, scene_.heightStep() };
-    HexSphereRenderer::RenderCamera camera{ viewMatrix, camera_.projection() };
-    HexSphereRenderer::SceneLighting lighting{ lightDir, waterTime_ };
-
+    HexSphereRenderer::RenderCamera camera{ camera_.view(), camera_.projection() };
+    HexSphereRenderer::SceneLighting lighting{ lightDir_, waterTime_ };
     renderer_->renderScene(graph, camera, lighting);
     stats_.frameRendered();
     return response;
@@ -202,7 +182,7 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         if (next < 0) return response;
         ent.currentCell = next;
         if (auto* transform = ecs_.get<ecs::Transform>(ent.id)) {
-            transform->position = computeSurfacePoint(scene_, next);
+            transform->position = computeSurfacePoint(scene_, next, scene_.heightStep(), scene_.pathBias());
         }
         response.requestUpdate = true;
         break;
@@ -367,6 +347,22 @@ void InputController::buildAndShowSelectedPath(Response& response) {
     response.requestUpdate = true;
 }
 
+void InputController::buildAndShowPathBetween(int startCell, int targetCell, Response& response) {
+    if (renderer_) {
+        PathBuilder pb(scene_.model());
+        pb.build();
+        const auto ids = pb.astar(startCell, targetCell);
+        if (!ids.empty()) {
+            const auto poly = pb.polylineOnSphere(ids, /*segmentsPerEdge=*/8, scene_.pathBias(), scene_.heightStep());
+            renderer_->uploadPath(poly);
+        }
+        else {
+            renderer_->uploadPath({});
+        }
+    }
+    response.requestUpdate = true;
+}
+
 void InputController::clearPath(Response& response) {
     if (renderer_) {
         renderer_->uploadPath({});
@@ -510,10 +506,8 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     int oldCell = entity->currentCell;
 
     if (cellId >= 0 && cellId < scene_.model().cellCount()) {
-        entity->currentCell = cellId;
-        if (auto* transform = ecs_.get<ecs::Transform>(entity->id)) {
-            transform->position = computeSurfacePoint(scene_, cellId);
-        }
+        // Запускаем анимацию перемещения
+        applyAnimation(selectedEntityId_, cellId, /*speed=*/1.2f, /*bounceHeight=*/0.03f);
 
         // Сначала ОЧИЩАЕМ все выделения
         scene_.clearSelection();
@@ -532,7 +526,8 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
 
         // Если есть старая и новая (разные) - строим путь
         if (oldCell >= 0 && oldCell != cellId) {
-            buildAndShowSelectedPath(response);
+            // Важно: рисуем путь строго oldCell -> cellId, чтобы совпадал с анимацией
+            buildAndShowPathBetween(oldCell, cellId, response);
         }
         else {
             // Если старая и новая совпадают - очищаем путь
@@ -593,4 +588,100 @@ InputController::Response InputController::regenerateOreDeposits() {
     r.requestUpdate = true;
     r.hudMessage = QString("Ore deposits regenerated");
     return r;
+}
+
+void InputController::applyAnimation(int entityId, int targetCell, float speed, float bounceHeight) {
+    auto* entity = ecs_.getEntity(entityId);
+    if (!entity) {
+        qDebug() << "Entity" << entityId << "not found for animation";
+        return;
+    }
+
+    auto* transform = ecs_.get<ecs::Transform>(entityId);
+    if (!transform) {
+        qDebug() << "Entity" << entityId << "has no transform component";
+        return;
+    }
+
+    // Получаем текущую ячейку
+    int startCell = entity->currentCell;
+    if (startCell < 0 || startCell >= scene_.model().cellCount()) {
+        qDebug() << "Entity" << entityId << "has invalid current cell:" << startCell;
+        return;
+    }
+
+    // Вычисляем начальную и целевую позиции
+    QVector3D startPos = computeSurfacePoint(scene_, startCell, scene_.heightStep(), scene_.pathBias());
+    QVector3D targetPos = computeSurfacePoint(scene_, targetCell, scene_.heightStep(), scene_.pathBias());
+
+    // Строим путь по тем же правилам, что и визуализация (A* + polylineOnSphere).
+    // Если путь не построился — fallback на прямую интерполяцию start->target.
+    std::vector<QVector3D> pathPoints;
+    {
+        PathBuilder pb(scene_.model());
+        pb.build();
+        const auto ids = pb.astar(startCell, targetCell);
+        if (!ids.empty()) {
+            pathPoints = pb.polylineOnSphere(ids, /*segmentsPerEdge=*/8, scene_.pathBias(), scene_.heightStep());
+        }
+    }
+
+    // Важно: пока идёт анимация, рендерер должен брать позицию из Transform, а не из currentCell.
+    // В EntityRenderer::renderEntities() позиция берётся из currentCell, если он >= 0.
+    // Поэтому на время анимации переключаемся в режим "позиция задаётся Transform".
+    entity->currentCell = -1;
+    transform->position = !pathPoints.empty() ? pathPoints.front() : startPos;
+
+    // Создаём анимацию через emplace (публичный метод ComponentStorage)
+    ecs::Animation& anim = ecs_.emplace<ecs::Animation>(entityId);
+    anim.type = ecs::Animation::Type::MoveTo;
+    // duration теперь считается от длины пути (или расстояния), чтобы скорость была стабильной
+    speed = std::max(0.01f, speed);
+    anim.duration = 0.0f; // установим ниже, когда будет известна длина
+    anim.elapsed = 0.0f;
+    anim.startPos = startPos;
+    anim.targetPos = targetPos;
+    anim.startCell = startCell;
+    anim.targetCell = targetCell;
+    anim.bounceHeight = bounceHeight;
+    anim.pathPoints = std::move(pathPoints);
+    anim.pathCumulative.clear();
+    anim.pathTotalLength = 0.0f;
+    if (!anim.pathPoints.empty()) {
+        anim.pathCumulative.resize(anim.pathPoints.size(), 0.0f);
+        for (size_t i = 1; i < anim.pathPoints.size(); ++i) {
+            anim.pathTotalLength += (anim.pathPoints[i] - anim.pathPoints[i - 1]).length();
+            anim.pathCumulative[i] = anim.pathTotalLength;
+        }
+        // Чтобы финальная точка совпадала с расчётной поверхностью, используем последнюю точку пути, если она есть.
+        targetPos = anim.pathPoints.back();
+        anim.targetPos = targetPos;
+    }
+    else {
+        anim.pathTotalLength = (targetPos - startPos).length();
+    }
+
+    anim.duration = std::max(0.05f, anim.pathTotalLength / speed);
+
+    // Коллбек по завершению анимации
+    anim.onComplete = [this, targetCell, targetPos](int id) {
+        auto* e = ecs_.getEntity(id);
+        if (e) {
+            e->currentCell = targetCell;
+            qDebug() << "Animation complete: entity" << id << "reached cell" << targetCell;
+
+            // Удаляем компонент анимации после завершения
+            // (можно оставить, если хочешь, чтобы он удалился автоматически в update)
+        }
+        if (auto* t = ecs_.get<ecs::Transform>(id)) {
+            t->position = targetPos;
+        }
+        };
+
+    qDebug() << "Animation started for entity" << entityId
+        << "from cell" << startCell << "to cell" << targetCell;
+}
+
+void InputController::updateAnimations(float dt) {
+    ecs_.update(dt);
 }

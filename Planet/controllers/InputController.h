@@ -50,7 +50,7 @@ public:
 
     Response advanceWaterTime(float dt);
 
-    // Äëÿ ñèñòåìû ğóä - íîâûå ìåòîäû
+    // ˜˜˜ ˜˜˜˜˜˜˜ ˜˜˜ - ˜˜˜˜˜ ˜˜˜˜˜˜
     Response toggleOreVisualization();
     void setOreAnimationTime(float time);
     void setOreVisualizationEnabled(bool enabled);
@@ -58,9 +58,16 @@ public:
     bool isOreVisualizationEnabled() const;
     HexSphereModel* getModel();
 
-    // Äîïîëíèòåëüíûå ìåòîäû äëÿ óïğàâëåíèÿ ñèñòåìîé ğóä
+    // ˜˜˜˜˜˜˜˜˜˜˜˜˜˜ ˜˜˜˜˜˜ ˜˜˜ ˜˜˜˜˜˜˜˜˜˜ ˜˜˜˜˜˜˜˜ ˜˜˜
     Response setOreAnimationSpeed(float speed);
     Response regenerateOreDeposits();
+
+    // ˜˜˜˜˜˜˜˜ ˜˜˜ ˜˜˜˜˜˜
+    // speed: "˜˜˜˜˜˜ ˜˜˜˜" ˜ ˜˜˜˜˜˜˜ (˜˜˜˜˜ ˜˜˜˜ / speed = duration)
+    void applyAnimation(int entityId, int targetCell, float speed = 1.0f, float bounceHeight = 0.05f);
+    void updateAnimations(float dt);
+    ecs::ComponentStorage& getECS() { return ecs_; }
+    const ecs::ComponentStorage& getECS() const { return ecs_; }
 
 private:
     struct PickHit {
@@ -75,6 +82,7 @@ private:
     void uploadSelection();
     void uploadBuffers();
     void buildAndShowSelectedPath(Response& response);
+    void buildAndShowPathBetween(int startCell, int targetCell, Response& response);
     void clearPath(Response& response);
     void updateBufferUsageStrategy();
 
@@ -105,7 +113,7 @@ private:
     float waterTime_ = 0.0f;
     QVector3D lightDir_ = QVector3D(1, 1, 1).normalized();
 
-    // Ïàğàìåòğû äëÿ ñèñòåìû ğóä
+    // ˜˜˜˜˜˜˜˜˜ ˜˜˜ ˜˜˜˜˜˜˜ ˜˜˜
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
     float oreAnimationSpeed_ = 0.1f;
