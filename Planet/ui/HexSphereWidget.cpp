@@ -55,6 +55,7 @@ HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputContro
     : QOpenGLWidget(parent)
     , cameraController_(cameraController)
     , inputController_(inputController)
+    , engine_(std::make_unique<EngineFacade>(inputController))
     , oreSystem_(nullptr) {
 
     qDebug() << "HexSphereWidget constructor start";
@@ -92,11 +93,22 @@ HexSphereWidget::~HexSphereWidget() = default;
 void HexSphereWidget::initializeGL() {
     inputController_.initialize(this);
 
-    // Инициализируем систему руд после загрузки модели
-    // Отложим до первого рендера или создания мира
-    // initOreSystem() будет вызван после генерации мира
+    // Таймер для анимаций (всегда работает)
+    animationTimer_ = new QTimer(this);
+    connect(animationTimer_, &QTimer::timeout, this, [this]() {
+        // Обновляем анимации с фиксированным dt
+        static QElapsedTimer timer;
+        if (!timer.isValid()) {
+            timer.start();
+            return;
+        }
+        float dt = timer.restart() / 1000.0f;
+        dt = std::min(dt, 0.033f);  // макс 30 FPS для анимаций
 
-    //waterTimer_->start(16);
+        inputController_.updateAnimations(dt);
+        update();  // запрашиваем перерисовку
+        });
+    animationTimer_->start(16);  // 60 FPS
 
     emit hudTextChanged("Controls: [LMB] select | [C] clear path | [P] path between selected | [+/-] height | [1-8] biomes | [S] smooth toggle | [W] move entity | [O] toggle ore visualization");
 }
@@ -104,6 +116,7 @@ void HexSphereWidget::initializeGL() {
 void HexSphereWidget::resizeGL(int w, int h) {
     inputController_.resize(w, h, devicePixelRatioF());
 }
+
 
 void HexSphereWidget::paintGL() {
     if (!context() || !context()->isValid() || !isValid()) return;
@@ -115,20 +128,14 @@ void HexSphereWidget::paintGL() {
     const qint64 ns = frameTimer_.nsecsElapsed();
     frameTimer_.restart();
     float dt = float(ns) * 1e-9f;
-
-    // Ограничиваем dt, чтобы избежать больших скачков
     dt = std::min(dt, 0.1f);
 
-    // Обновляем анимации в ECS
-    inputController_.getECS().update(dt);  // <-- ИСПРАВЛЕНО
+    // УБИРАЕМ ЭТО - теперь обновление в таймере
+    // inputController_.getECS().update(dt);
 
-    // 1) tick facade (пока только overlay/fps)
     engine_->tick(dt);
+    inputController_.render();
 
-    // 2) старый рендер как есть
-    inputController_.render(); // или как у тебя называется
-
-    // 3) рисуем текст поверх (после GL)
     const auto& o = engine_->overlay();
     overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5")
         .arg(qulonglong(o.sceneVersion))
@@ -250,3 +257,4 @@ void HexSphereWidget::updateOreAnimation(float deltaTime) {
     // Обновляем время анимации в InputController
     inputController_.setOreAnimationTime(oreAnimationTime_);
 }
+
