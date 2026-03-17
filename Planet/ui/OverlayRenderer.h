@@ -8,16 +8,16 @@
 class OverlayRenderer {
 public:
     OverlayRenderer(QOpenGLFunctions_3_3_Core* gl,
-                    GLuint progWire,
-                    GLuint progSel,
-                    GLint uMvpWire,
-                    GLint uMvpSel,
-                    GLuint vaoWire,
-                    GLuint vaoSel,
-                    GLuint vaoPath,
-                    const GLsizei& lineVertexCount,
-                    const GLsizei& selLineVertexCount,
-                    const GLsizei& pathVertexCount);
+        GLuint progWire,
+        GLuint progSel,
+        GLint uMvpWire,
+        GLint uMvpSel,
+        GLuint vaoWire,
+        GLuint vaoSel,
+        GLuint vaoPath,
+        const GLsizei& lineVertexCount,
+        const GLsizei& selLineVertexCount,
+        const GLsizei& pathVertexCount);
 
     void render(const HexSphereRenderer::RenderContext& ctx) const;
 

@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <optional>
 #include <limits>
+#include <memory>
 
 struct Tri { int a, b, c; };
 
@@ -57,6 +58,22 @@ struct OreVisualParams {
     QVector3D grainColor;           // Цвет зерен
 };
 
+// Forward declaration
+class HexSphereModel;
+
+// Structure for tree placement with random position within cell
+struct TreePlacement {
+    int cellId = -1;
+    int triangleIdx = 0;
+    float baryU = 0.33f;
+    float baryV = 0.33f;
+    float baryW = 0.34f;
+    float scale = 1.0f;
+    float rotation = 0.0f;
+
+    QVector3D getPosition(const HexSphereModel& model) const;
+};
+
 // Dual (hex/pent) sphere data
 struct Cell {
     int id = -1;                 // equals primal vertex index
@@ -69,17 +86,16 @@ struct Cell {
     float area = 0.0f;           // euclidean triangle-fan area (for info)
     uint32_t stateMask = 0;      // bit 0 => selected
 
-    // Новые атрибуты для климатической карты
+    // Климатические данные (из старой версии)
     float temperature = 0.0f;    // температура [0..1]
     float humidity = 0.0f;       // влажность [0..1] 
     float pressure = 0.0f;       // давление [0..1]
 
-    // Дополнительные характеристики
+    // Данные о руде (из старой версии)
     float oreDensity = 0.0f;     // плотность руды [0..1]
     uint8_t oreType = 0;         // тип руды (0-нет, 1-железо, 2-медь, и т.д.)
-
-    OreVisualParams oreVisual;      // Визуальные параметры руды
-    float oreNoiseOffset = 0.0f;    // Смещение для анимации шума
+    OreVisualParams oreVisual;   // Визуальные параметры руды
+    float oreNoiseOffset = 0.0f; // Смещение для анимации шума
 };
 
 struct PickTri { // geometry for ray picking
@@ -96,6 +112,7 @@ public:
     const std::vector<Cell>& cells() const { return cells_; }
     std::vector<Cell>& cells() { return cells_; }
     const std::vector<PickTri>& pickTris() const { return pickTris_; }
+    const std::vector<std::array<int, 3>>& dualOwners() const { return dualOwners_; }
 
     int subdivisions() const { return L_; }
     int pentagonCount() const { return pentCount_; }
@@ -106,102 +123,26 @@ public:
     void addHeight(int cellId, int dh);
     void setBiome(int cellId, Biome b);
 
+    // Сеттеры для климатических данных
+    void setTemperature(int cellId, float temp);
+    void setHumidity(int cellId, float humidity);
+    void setPressure(int cellId, float pressure);
+    void setOreDensity(int cellId, float oreDensity);
+    void setOreType(int cellId, uint8_t oreType);
+
+    // Утилиты для климатических данных
+    float getAverageTemperature() const;
+    float getAverageHumidity() const;
+    std::vector<int> getCellsWithOre(uint8_t oreType) const;
+    void resetClimateData();
+
     // Утилиты
-    static QVector3D biomeColor(Biome b, float temperature = 0.5f) {
-        // Базовые цвета биомов
-        QVector3D baseColor;
-        switch (b) {
-        case Biome::Sea:      baseColor = { 0.12f, 0.40f, 0.85f }; break;
-        case Biome::Grass:    baseColor = { 0.20f, 0.75f, 0.30f }; break;
-        case Biome::Rock:     baseColor = { 0.60f, 0.60f, 0.60f }; break;
-        case Biome::Snow:     baseColor = { 0.95f, 0.95f, 0.98f }; break;
-        case Biome::Tundra:   baseColor = { 0.70f, 0.75f, 0.65f }; break;
-        case Biome::Desert:   baseColor = { 0.90f, 0.85f, 0.55f }; break;
-        case Biome::Savanna:  baseColor = { 0.75f, 0.70f, 0.30f }; break;
-        case Biome::Jungle:   baseColor = { 0.15f, 0.55f, 0.20f }; break;
-        default:              baseColor = { 1,1,1 }; break;
-        }
+    static QVector3D biomeColor(Biome b, float temperature = 0.5f);
 
-        // Корректировка цвета в зависимости от температуры
-        // Холодные температуры добавляют синий оттенок, теплые - красный
-        QVector3D tempAdjust;
-        if (temperature < 0.3f) {
-            // Холодно - синий оттенок
-            float coldFactor = (0.3f - temperature) / 0.3f;
-            tempAdjust = { 0.0f, 0.0f, 0.2f * coldFactor };
-        }
-        else if (temperature > 0.7f) {
-            // Жарко - красный/желтый оттенок
-            float heatFactor = (temperature - 0.7f) / 0.3f;
-            tempAdjust = { 0.15f * heatFactor, 0.1f * heatFactor, 0.0f };
-        }
-
-        return baseColor + tempAdjust;
-    }
-
-    // Утилиты для работы с климатическими данными
-    float getAverageTemperature() const {
-        float sum = 0.0f;
-        for (const auto& cell : cells_) sum += cell.temperature;
-        return cells_.empty() ? 0.0f : sum / cells_.size();
-    }
-
-    float getAverageHumidity() const {
-        float sum = 0.0f;
-        for (const auto& cell : cells_) sum += cell.humidity;
-        return cells_.empty() ? 0.0f : sum / cells_.size();
-    }
-
-    // Получение ячеек с определенным типом руды
-    std::vector<int> getCellsWithOre(uint8_t oreType) const {
-        std::vector<int> result;
-        for (const auto& cell : cells_) {
-            if (cell.oreType == oreType && cell.oreDensity > 0.1f) {
-                result.push_back(cell.id);
-            }
-        }
-        return result;
-    }
-
-    // Сброс всех климатических данных
-    void resetClimateData() {
-        for (auto& cell : cells_) {
-            cell.temperature = 0.0f;
-            cell.humidity = 0.0f;
-            cell.pressure = 0.0f;
-            cell.oreDensity = 0.0f;
-            cell.oreType = 0;
-        }
-    }
-
-    void setTemperature(int cellId, float temp) {
-        if (cellId >= 0 && cellId < (int)cells_.size()) {
-            cells_[cellId].temperature = temp;
-        }
-    }
-
-    void setHumidity(int cellId, float humidity) {
-        if (cellId >= 0 && cellId < (int)cells_.size()) {
-            cells_[cellId].humidity = humidity;
-        }
-    }
-
-    void setPressure(int cellId, float pressure) {
-        if (cellId >= 0 && cellId < (int)cells_.size()) {
-            cells_[cellId].pressure = pressure;
-        }
-    }
-
-    void setOreDensity(int cellId, float oreDensity) {
-        if (cellId >= 0 && cellId < (int)cells_.size()) {
-            cells_[cellId].oreDensity = oreDensity;
-        }
-    }
-
-    void setOreType(int cellId, uint8_t oreType) {
-        if (cellId >= 0 && cellId < (int)cells_.size()) {
-            cells_[cellId].oreType = oreType;
-        }
+    // Для тестирования
+    void debug_setCellsAndDual(std::vector<Cell> c, std::vector<QVector3D> d) {
+        cells_ = std::move(c);
+        dualVerts_ = std::move(d);
     }
 
 private:
@@ -213,3 +154,22 @@ private:
     std::vector<PickTri> pickTris_;                     // triangles for picking and green fill
     std::vector<std::array<int, 3>> dualOwners_; // для каждой дуальной вершины dv ? {cellA,cellB,cellC}
 };
+
+// Определение TreePlacement::getPosition
+inline QVector3D TreePlacement::getPosition(const HexSphereModel& model) const {
+    if (cellId < 0 || cellId >= static_cast<int>(model.cells().size())) {
+        return QVector3D(0, 0, 0);
+    }
+
+    const auto& cell = model.cells()[cellId];
+    if (triangleIdx < 0 || triangleIdx >= static_cast<int>(cell.poly.size())) {
+        return cell.centroid;
+    }
+
+    int nextIdx = (triangleIdx + 1) % cell.poly.size();
+    QVector3D v0 = model.dualVerts()[cell.poly[triangleIdx]];
+    QVector3D v1 = model.dualVerts()[cell.poly[nextIdx]];
+    QVector3D v2 = cell.centroid;
+
+    return (v0 * baryU + v1 * baryV + v2 * baryW).normalized();
+}

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <QMatrix4x4>
 #include <QOpenGLFunctions_3_3_Core>
@@ -13,6 +13,7 @@
 #include "ui/PerformanceStats.h"
 #include "ECS/ComponentStorage.h"
 #include "controllers/HexSphereSceneController.h"
+#include "resources/HexSphereWidget_shaders.h"
 #include "model/ModelHandler.h"
 
 class TerrainRenderer;
@@ -121,6 +122,11 @@ private:
     std::unique_ptr<WaterRenderer> waterRenderer_;
     std::unique_ptr<EntityRenderer> entityRenderer_;
     std::unique_ptr<OverlayRenderer> overlayRenderer_;
+
+    GLuint treeColorTexture_ = 0;
+    GLint uTreeTexture_ = -1;
+
+    GLuint createTreeColorTexture();
 
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;

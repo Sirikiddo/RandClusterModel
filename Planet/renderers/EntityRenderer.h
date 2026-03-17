@@ -9,20 +9,20 @@
 class EntityRenderer {
 public:
     EntityRenderer(QOpenGLFunctions_3_3_Core* gl,
-                   GLuint progWire,
-                   GLuint progSel,
-                   GLuint progModel,
-                   GLint uMvpWire,
-                   GLint uMvpSel,
-                   GLint uMvpModel,
-                   GLint uModel,
-                   GLint uLightDir,
-                   GLint uViewPos,
-                   GLint uColor,
-                   GLint uUseTexture,
-                   GLuint vaoPyramid,
-                   const GLsizei& pyramidVertexCount,
-                   const std::shared_ptr<ModelHandler>& treeModel);
+        GLuint progWire,
+        GLuint progSel,
+        GLuint progModel,
+        GLint uMvpWire,
+        GLint uMvpSel,
+        GLint uMvpModel,
+        GLint uModel,
+        GLint uLightDir,
+        GLint uViewPos,
+        GLint uColor,
+        GLint uUseTexture,
+        GLuint vaoPyramid,
+        const GLsizei& pyramidVertexCount,
+        const std::shared_ptr<ModelHandler>& treeModel);
 
     void renderEntities(const HexSphereRenderer::RenderContext& ctx) const;
     void renderTrees(const HexSphereRenderer::RenderContext& ctx) const;

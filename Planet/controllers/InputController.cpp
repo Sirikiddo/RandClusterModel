@@ -1,4 +1,4 @@
-#include "controllers/InputController.h"
+﻿#include "controllers/InputController.h"
 
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -16,39 +16,40 @@
 #include "model/SurfacePlacement.h"
 
 namespace {
-bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
-    const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
-    float& tOut) {
-    const float EPS = 1e-6f;
-    const QVector3D e1 = v1 - v0;
-    const QVector3D e2 = v2 - v0;
-    const QVector3D p = QVector3D::crossProduct(d, e2);
-    const float det = QVector3D::dotProduct(e1, p);
-    if (std::fabs(det) < EPS) return false;
-    const float invDet = 1.0f / det;
-    const QVector3D t = o - v0;
-    const float u = QVector3D::dotProduct(t, p) * invDet; if (u < -EPS || u > 1.0f + EPS) return false;
-    const QVector3D q = QVector3D::crossProduct(t, e1);
-    const float v = QVector3D::dotProduct(d, q) * invDet; if (v < -EPS || u + v > 1.0f + EPS) return false;
-    const float tt = QVector3D::dotProduct(e2, q) * invDet; if (tt <= EPS) return false;
-    tOut = tt; return true;
-}
+    bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
+        const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
+        float& tOut) {
+        const float EPS = 1e-6f;
+        const QVector3D e1 = v1 - v0;
+        const QVector3D e2 = v2 - v0;
+        const QVector3D p = QVector3D::crossProduct(d, e2);
+        const float det = QVector3D::dotProduct(e1, p);
+        if (std::fabs(det) < EPS) return false;
+        const float invDet = 1.0f / det;
+        const QVector3D t = o - v0;
+        const float u = QVector3D::dotProduct(t, p) * invDet; if (u < -EPS || u > 1.0f + EPS) return false;
+        const QVector3D q = QVector3D::crossProduct(t, e1);
+        const float v = QVector3D::dotProduct(d, q) * invDet; if (v < -EPS || u + v > 1.0f + EPS) return false;
+        const float tt = QVector3D::dotProduct(e2, q) * invDet; if (tt <= EPS) return false;
+        tOut = tt; return true;
+    }
 
-static void printGlInfo(QOpenGLFunctions_3_3_Core* gl) {
-    const GLubyte* vendor = gl->glGetString(GL_VENDOR);
-    const GLubyte* renderer = gl->glGetString(GL_RENDERER);
-    const GLubyte* version = gl->glGetString(GL_VERSION);
+    static void printGlInfo(QOpenGLFunctions_3_3_Core* gl) {
+        const GLubyte* vendor = gl->glGetString(GL_VENDOR);
+        const GLubyte* renderer = gl->glGetString(GL_RENDERER);
+        const GLubyte* version = gl->glGetString(GL_VERSION);
 
-    qDebug() << "=== OpenGL Device Info ===";
-    qDebug() << "GPU Vendor:   " << reinterpret_cast<const char*>(vendor);
-    qDebug() << "GPU Renderer: " << reinterpret_cast<const char*>(renderer);
-    qDebug() << "GL Version:   " << reinterpret_cast<const char*>(version);
-    qDebug() << "===========================";
-}
+        qDebug() << "=== OpenGL Device Info ===";
+        qDebug() << "GPU Vendor:   " << reinterpret_cast<const char*>(vendor);
+        qDebug() << "GPU Renderer: " << reinterpret_cast<const char*>(renderer);
+        qDebug() << "GL Version:   " << reinterpret_cast<const char*>(version);
+        qDebug() << "===========================";
+    }
 }
 
 InputController::InputController(CameraController& camera)
-    : camera_(camera) {}
+    : camera_(camera) {
+}
 
 void InputController::initialize(QOpenGLWidget* owner) {
     owner_ = owner;
@@ -88,9 +89,9 @@ InputController::Response InputController::render() {
     Response response;
     if (!renderer_) return response;
 
-    HexSphereRenderer::RenderGraph graph{scene_, ecs_, scene_.heightStep()};
-    HexSphereRenderer::RenderCamera camera{camera_.view(), camera_.projection()};
-    HexSphereRenderer::SceneLighting lighting{lightDir_, waterTime_};
+    HexSphereRenderer::RenderGraph graph{ scene_, ecs_, scene_.heightStep() };
+    HexSphereRenderer::RenderCamera camera{ camera_.view(), camera_.projection() };
+    HexSphereRenderer::SceneLighting lighting{ lightDir_, waterTime_ };
     renderer_->renderScene(graph, camera, lighting);
     stats_.frameRendered();
     return response;
@@ -337,7 +338,8 @@ void InputController::buildAndShowSelectedPath(Response& response) {
     if (renderer_) {
         if (auto poly = scene_.buildPathPolyline()) {
             renderer_->uploadPath(*poly);
-        } else {
+        }
+        else {
             renderer_->uploadPath({});
         }
     }
@@ -436,7 +438,7 @@ std::optional<InputController::PickHit> InputController::pickEntityAt(int sx, in
             bestEntityId = e.id;
             bestPos = ro + rd * t;
         }
-    });
+        });
 
     if (bestEntityId != -1) {
         return PickHit{ -1, bestEntityId, bestPos, bestT, true };
@@ -477,14 +479,43 @@ void InputController::deselectEntity() {
     }
 }
 
+
 void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     if (selectedEntityId_ == -1) return;
     auto* entity = ecs_.getEntity(selectedEntityId_);
     if (!entity) return;
+
+    // Запоминаем старую позицию
+    int oldCell = entity->currentCell;
+
     if (cellId >= 0 && cellId < scene_.model().cellCount()) {
         entity->currentCell = cellId;
         if (auto* transform = ecs_.get<ecs::Transform>(entity->id)) {
             transform->position = computeSurfacePoint(scene_, cellId);
+        }
+
+        // Сначала ОЧИЩАЕМ все выделения
+        scene_.clearSelection();
+
+        // Если есть старая ячейка и она отличается от новой
+        if (oldCell >= 0 && oldCell != cellId) {
+            // Выделяем старую ячейку
+            scene_.toggleCellSelection(oldCell);
+        }
+
+        // Всегда выделяем новую ячейку
+        scene_.toggleCellSelection(cellId);
+
+        // Обновляем выделение в рендере
+        uploadSelection();
+
+        // Если есть старая и новая (разные) - строим путь
+        if (oldCell >= 0 && oldCell != cellId) {
+            buildAndShowSelectedPath(response);
+        }
+        else {
+            // Если старая и новая совпадают - очищаем путь
+            clearPath(response);
         }
     }
     deselectEntity();
@@ -523,7 +554,7 @@ bool InputController::isOreVisualizationEnabled() const {
 }
 
 HexSphereModel* InputController::getModel() {
-    // �������� ������ �� �����
+    // �������� ������ �� �����
     return &scene_.modelMutable();
 }
 
@@ -542,5 +573,3 @@ InputController::Response InputController::regenerateOreDeposits() {
     r.hudMessage = QString("Ore deposits regenerated");
     return r;
 }
-
-

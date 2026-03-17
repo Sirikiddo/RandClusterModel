@@ -46,7 +46,7 @@ WaterGeometryData WaterMeshGenerator::buildWaterGeometry(const HexSphereModel& m
         subdivideTriangle(mid01, v1, mid12, edge_mid01, edge1, edge_mid12, level - 1);
         subdivideTriangle(mid20, mid12, v2, edge_mid20, edge_mid12, edge2, level - 1);
         subdivideTriangle(mid01, mid12, mid20, edge_mid01, edge_mid12, edge_mid20, level - 1);
-    };
+        };
 
     for (size_t cellIdx = 0; cellIdx < cells.size(); ++cellIdx) {
         const auto& cell = cells[cellIdx];

@@ -1,15 +1,15 @@
 #include "renderers/WaterRenderer.h"
 
 WaterRenderer::WaterRenderer(QOpenGLFunctions_3_3_Core* gl,
-                             GLuint program,
-                             GLint uMvp,
-                             GLint uTime,
-                             GLint uLightDir,
-                             GLint uViewPos,
-                             GLint uEnvMap,
-                             GLuint& envCubemap,
-                             GLuint vao,
-                             const GLsizei& indexCount)
+    GLuint program,
+    GLint uMvp,
+    GLint uTime,
+    GLint uLightDir,
+    GLint uViewPos,
+    GLint uEnvMap,
+    GLuint& envCubemap,
+    GLuint vao,
+    const GLsizei& indexCount)
     : gl_(gl)
     , program_(program)
     , uMvp_(uMvp)
@@ -19,7 +19,8 @@ WaterRenderer::WaterRenderer(QOpenGLFunctions_3_3_Core* gl,
     , uEnvMap_(uEnvMap)
     , envCubemap_(envCubemap)
     , vao_(vao)
-    , indexCount_(indexCount) {}
+    , indexCount_(indexCount) {
+}
 
 void WaterRenderer::render(const HexSphereRenderer::RenderContext& ctx) const {
     if (indexCount_ == 0 || program_ == 0) return;

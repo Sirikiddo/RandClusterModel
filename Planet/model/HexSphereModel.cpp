@@ -88,7 +88,7 @@ void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
     dualOwners_.resize(ico.F.size());
     for (int f = 0; f < (int)ico.F.size(); ++f) {
         const auto& t = ico.F[f];
-        dualOwners_[f] = { t.a, t.b, t.c }; // эти индексы и есть id клеток
+        dualOwners_[f] = { t.a, t.b, t.c };
     }
 
     // 2) Build cells: one per primal vertex
@@ -121,7 +121,6 @@ void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
 
         // Neighbors in CCW order: for each consecutive pair of faces around v, find the opposite vertex
         cell.neighbors.reserve(cell.poly.size());
-        auto faceHasV = [&](const Tri& t, int vid) { return t.a == vid || t.b == vid || t.c == vid; };
 
         for (size_t i = 0; i < cell.poly.size(); ++i) {
             int f0 = cell.poly[i];
@@ -129,7 +128,6 @@ void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
             const Tri& T0 = ico.F[f0];
             const Tri& T1 = ico.F[f1];
             // Find the shared edge that includes primal vertex v and some neighbor w
-            // T0 and T1 both contain v; find the other common vertex between T0 and T1 (besides v)
             int commonOther = -1;
             int t0v[3] = { T0.a,T0.b,T0.c };
             int t1v[3] = { T1.a,T1.b,T1.c };
@@ -148,6 +146,13 @@ void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
         if (!cell.poly.empty()) sum /= float(cell.poly.size());
         if (!sum.isNull()) sum.normalize();
         cell.centroid = sum;
+
+        // Инициализируем климатические данные
+        cell.temperature = 0.5f;
+        cell.humidity = 0.5f;
+        cell.pressure = 0.5f;
+        cell.oreDensity = 0.0f;
+        cell.oreType = 0;
     }
 
     // 3) Build unique wire edges of the dual mesh
@@ -186,7 +191,7 @@ void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
 
 void HexSphereModel::setHeight(int cellId, int h) {
     if (cellId < 0 || cellId >= static_cast<int>(cells_.size()))
-        return; // защита от некорректного индекса
+        return;
     cells_[cellId].height = h;
 }
 
@@ -200,4 +205,97 @@ void HexSphereModel::setBiome(int cellId, Biome b) {
     if (cellId < 0 || cellId >= static_cast<int>(cells_.size()))
         return;
     cells_[cellId].biome = b;
+}
+
+void HexSphereModel::setTemperature(int cellId, float temp) {
+    if (cellId >= 0 && cellId < (int)cells_.size()) {
+        cells_[cellId].temperature = temp;
+    }
+}
+
+void HexSphereModel::setHumidity(int cellId, float humidity) {
+    if (cellId >= 0 && cellId < (int)cells_.size()) {
+        cells_[cellId].humidity = humidity;
+    }
+}
+
+void HexSphereModel::setPressure(int cellId, float pressure) {
+    if (cellId >= 0 && cellId < (int)cells_.size()) {
+        cells_[cellId].pressure = pressure;
+    }
+}
+
+void HexSphereModel::setOreDensity(int cellId, float oreDensity) {
+    if (cellId >= 0 && cellId < (int)cells_.size()) {
+        cells_[cellId].oreDensity = oreDensity;
+    }
+}
+
+void HexSphereModel::setOreType(int cellId, uint8_t oreType) {
+    if (cellId >= 0 && cellId < (int)cells_.size()) {
+        cells_[cellId].oreType = oreType;
+    }
+}
+
+float HexSphereModel::getAverageTemperature() const {
+    float sum = 0.0f;
+    for (const auto& cell : cells_) sum += cell.temperature;
+    return cells_.empty() ? 0.0f : sum / cells_.size();
+}
+
+float HexSphereModel::getAverageHumidity() const {
+    float sum = 0.0f;
+    for (const auto& cell : cells_) sum += cell.humidity;
+    return cells_.empty() ? 0.0f : sum / cells_.size();
+}
+
+std::vector<int> HexSphereModel::getCellsWithOre(uint8_t oreType) const {
+    std::vector<int> result;
+    for (const auto& cell : cells_) {
+        if (cell.oreType == oreType && cell.oreDensity > 0.1f) {
+            result.push_back(cell.id);
+        }
+    }
+    return result;
+}
+
+void HexSphereModel::resetClimateData() {
+    for (auto& cell : cells_) {
+        cell.temperature = 0.0f;
+        cell.humidity = 0.0f;
+        cell.pressure = 0.0f;
+        cell.oreDensity = 0.0f;
+        cell.oreType = 0;
+    }
+}
+
+QVector3D HexSphereModel::biomeColor(Biome b, float temperature) {
+    // Базовые цвета биомов
+    QVector3D baseColor;
+    switch (b) {
+    case Biome::Sea:      baseColor = { 0.12f, 0.40f, 0.85f }; break;
+    case Biome::Grass:    baseColor = { 0.20f, 0.75f, 0.30f }; break;
+    case Biome::Rock:     baseColor = { 0.60f, 0.60f, 0.60f }; break;
+    case Biome::Snow:     baseColor = { 0.95f, 0.95f, 0.98f }; break;
+    case Biome::Tundra:   baseColor = { 0.70f, 0.75f, 0.65f }; break;
+    case Biome::Desert:   baseColor = { 0.90f, 0.85f, 0.55f }; break;
+    case Biome::Savanna:  baseColor = { 0.75f, 0.70f, 0.30f }; break;
+    case Biome::Jungle:   baseColor = { 0.15f, 0.55f, 0.20f }; break;
+    default:              baseColor = { 1,1,1 }; break;
+    }
+
+    // Корректировка цвета в зависимости от температуры
+    QVector3D tempAdjust;
+    if (temperature < 0.3f) {
+        // Холодно - синий оттенок
+        float coldFactor = (0.3f - temperature) / 0.3f;
+        tempAdjust = { 0.0f, 0.0f, 0.2f * coldFactor };
+    }
+    else if (temperature > 0.7f) {
+        // Жарко - красный/желтый оттенок
+        float heatFactor = (temperature - 0.7f) / 0.3f;
+        tempAdjust = { 0.15f * heatFactor, 0.1f * heatFactor, 0.0f };
+    }
+
+    return baseColor + tempAdjust;
 }

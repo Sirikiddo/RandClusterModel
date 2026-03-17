@@ -1,4 +1,4 @@
-#pragma once
+п»ї#pragma once
 
 #include <QMatrix4x4>
 #include <QPoint>
@@ -50,7 +50,7 @@ public:
 
     Response advanceWaterTime(float dt);
 
-    // Для системы руд - новые методы
+    // пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ - пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
     Response toggleOreVisualization();
     void setOreAnimationTime(float time);
     void setOreVisualizationEnabled(bool enabled);
@@ -58,7 +58,7 @@ public:
     bool isOreVisualizationEnabled() const;
     HexSphereModel* getModel();
 
-    // Дополнительные методы для управления системой руд
+    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ
     Response setOreAnimationSpeed(float speed);
     Response regenerateOreDeposits();
 
@@ -104,7 +104,7 @@ private:
     float waterTime_ = 0.0f;
     QVector3D lightDir_ = QVector3D(1, 1, 1).normalized();
 
-    // Параметры для системы руд
+    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
     float oreAnimationSpeed_ = 0.1f;

@@ -3,8 +3,8 @@
 
 namespace ecs {
 
-struct Mesh {
-    QString meshId{"pyramid"};
-};
+    struct Mesh {
+        QString meshId{ "pyramid" };
+    };
 
 } // namespace ecs
