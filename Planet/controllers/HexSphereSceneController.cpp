@@ -6,6 +6,9 @@
 #include "generation/MeshGenerators/TerrainMeshGenerator.h"
 #include "generation/MeshGenerators/WaterMeshGenerator.h"
 #include "generation/MeshGenerators/WireMeshGenerator.h"
+#include <QVector3D>
+#include <qelapsedtimer.h>
+#include <QElapsedTimer>
 
 HexSphereSceneController::HexSphereSceneController()
     : generator_(std::make_unique<ClimateBiomeTerrainGenerator>()) {
@@ -127,4 +130,135 @@ void HexSphereSceneController::updateTerrainMesh() {
     options.doEdgeCliffs = true;
 
     terrainCPU_ = TerrainMeshGenerator::buildTerrainMesh(model_, options);
+}
+
+// ========== НОВЫЕ МЕТОДЫ ==========
+
+// Преобразование плоского массива float в массив QVector3D
+static std::vector<QVector3D> convertToQVector3D(const std::vector<float>& positions) {
+    std::vector<QVector3D> result;
+    result.reserve(positions.size() / 3);
+    for (size_t i = 0; i < positions.size(); i += 3) {
+        result.emplace_back(positions[i], positions[i + 1], positions[i + 2]);
+    }
+    return result;
+}
+
+// ОСНОВНАЯ ФУНКЦИЯ: фильтрация треугольников по видимости
+//std::vector<uint32_t> HexSphereSceneController::getVisibleIndices(const QVector3D& cameraPos) const {
+//    if (terrainCPU_.idx.empty() || terrainCPU_.pos.empty()) {
+//        return terrainCPU_.idx;
+//    }
+//
+//    // Валидируем/перестраиваем кэш при необходимости
+//    validateCache();
+//
+//    QVector3D planetCenter(0, 0, 0);
+//    QVector3D toCam = (cameraPos - planetCenter).normalized();
+//
+//    std::vector<uint32_t> visibleIndices;
+//    visibleIndices.reserve(terrainCPU_.idx.size() / 2);
+//
+//    // Используем кэшированные центры
+//    for (const auto& tri : triangleCache_) {
+//        QVector3D normal = tri.center.normalized();
+//
+//        if (QVector3D::dotProduct(normal, toCam) > 0.0f) {
+//            visibleIndices.push_back(tri.i0);
+//            visibleIndices.push_back(tri.i1);
+//            visibleIndices.push_back(tri.i2);
+//        }
+//    }
+//
+//    return visibleIndices;
+//}
+
+std::vector<uint32_t> HexSphereSceneController::getVisibleIndices(const QVector3D& cameraPos) const {
+#ifdef __AVX2__
+    return getVisibleIndicesSIMD(cameraPos);  // Используем SIMD если доступно
+#else
+    // Fallback на обычную версию
+    validateCache();
+
+    QVector3D planetCenter(0, 0, 0);
+    QVector3D toCam = (cameraPos - planetCenter).normalized();
+
+    std::vector<uint32_t> visibleIndices;
+    visibleIndices.reserve(terrainCPU_.idx.size() / 2);
+
+    for (const auto& tri : triangleCache_) {
+        QVector3D normal = tri.center.normalized();
+        if (QVector3D::dotProduct(normal, toCam) > 0.0f) {
+            visibleIndices.push_back(tri.i0);
+            visibleIndices.push_back(tri.i1);
+            visibleIndices.push_back(tri.i2);
+        }
+    }
+
+    return visibleIndices;
+#endif
+}
+
+// Получить отфильтрованный TerrainMesh для текущей позиции камеры
+TerrainMesh HexSphereSceneController::getVisibleTerrainMesh() const {
+    TerrainMesh visibleMesh = terrainCPU_;  // Копируем весь mesh
+
+    // Фильтруем индексы на основе текущей позиции камеры
+    visibleMesh.idx = getVisibleIndices(cameraPos_);
+
+    return visibleMesh;
+}
+
+// Обновить видимость (вызывается каждый кадр перед рендерингом)
+void HexSphereSceneController::updateVisibility(const QVector3D& cameraPos) {
+    // Сохраняем новую позицию камеры
+    setCameraPosition(cameraPos);
+
+    // Здесь можно добавить логику, если нужно что-то делать при изменении видимости
+    // Например, отметить, что индексы нужно перезагрузить в GPU
+}
+
+// Получить статистику по видимости
+std::pair<size_t, size_t> HexSphereSceneController::getVisibilityStats() const {
+    size_t totalTriangles = terrainCPU_.idx.size() / 3;
+    size_t visibleTriangles = getVisibleIndices(cameraPos_).size() / 3;
+    return { visibleTriangles, totalTriangles };
+}
+
+void HexSphereSceneController::rebuildCache() const {
+    if (terrainCPU_.idx.empty() || terrainCPU_.pos.empty()) {
+        triangleCache_.clear();
+        cacheValid_ = false;
+        return;
+    }
+
+    // Конвертируем позиции в QVector3D
+    std::vector<QVector3D> positions = convertToQVector3D(terrainCPU_.pos);
+
+    triangleCache_.clear();
+    triangleCache_.reserve(terrainCPU_.idx.size() / 3);
+
+    QElapsedTimer timer;
+    timer.start();
+
+    for (size_t i = 0; i + 2 < terrainCPU_.idx.size(); i += 3) {
+        uint32_t i0 = terrainCPU_.idx[i];
+        uint32_t i1 = terrainCPU_.idx[i + 1];
+        uint32_t i2 = terrainCPU_.idx[i + 2];
+
+        QVector3D center = (positions[i0] + positions[i1] + positions[i2]) * (1.0f / 3.0f);
+
+        triangleCache_.push_back({ center, i0, i1, i2, 0.0f });
+    }
+
+    qDebug() << "Cache rebuilt:" << triangleCache_.size() << "triangles in"
+        << timer.elapsed() << "ms";
+
+    cacheValid_ = true;
+}
+
+void HexSphereSceneController::validateCache() const {
+    if (!cacheValid_ || triangleCache_.size() != terrainCPU_.idx.size() / 3) {
+        rebuildCache();
+    }
 }
