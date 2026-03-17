@@ -291,42 +291,90 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
 }
 
 // ========== НОВЫЙ МЕТОД ДЛЯ ОБНОВЛЕНИЯ ВИДИМОСТИ ==========
+//void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
+//    if (!glReady_ || !lastScene_) return;
+//
+//    // Обновляем позицию камеры в сцене
+//    lastScene_->setCameraPosition(cameraPos);
+//
+//    // Наглядно убедиться, что треугольников реально меньше
+//    static QElapsedTimer timer;
+//    if (!timer.isValid()) {
+//        timer.start();
+//    }
+//    if (timer.elapsed() < 100) return;  // Не чаще чем раз в 100 мс
+//    timer.restart();
+//
+//    // Проверяем, двигалась ли камера
+//    if (lastScene_->hasCameraMoved()) {
+//        // Получаем только видимые индексы
+//        std::vector<uint32_t> visibleIndices = lastScene_->getVisibleIndices(cameraPos);
+//
+//        if (visibleIndices.empty()) {
+//            qDebug() << "No visible triangles!";
+//            return;
+//        }
+//
+//        qDebug() << "Updating visibility - visible indices:" << visibleIndices.size();
+//
+//        // Обновляем ТОЛЬКО индексный буфер
+//        gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
+//        gl_->glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
+//            visibleIndices.size() * sizeof(uint32_t),
+//            visibleIndices.data());
+//
+//        // Обновляем счетчик для отрисовки
+//        terrainIndexCount_ = GLsizei(visibleIndices.size());
+//
+//        // Отмечаем, что камера обработана
+//        lastScene_->updateLastCameraPosition();
+//
+//        qDebug() << "Visibility updated, drawing" << terrainIndexCount_ << "indices";
+//    }
+//}
+
 void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
     if (!glReady_ || !lastScene_) return;
 
     // Обновляем позицию камеры в сцене
     lastScene_->setCameraPosition(cameraPos);
 
-    // Наглядно убедиться, что треугольников реально меньше
-  /*  static QElapsedTimer timer;
-    if (!timer.hasExpired(500)) return;
-    timer.start();*/
+    // УДАЛИТЬ эту строку:
+    // lastScene_->updatePrediction(cameraPos);
 
-    // Проверяем, двигалась ли камера
-    if (lastScene_->hasCameraMoved()) {
-        // Получаем только видимые индексы
+    // Используем адаптивную логику для определения необходимости обновления
+    if (lastScene_->shouldUpdateVisibility() && lastScene_->hasCameraMoved(0.1f)) {
+        QElapsedTimer filterTimer;
+        filterTimer.start();
+
+        // ИСПРАВИТЬ: использовать обычную версию, не с предсказанием
         std::vector<uint32_t> visibleIndices = lastScene_->getVisibleIndices(cameraPos);
 
-        if (visibleIndices.empty()) {
-            qDebug() << "No visible triangles!";
-            return;
+        qint64 elapsed = filterTimer.elapsed();
+
+        // Статистика
+        static int updateCount = 0;
+        static qint64 totalTime = 0;
+        updateCount++;
+        totalTime += elapsed;
+
+        if (updateCount % 10 == 0) {
+            qDebug() << "=== ADAPTIVE UPDATE STATS ===";  // Вернуть старое название
+            qDebug() << "Avg filter time:" << (totalTime / updateCount) << "ms";
+            qDebug() << "Triangles:" << (visibleIndices.size() / 3)
+                << "/" << (lastScene_->terrain().idx.size() / 3);
+            qDebug() << "==============================";
         }
 
-        qDebug() << "Updating visibility - visible indices:" << visibleIndices.size();
-
-        // Обновляем ТОЛЬКО индексный буфер
+        // Обновляем индексный буфер
         gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
-        gl_->glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
+        gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER,
             visibleIndices.size() * sizeof(uint32_t),
-            visibleIndices.data());
+            visibleIndices.data(),
+            GL_DYNAMIC_DRAW);
 
-        // Обновляем счетчик для отрисовки
         terrainIndexCount_ = GLsizei(visibleIndices.size());
-
-        // Отмечаем, что камера обработана
         lastScene_->updateLastCameraPosition();
-
-        qDebug() << "Visibility updated, drawing" << terrainIndexCount_ << "indices";
     }
 }
 

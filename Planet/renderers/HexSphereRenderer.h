@@ -16,6 +16,9 @@
 #include "controllers/HexSphereSceneController.h"
 #include "model/ModelHandler.h"
 
+#include <QMutex>
+#include <QtConcurrent/QtConcurrent>
+
 class TerrainRenderer;
 class WaterRenderer;
 class EntityRenderer;
@@ -77,6 +80,22 @@ public:
 
     bool ready() const { return glReady_; }
     GLuint envCubemap() const { return envCubemap_; }
+
+    // Для двойной буферизации
+    struct VisibilityBuffer {
+        std::vector<uint32_t> indices;
+        bool ready = false;
+        int frameAge = 0;
+    };
+
+    VisibilityBuffer buffers_[2];
+    int currentBuffer_ = 0;
+    int nextBuffer_ = 1;
+
+    void swapBuffers() {
+        std::swap(currentBuffer_, nextBuffer_);
+        buffers_[nextBuffer_].ready = false;
+    }
 
 private:
     GLuint makeProgram(const char* vs, const char* fs);
