@@ -106,10 +106,8 @@ void HexSphereWidget::resizeGL(int w, int h) {
 }
 
 void HexSphereWidget::paintGL() {
-    //applyResponse(inputController_.render());
     if (!context() || !context()->isValid() || !isValid()) return;
 
-    // dt
     if (!timerStarted_) {
         frameTimer_.start();
         timerStarted_ = true;
@@ -117,6 +115,12 @@ void HexSphereWidget::paintGL() {
     const qint64 ns = frameTimer_.nsecsElapsed();
     frameTimer_.restart();
     float dt = float(ns) * 1e-9f;
+
+    // Ограничиваем dt, чтобы избежать больших скачков
+    dt = std::min(dt, 0.1f);
+
+    // Обновляем анимации в ECS
+    inputController_.getECS().update(dt);  // <-- ИСПРАВЛЕНО
 
     // 1) tick facade (пока только overlay/fps)
     engine_->tick(dt);

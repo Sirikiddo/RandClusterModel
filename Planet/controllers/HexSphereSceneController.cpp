@@ -81,6 +81,9 @@ void HexSphereSceneController::toggleCellSelection(int cellId) {
     }
 }
 
+
+
+
 std::optional<std::vector<QVector3D>> HexSphereSceneController::buildPathPolyline() const {
     if (selectedCells_.size() != 2) {
         return std::nullopt;
@@ -261,4 +264,5 @@ void HexSphereSceneController::validateCache() const {
     if (!cacheValid_ || triangleCache_.size() != terrainCPU_.idx.size() / 3) {
         rebuildCache();
     }
+
 }
