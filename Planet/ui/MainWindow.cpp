@@ -13,10 +13,19 @@
 #include <QToolBar>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
+    qDebug() << "MainWindow constructor start";
+
     cameraController_ = std::make_unique<CameraController>();
+    qDebug() << "CameraController created";
+
     inputController_ = std::make_unique<InputController>(*cameraController_);
+    qDebug() << "InputController created";
+
     glw_ = new HexSphereWidget(*cameraController_, *inputController_, this);
+    qDebug() << "HexSphereWidget created";
+
     setCentralWidget(glw_);
+    qDebug() << "Central widget set";
 
     auto* tb = addToolBar("Controls");
     levelSpin_ = new QSpinBox(tb);

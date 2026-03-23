@@ -2,6 +2,7 @@
 
 #include <QMatrix4x4>
 #include <QOpenGLFunctions_3_3_Core>
+#include <QOpenGLVertexArrayObject>
 #include <QVector3D>
 #include <QOpenGLWidget>
 #include <QtOpenGL>
@@ -16,6 +17,9 @@
 #include "resources/HexSphereWidget_shaders.h"
 #include "model/ModelHandler.h"
 
+#include <QMutex>
+#include <QtConcurrent/QtConcurrent>
+
 class TerrainRenderer;
 class WaterRenderer;
 class EntityRenderer;
@@ -26,6 +30,9 @@ public:
 
     void setOreAnimationTime(float time);
     void setOreVisualizationEnabled(bool enabled);
+
+    void updateVisibility(const QVector3D& cameraPos);
+
 
     struct RenderGraph {
         const HexSphereSceneController& scene;
@@ -75,6 +82,22 @@ public:
     bool ready() const { return glReady_; }
     GLuint envCubemap() const { return envCubemap_; }
 
+    // Для двойной буферизации
+    struct VisibilityBuffer {
+        std::vector<uint32_t> indices;
+        bool ready = false;
+        int frameAge = 0;
+    };
+
+    VisibilityBuffer buffers_[2];
+    int currentBuffer_ = 0;
+    int nextBuffer_ = 1;
+
+    void swapBuffers() {
+        std::swap(currentBuffer_, nextBuffer_);
+        buffers_[nextBuffer_].ready = false;
+    }
+
 private:
     GLuint makeProgram(const char* vs, const char* fs);
     void generateEnvCubemap();
@@ -85,6 +108,11 @@ private:
     void uploadSelectionOutlineInternal(const std::vector<float>& vertices);
     void uploadPathInternal(const std::vector<QVector3D>& points);
     void uploadWaterInternal(const WaterGeometryData& data);
+
+    // НОВЫЙ МЕТОД
+    void recreateTerrainVAO();
+
+    HexSphereSceneController* lastScene_ = nullptr;
 
     QOpenGLWidget* owner_ = nullptr;
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
@@ -99,11 +127,13 @@ private:
     GLuint progWater_ = 0, progModel_ = 0;
     GLint uMVP_Wire_ = -1, uMVP_Terrain_ = -1, uMVP_Sel_ = -1;
     GLint uModel_ = -1, uLightDir_ = -1;
+    GLint uNormalMatrix_ = -1;
     GLint uMVP_Water_ = -1, uTime_Water_ = -1, uLightDir_Water_ = -1, uViewPos_Water_ = -1;
     GLint uMVP_Model_ = -1, uModel_Model_ = -1, uLightDir_Model_ = -1, uViewPos_Model_ = -1, uColor_Model_ = -1, uUseTexture_ = -1;
 
     GLuint vaoWire_ = 0, vboPositions_ = 0;
-    GLuint vaoTerrain_ = 0, vboTerrainPos_ = 0, vboTerrainCol_ = 0, vboTerrainNorm_ = 0, iboTerrain_ = 0;
+    QOpenGLVertexArrayObject vaoTerrain_;
+    GLuint vboTerrainPos_ = 0, vboTerrainCol_ = 0, vboTerrainNorm_ = 0, iboTerrain_ = 0;
     GLuint vaoSel_ = 0, vboSel_ = 0;
     GLuint vaoPath_ = 0, vboPath_ = 0;
     GLuint vaoPyramid_ = 0, vboPyramid_ = 0;
@@ -130,4 +160,7 @@ private:
 
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
+    bool firstRenderDone_ = false;
+
+    size_t totalIndexCount_ = 0;
 };

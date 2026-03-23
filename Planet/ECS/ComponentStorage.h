@@ -9,6 +9,7 @@
 #include "Collider.h"
 #include "Material.h"
 #include "Script.h"
+#include "Animation.h"
 
 namespace ecs {
 
@@ -94,6 +95,7 @@ namespace ecs {
         std::unordered_map<EntityId, Collider> colliders_;
         std::unordered_map<EntityId, Material> materials_;
         std::unordered_map<EntityId, Script> scripts_;
+        std::unordered_map<EntityId, Animation> animations_;
     };
 
     // Template specializations to fetch component maps.
@@ -112,6 +114,9 @@ namespace ecs {
     template<>
     inline std::unordered_map<EntityId, Script>& ComponentStorage::mapFor<Script>() { return scripts_; }
 
+    template<>
+    inline std::unordered_map<EntityId, Animation>& ComponentStorage::mapFor<Animation>() { return animations_; }
+
     // Const overloads.
     template<>
     inline const std::unordered_map<EntityId, Transform>& ComponentStorage::mapFor<Transform>() const { return transforms_; }
@@ -128,4 +133,6 @@ namespace ecs {
     template<>
     inline const std::unordered_map<EntityId, Script>& ComponentStorage::mapFor<Script>() const { return scripts_; }
 
+    template<>
+    inline const std::unordered_map<EntityId, Animation>& ComponentStorage::mapFor<Animation>() const { return animations_; }
 } // namespace ecs

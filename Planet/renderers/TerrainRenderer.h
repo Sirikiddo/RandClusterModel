@@ -12,10 +12,14 @@ public:
         GLint uMvp,
         GLint uModel,
         GLint uLightDir,
-        GLuint vao,
-        const GLsizei& indexCount);
+        GLint uNormalMatrix,
+        GLuint vao);
 
-    void render(const HexSphereRenderer::RenderContext& ctx) const;
+    void render(const HexSphereRenderer::RenderContext& ctx, GLsizei indexCount) const;
+    void updateVAO(GLuint newVao) {
+        vao_ = newVao;
+        qDebug() << "TerrainRenderer VAO updated to:" << newVao;
+    }
 
 private:
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
@@ -23,7 +27,6 @@ private:
     GLint uMvp_ = -1;
     GLint uModel_ = -1;
     GLint uLightDir_ = -1;
+    GLint uNormalMatrix_ = -1;
     GLuint vao_ = 0;
-    const GLsizei& indexCount_;
 };
-

@@ -1,8 +1,32 @@
 #include "ComponentStorage.h"
+#include "Animation.h"
 
 #include <algorithm>
 
 namespace ecs {
+
+    static QVector3D samplePolylineByDistance(const Animation& anim, float distance) {
+        if (anim.pathPoints.empty()) return anim.startPos;
+        if (anim.pathPoints.size() == 1) return anim.pathPoints.front();
+        if (anim.pathTotalLength <= 1e-6f) return anim.pathPoints.back();
+
+        distance = std::clamp(distance, 0.0f, anim.pathTotalLength);
+        const auto& cum = anim.pathCumulative;
+        const auto& pts = anim.pathPoints;
+        if (cum.size() != pts.size() || cum.size() < 2) {
+            return pts.back();
+        }
+
+        size_t i = 1;
+        while (i < cum.size() && cum[i] < distance) ++i;
+        if (i >= cum.size()) return pts.back();
+
+        const float d0 = cum[i - 1];
+        const float d1 = cum[i];
+        const float denom = (d1 - d0);
+        const float localT = (denom > 1e-6f) ? ((distance - d0) / denom) : 0.0f;
+        return pts[i - 1] * (1.0f - localT) + pts[i] * localT;
+    }
 
     Entity& ComponentStorage::createEntity(const QString& name) {
         Entity entity;
@@ -20,6 +44,7 @@ namespace ecs {
         colliders_.erase(id);
         materials_.erase(id);
         scripts_.erase(id);
+        animations_.erase(id);
         entityOrder_.erase(std::remove(entityOrder_.begin(), entityOrder_.end(), id), entityOrder_.end());
     }
 
@@ -30,6 +55,7 @@ namespace ecs {
         colliders_.clear();
         materials_.clear();
         scripts_.clear();
+        animations_.clear();
         entityOrder_.clear();
         nextId_ = 0;
     }
@@ -89,6 +115,50 @@ namespace ecs {
             if (script.onUpdate) {
                 script.onUpdate(id, dt);
             }
+        }
+
+        std::vector<EntityId> toRemove;
+        for (auto& [id, anim] : animations_) {
+            anim.elapsed += dt;
+
+            if (anim.isFinished()) {
+                if (anim.onComplete) {
+                    anim.onComplete(id);
+                }
+                toRemove.push_back(id);
+                continue;
+            }
+
+            const float t = anim.progress();
+            if (auto* transform = get<Transform>(id)) {
+                switch (anim.type) {
+                case Animation::Type::MoveTo: {
+                    const float eased = Animation::easeOutCubic(t);
+                    if (!anim.pathPoints.empty()) {
+                        const float d = eased * anim.pathTotalLength;
+                        transform->position = samplePolylineByDistance(anim, d);
+                    }
+                    else {
+                        transform->position = anim.startPos * (1.0f - eased) + anim.targetPos * eased;
+                    }
+
+                    if (anim.bounceHeight > 0.0f) {
+                        const float bounceFactor = 4.0f * t * (1.0f - t);
+                        const QVector3D up = transform->position.normalized();
+                        transform->position += up * bounceFactor * anim.bounceHeight;
+                    }
+                    break;
+                }
+                case Animation::Type::Rotate:
+                case Animation::Type::Scale:
+                default:
+                    break;
+                }
+            }
+        }
+
+        for (auto id : toRemove) {
+            animations_.erase(id);
         }
     }
 

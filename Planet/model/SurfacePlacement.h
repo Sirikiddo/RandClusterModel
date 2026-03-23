@@ -3,7 +3,6 @@
 #include "controllers/HexSphereSceneController.h"
 #include <random>
 
-// Оригинальная функция для центра ячейки
 inline QVector3D computeSurfacePoint(const HexSphereSceneController& scene, int cellId, float heightStep,
     float objectOffset = 0.03f) {
     const auto& cells = scene.model().cells();
@@ -12,15 +11,19 @@ inline QVector3D computeSurfacePoint(const HexSphereSceneController& scene, int 
     }
 
     const Cell& cell = cells[static_cast<size_t>(cellId)];
+
+    // Радиус = базовый радиус (1.0) + высота ячейки * шаг высоты + смещение
     const float surfaceHeight = 1.0f + cell.height * heightStep;
+
+    // Возвращаем нормализованное направление центроида, умноженное на радиус
     return cell.centroid.normalized() * (surfaceHeight + objectOffset);
 }
+
 
 inline QVector3D computeSurfacePoint(const HexSphereSceneController& scene, int cellId) {
     return computeSurfacePoint(scene, cellId, scene.heightStep());
 }
 
-// Функция для TreePlacement - ТАКАЯ ЖЕ, КАК В СТАРОЙ РАБОЧЕЙ ВЕРСИИ
 inline QVector3D computeSurfacePoint(const HexSphereSceneController& scene, const TreePlacement& placement,
     float heightStep) {
     const auto& cells = scene.model().cells();
@@ -31,9 +34,6 @@ inline QVector3D computeSurfacePoint(const HexSphereSceneController& scene, cons
     const Cell& cell = cells[static_cast<size_t>(placement.cellId)];
     const float surfaceHeight = 1.0f + cell.height * heightStep;
 
-    // Получаем позицию на единичной сфере из TreePlacement
     QVector3D posOnSphere = placement.getPosition(scene.model());
-
-    // Поднимаем точку на нужную высоту - БЕЗ ДОПОЛНИТЕЛЬНОГО СМЕЩЕНИЯ
     return posOnSphere.normalized() * surfaceHeight;
 }

@@ -50,7 +50,6 @@ public:
 
     Response advanceWaterTime(float dt);
 
-    // ��� ������� ��� - ����� ������
     Response toggleOreVisualization();
     void setOreAnimationTime(float time);
     void setOreVisualizationEnabled(bool enabled);
@@ -58,9 +57,15 @@ public:
     bool isOreVisualizationEnabled() const;
     HexSphereModel* getModel();
 
-    // �������������� ������ ��� ���������� �������� ���
     Response setOreAnimationSpeed(float speed);
     Response regenerateOreDeposits();
+
+    // ???????? ??? ??????
+    // speed: "?????? ????" ? ??????? (????? ???? / speed = duration)
+    void applyAnimation(int entityId, int targetCell, float speed = 1.0f, float bounceHeight = 0.05f);
+    void updateAnimations(float dt);
+    ecs::ComponentStorage& getECS() { return ecs_; }
+    const ecs::ComponentStorage& getECS() const { return ecs_; }
 
 private:
     struct PickHit {
@@ -75,6 +80,7 @@ private:
     void uploadSelection();
     void uploadBuffers();
     void buildAndShowSelectedPath(Response& response);
+    void buildAndShowPathBetween(int startCell, int targetCell, Response& response);
     void clearPath(Response& response);
     void updateBufferUsageStrategy();
 
@@ -90,6 +96,7 @@ private:
     CameraController& camera_;
     QOpenGLWidget* owner_ = nullptr;
     std::unique_ptr<HexSphereRenderer> renderer_;
+    
 
     HexSphereSceneController scene_{};
     ecs::ComponentStorage ecs_{};
@@ -104,7 +111,6 @@ private:
     float waterTime_ = 0.0f;
     QVector3D lightDir_ = QVector3D(1, 1, 1).normalized();
 
-    // ��������� ��� ������� ���
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
     float oreAnimationSpeed_ = 0.1f;
