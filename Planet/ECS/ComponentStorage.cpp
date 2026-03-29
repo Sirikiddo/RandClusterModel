@@ -2,6 +2,7 @@
 #include "Animation.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace ecs {
 
@@ -26,6 +27,23 @@ namespace ecs {
         const float denom = (d1 - d0);
         const float localT = (denom > 1e-6f) ? ((distance - d0) / denom) : 0.0f;
         return pts[i - 1] * (1.0f - localT) + pts[i] * localT;
+    }
+
+    static float arcHeightFactor(const Animation& anim, float t) {
+        const float peakT = std::clamp(anim.arcPeakT, 0.05f, 0.95f);
+        if (!anim.softLanding && std::abs(peakT - 0.5f) < 1e-3f) {
+            return 4.0f * t * (1.0f - t);
+        }
+
+        if (t <= peakT) {
+            return Animation::easeOutCubic(t / peakT);
+        }
+
+        const float localT = (t - peakT) / (1.0f - peakT);
+        if (anim.softLanding) {
+            return 1.0f - Animation::easeInOutQuad(localT);
+        }
+        return 1.0f - localT;
     }
 
     Entity& ComponentStorage::createEntity(const QString& name) {
@@ -133,19 +151,17 @@ namespace ecs {
             if (auto* transform = get<Transform>(id)) {
                 switch (anim.type) {
                 case Animation::Type::MoveTo: {
-                    const float eased = Animation::easeOutCubic(t);
                     if (!anim.pathPoints.empty()) {
-                        const float d = eased * anim.pathTotalLength;
+                        const float d = t * anim.pathTotalLength;
                         transform->position = samplePolylineByDistance(anim, d);
                     }
                     else {
-                        transform->position = anim.startPos * (1.0f - eased) + anim.targetPos * eased;
+                        transform->position = anim.startPos * (1.0f - t) + anim.targetPos * t;
                     }
 
                     if (anim.bounceHeight > 0.0f) {
-                        const float bounceFactor = 4.0f * t * (1.0f - t);
                         const QVector3D up = transform->position.normalized();
-                        transform->position += up * bounceFactor * anim.bounceHeight;
+                        transform->position += up * arcHeightFactor(anim, t) * anim.bounceHeight;
                     }
                     break;
                 }

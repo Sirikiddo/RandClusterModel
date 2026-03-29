@@ -68,7 +68,7 @@ void EntityRenderer::renderEntities(const HexSphereRenderer::RenderContext& ctx)
     ctx.graph.ecs.each<ecs::Mesh, ecs::Transform>([&](const ecs::Entity& e, const ecs::Mesh&, const ecs::Transform& transform) {
         QVector3D surfacePos;
         if (e.currentCell >= 0) {
-            surfacePos = computeSurfacePoint(ctx.graph.scene, e.currentCell, ctx.graph.heightStep);
+            surfacePos = computeSurfacePoint(ctx.graph.scene, e.currentCell, ctx.graph.heightStep, 0.0f);
         }
         else {
             surfacePos = transform.position;

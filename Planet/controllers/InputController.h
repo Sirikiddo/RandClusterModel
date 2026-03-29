@@ -3,8 +3,9 @@
 #include <QMatrix4x4>
 #include <QPoint>
 #include <QVector3D>
-#include <optional>
 #include <memory>
+#include <optional>
+#include <vector>
 
 #include "controllers/HexSphereSceneController.h"
 #include "renderers/HexSphereRenderer.h"
@@ -60,9 +61,7 @@ public:
     Response setOreAnimationSpeed(float speed);
     Response regenerateOreDeposits();
 
-    // ???????? ??? ??????
-    // speed: "?????? ????" ? ??????? (????? ???? / speed = duration)
-    void applyAnimation(int entityId, int targetCell, float speed = 1.0f, float bounceHeight = 0.05f);
+    bool applyAnimation(int entityId, int targetCell, float speed = 1.0f, float bounceHeight = 0.05f);
     void updateAnimations(float dt);
     ecs::ComponentStorage& getECS() { return ecs_; }
     const ecs::ComponentStorage& getECS() const { return ecs_; }

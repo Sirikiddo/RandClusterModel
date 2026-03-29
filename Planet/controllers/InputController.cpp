@@ -7,6 +7,7 @@
 #include <QOpenGLWidget>
 #include <QWheelEvent>
 #include <QtDebug>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -17,40 +18,78 @@
 #include "model/SurfacePlacement.h"
 
 namespace {
-    bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
-        const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
-        float& tOut) {
-        const float EPS = 1e-6f;
-        const QVector3D e1 = v1 - v0;
-        const QVector3D e2 = v2 - v0;
-        const QVector3D p = QVector3D::crossProduct(d, e2);
-        const float det = QVector3D::dotProduct(e1, p);
-        if (std::fabs(det) < EPS) return false;
-        const float invDet = 1.0f / det;
-        const QVector3D t = o - v0;
-        const float u = QVector3D::dotProduct(t, p) * invDet; if (u < -EPS || u > 1.0f + EPS) return false;
-        const QVector3D q = QVector3D::crossProduct(t, e1);
-        const float v = QVector3D::dotProduct(d, q) * invDet; if (v < -EPS || u + v > 1.0f + EPS) return false;
-        const float tt = QVector3D::dotProduct(e2, q) * invDet; if (tt <= EPS) return false;
-        tOut = tt; return true;
-    }
 
-    static void printGlInfo(QOpenGLFunctions_3_3_Core* gl) {
-        const GLubyte* vendor = gl->glGetString(GL_VENDOR);
-        const GLubyte* renderer = gl->glGetString(GL_RENDERER);
-        const GLubyte* version = gl->glGetString(GL_VERSION);
+constexpr int kPathSegmentsPerEdge = 8;
+constexpr float kEntitySurfaceOffset = 0.0f;
+constexpr float kBaseTraversalSpeed = 0.35f;
 
-        qDebug() << "=== OpenGL Device Info ===";
-        qDebug() << "GPU Vendor:   " << reinterpret_cast<const char*>(vendor);
-        qDebug() << "GPU Renderer: " << reinterpret_cast<const char*>(renderer);
-        qDebug() << "GL Version:   " << reinterpret_cast<const char*>(version);
-        qDebug() << "===========================";
+bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
+                   const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
+                   float& tOut) {
+    const float eps = 1e-6f;
+    const QVector3D e1 = v1 - v0;
+    const QVector3D e2 = v2 - v0;
+    const QVector3D p = QVector3D::crossProduct(d, e2);
+    const float det = QVector3D::dotProduct(e1, p);
+    if (std::fabs(det) < eps) return false;
+
+    const float invDet = 1.0f / det;
+    const QVector3D t = o - v0;
+    const float u = QVector3D::dotProduct(t, p) * invDet;
+    if (u < -eps || u > 1.0f + eps) return false;
+
+    const QVector3D q = QVector3D::crossProduct(t, e1);
+    const float v = QVector3D::dotProduct(d, q) * invDet;
+    if (v < -eps || u + v > 1.0f + eps) return false;
+
+    const float tt = QVector3D::dotProduct(e2, q) * invDet;
+    if (tt <= eps) return false;
+
+    tOut = tt;
+    return true;
+}
+
+void printGlInfo(QOpenGLFunctions_3_3_Core* gl) {
+    const GLubyte* vendor = gl->glGetString(GL_VENDOR);
+    const GLubyte* renderer = gl->glGetString(GL_RENDERER);
+    const GLubyte* version = gl->glGetString(GL_VERSION);
+
+    qDebug() << "=== OpenGL Device Info ===";
+    qDebug() << "GPU Vendor:   " << reinterpret_cast<const char*>(vendor);
+    qDebug() << "GPU Renderer: " << reinterpret_cast<const char*>(renderer);
+    qDebug() << "GL Version:   " << reinterpret_cast<const char*>(version);
+    qDebug() << "===========================";
+}
+
+float landingDurationMultiplier(Biome biome) {
+    switch (biome) {
+    case Biome::Sea:  return 1.25f;
+    case Biome::Snow: return 1.10f;
+    default:          return 1.0f;
     }
 }
+
+float bounceHeightForBiome(Biome biome) {
+    switch (biome) {
+    case Biome::Sea:  return 0.018f;
+    case Biome::Snow: return 0.028f;
+    case Biome::Rock: return 0.030f;
+    default:          return 0.035f;
+    }
+}
+
+float arcPeakForBiome(Biome biome) {
+    return biome == Biome::Sea ? 0.32f : 0.5f;
+}
+
+bool usesSoftLanding(Biome biome) {
+    return biome == Biome::Sea;
+}
+
+} // namespace
 
 InputController::InputController(CameraController& camera)
-    : camera_(camera) {
-}
+    : camera_(camera) {}
 
 void InputController::initialize(QOpenGLWidget* owner) {
     owner_ = owner;
@@ -74,7 +113,7 @@ void InputController::initialize(QOpenGLWidget* owner) {
     pyramid.currentCell = 0;
     ecs_.emplace<ecs::Mesh>(pyramid.id).meshId = "pyramid";
     ecs::Transform& transform = ecs_.emplace<ecs::Transform>(pyramid.id);
-    QVector3D surfacePosition = computeSurfacePoint(scene_, 0, scene_.heightStep(), scene_.pathBias());
+    const QVector3D surfacePosition = computeSurfacePoint(scene_, 0, scene_.heightStep(), kEntitySurfaceOffset);
     transform.position = ecs::localToWorldPoint(transform, ecs::CoordinateFrame{}, surfacePosition);
     ecs_.emplace<ecs::Collider>(pyramid.id).radius = 0.08f;
 
@@ -108,13 +147,13 @@ InputController::Response InputController::mousePress(QMouseEvent* e) {
     }
 
     if (e->button() == Qt::LeftButton) {
-        auto p = e->position();
+        const auto p = e->position();
         auto hit = pickSceneAt(p.x(), p.y());
         if (!hit) return response;
+
         if (hit->isEntity) {
             selectEntity(hit->entityId, response);
-        }
-        else if (hit->cellId >= 0) {
+        } else if (hit->cellId >= 0) {
             scene_.toggleCellSelection(hit->cellId);
             uploadSelection();
             moveSelectedEntityToCell(hit->cellId, response);
@@ -171,21 +210,39 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         return response;
     case Qt::Key_W:
     {
-        auto sel = ecs_.selectedEntity();
-        if (!sel) return response;
-        ecs::Entity& ent = sel->get();
+        auto selected = ecs_.selectedEntity();
+        if (!selected) return response;
+
+        ecs::Entity& entity = selected->get();
+        if (ecs_.get<ecs::Animation>(entity.id)) {
+            response.hudMessage = QString("Explorer is already moving");
+            response.requestUpdate = true;
+            return response;
+        }
+
         const auto& cells = scene_.model().cells();
-        if (ent.currentCell < 0 || ent.currentCell >= (int)cells.size()) return response;
-        const auto& c = cells[(size_t)ent.currentCell];
-        if (c.neighbors.empty()) return response;
-        int next = c.neighbors[0];
-        if (next < 0) return response;
-        ent.currentCell = next;
-        if (auto* transform = ecs_.get<ecs::Transform>(ent.id)) {
-            transform->position = computeSurfacePoint(scene_, next, scene_.heightStep(), scene_.pathBias());
+        if (entity.currentCell < 0 || entity.currentCell >= static_cast<int>(cells.size())) return response;
+        const auto& currentCell = cells[static_cast<size_t>(entity.currentCell)];
+        if (currentCell.neighbors.empty()) return response;
+
+        bool moved = false;
+        for (int next : currentCell.neighbors) {
+            if (next < 0) continue;
+            buildAndShowPathBetween(entity.currentCell, next, response);
+            moved = applyAnimation(entity.id, next, kBaseTraversalSpeed, bounceHeightForBiome(cells[static_cast<size_t>(next)].biome));
+            if (moved) {
+                break;
+            }
+        }
+
+        if (!moved) {
+            if (renderer_) {
+                renderer_->uploadPath({});
+            }
+            response.hudMessage = QString("No accessible neighboring cell");
         }
         response.requestUpdate = true;
-        break;
+        return response;
     }
     case Qt::Key_Escape:
         deselectEntity();
@@ -198,12 +255,18 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
             response.requestUpdate = true;
         }
         return response;
-    default: break;
+    default:
+        break;
     }
 
     if (scene_.selectedCells().empty()) return response;
 
-    auto apply = [&](auto fn) { for (int cid : scene_.selectedCells()) fn(cid); };
+    auto apply = [&](auto fn) {
+        for (int cid : scene_.selectedCells()) {
+            fn(cid);
+        }
+    };
+
     switch (e->key()) {
     case Qt::Key_Plus:
     case Qt::Key_Equal:
@@ -237,8 +300,10 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
     case Qt::Key_8:
         apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Jungle); });
         break;
-    default: return response;
+    default:
+        return response;
     }
+
     rebuildModel(response);
     return response;
 }
@@ -339,8 +404,7 @@ void InputController::buildAndShowSelectedPath(Response& response) {
     if (renderer_) {
         if (auto poly = scene_.buildPathPolyline()) {
             renderer_->uploadPath(*poly);
-        }
-        else {
+        } else {
             renderer_->uploadPath({});
         }
     }
@@ -353,10 +417,9 @@ void InputController::buildAndShowPathBetween(int startCell, int targetCell, Res
         pb.build();
         const auto ids = pb.astar(startCell, targetCell);
         if (!ids.empty()) {
-            const auto poly = pb.polylineOnSphere(ids, /*segmentsPerEdge=*/8, scene_.pathBias(), scene_.heightStep());
+            const auto poly = pb.polylineOnSphere(ids, kPathSegmentsPerEdge, scene_.pathBias(), scene_.heightStep());
             renderer_->uploadPath(poly);
-        }
-        else {
+        } else {
             renderer_->uploadPath({});
         }
     }
@@ -376,8 +439,7 @@ void InputController::updateBufferUsageStrategy() {
         uploadOptions_.terrainUsage = GL_DYNAMIC_DRAW;
         uploadOptions_.wireUsage = GL_DYNAMIC_DRAW;
         uploadOptions_.useStaticBuffers = false;
-    }
-    else {
+    } else {
         uploadOptions_.terrainUsage = GL_STATIC_DRAW;
         uploadOptions_.wireUsage = GL_STATIC_DRAW;
         uploadOptions_.useStaticBuffers = true;
@@ -393,11 +455,13 @@ std::optional<int> InputController::pickCellAt(int sx, int sy) const {
     int bestId = -1;
     for (const auto& pt : tris) {
         float t;
-        if (rayTriangleMT(ro, rd, pt.v0, pt.v1, pt.v2, t))
-            if (t < bestT) { bestT = t; bestId = pt.cellId; }
+        if (rayTriangleMT(ro, rd, pt.v0, pt.v1, pt.v2, t) && t < bestT) {
+            bestT = t;
+            bestId = pt.cellId;
+        }
     }
     if (bestId >= 0) return bestId;
-    else return std::nullopt;
+    return std::nullopt;
 }
 
 std::optional<InputController::PickHit> InputController::pickTerrainAt(int sx, int sy) const {
@@ -406,7 +470,7 @@ std::optional<InputController::PickHit> InputController::pickTerrainAt(int sx, i
     const QVector3D rd = camera_.rayDirectionFromScreen(sx, sy, owner_->width(), owner_->height(), owner_->devicePixelRatioF());
 
     float bestT = std::numeric_limits<float>::infinity();
-    int   bestOwner = -1;
+    int bestOwner = -1;
     QVector3D bestPos;
 
     const auto& P = scene_.terrain().pos;
@@ -415,15 +479,20 @@ std::optional<InputController::PickHit> InputController::pickTerrainAt(int sx, i
 
     const size_t triCount = O.size();
     for (size_t t = 0; t < triCount; ++t) {
-        const uint32_t i0 = I[3 * t + 0], i1 = I[3 * t + 1], i2 = I[3 * t + 2];
+        const uint32_t i0 = I[3 * t + 0];
+        const uint32_t i1 = I[3 * t + 1];
+        const uint32_t i2 = I[3 * t + 2];
         const QVector3D v0(P[3 * i0], P[3 * i0 + 1], P[3 * i0 + 2]);
         const QVector3D v1(P[3 * i1], P[3 * i1 + 1], P[3 * i1 + 2]);
         const QVector3D v2(P[3 * i2], P[3 * i2 + 1], P[3 * i2 + 2]);
         float tt;
         if (rayTriangleMT(ro, rd, v0, v1, v2, tt) && tt < bestT) {
-            bestT = tt; bestOwner = O[t]; bestPos = ro + rd * tt;
+            bestT = tt;
+            bestOwner = O[t];
+            bestPos = ro + rd * tt;
         }
     }
+
     if (bestOwner >= 0) {
         return PickHit{ bestOwner, -1, bestPos, bestT, false };
     }
@@ -446,16 +515,17 @@ std::optional<InputController::PickHit> InputController::pickEntityAt(int sx, in
         const float c = QVector3D::dotProduct(oc, oc) - radius * radius;
         const float discriminant = b * b - 4.0f * c;
         if (discriminant < 0) return;
+
         const float sqrtDisc = std::sqrt(discriminant);
         const float t0 = (-b - sqrtDisc) * 0.5f;
         const float t1 = (-b + sqrtDisc) * 0.5f;
-        float t = (t0 > 0) ? t0 : t1;
+        const float t = (t0 > 0) ? t0 : t1;
         if (t > 0 && t < bestT) {
             bestT = t;
             bestEntityId = e.id;
             bestPos = ro + rd * t;
         }
-        });
+    });
 
     if (bestEntityId != -1) {
         return PickHit{ -1, bestEntityId, bestPos, bestT, true };
@@ -496,72 +566,49 @@ void InputController::deselectEntity() {
     }
 }
 
-
 void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     if (selectedEntityId_ == -1) return;
     auto* entity = ecs_.getEntity(selectedEntityId_);
     if (!entity) return;
 
-    // Запоминаем старую позицию
-    int oldCell = entity->currentCell;
-
-    if (cellId >= 0 && cellId < scene_.model().cellCount()) {
-        // Запускаем анимацию перемещения
-        applyAnimation(selectedEntityId_, cellId, /*speed=*/1.2f, /*bounceHeight=*/0.03f);
-
-        // Сначала ОЧИЩАЕМ все выделения
-        scene_.clearSelection();
-
-        // Если есть старая ячейка и она отличается от новой
-        if (oldCell >= 0 && oldCell != cellId) {
-            // Выделяем старую ячейку
-            scene_.toggleCellSelection(oldCell);
-        }
-
-        // Всегда выделяем новую ячейку
-        scene_.toggleCellSelection(cellId);
-
-        // Обновляем выделение в рендере
-        uploadSelection();
-
-        // Если есть старая и новая (разные) - строим путь
-        if (oldCell >= 0 && oldCell != cellId) {
-            // Важно: рисуем путь строго oldCell -> cellId, чтобы совпадал с анимацией
-            buildAndShowPathBetween(oldCell, cellId, response);
-        }
-        else {
-            // Если старая и новая совпадают - очищаем путь
-            clearPath(response);
-        }
-
-        // Сначала ОЧИЩАЕМ все выделения
-        scene_.clearSelection();
-
-        // Если есть старая ячейка и она отличается от новой
-        if (oldCell >= 0 && oldCell != cellId) {
-            // Выделяем старую ячейку
-            scene_.toggleCellSelection(oldCell);
-        }
-
-        // Всегда выделяем новую ячейку
-        scene_.toggleCellSelection(cellId);
-
-        // Обновляем выделение в рендере
-        uploadSelection();
-
-        // Если есть старая и новая (разные) - строим путь
-        if (oldCell >= 0 && oldCell != cellId) {
-            buildAndShowSelectedPath(response);
-        }
-        else {
-            // Если старая и новая совпадают - очищаем путь
-            clearPath(response);
-        }
+    if (ecs_.get<ecs::Animation>(entity->id)) {
+        response.hudMessage = QString("Explorer is already moving");
+        response.requestUpdate = true;
+        return;
     }
+
+    const int oldCell = entity->currentCell;
+    if (oldCell < 0 || oldCell >= scene_.model().cellCount()) return;
+    if (cellId < 0 || cellId >= scene_.model().cellCount()) return;
+
+    scene_.clearSelection();
+    scene_.toggleCellSelection(oldCell);
+    if (cellId != oldCell) {
+        scene_.toggleCellSelection(cellId);
+    }
+    uploadSelection();
+
+    if (cellId == oldCell) {
+        clearPath(response);
+        deselectEntity();
+        response.requestUpdate = true;
+        return;
+    }
+
+    buildAndShowPathBetween(oldCell, cellId, response);
+    if (!applyAnimation(entity->id, cellId, kBaseTraversalSpeed, bounceHeightForBiome(scene_.model().cells()[static_cast<size_t>(cellId)].biome))) {
+        if (renderer_) {
+            renderer_->uploadPath({});
+        }
+        response.hudMessage = QString("No traversable path. Max climb is %1 cells.").arg(PathBuilder::kMaxClimbDelta);
+        deselectEntity();
+        response.requestUpdate = true;
+        return;
+    }
+
     deselectEntity();
     response.requestUpdate = true;
 }
-
 
 InputController::Response InputController::toggleOreVisualization() {
     oreVisualizationEnabled_ = !oreVisualizationEnabled_;
@@ -569,12 +616,12 @@ InputController::Response InputController::toggleOreVisualization() {
 
     qDebug() << "Ore visualization toggled to:" << oreVisualizationEnabled_;
 
-    Response r;
-    r.requestUpdate = true;
-    r.hudMessage = oreVisualizationEnabled_
+    Response response;
+    response.requestUpdate = true;
+    response.hudMessage = oreVisualizationEnabled_
         ? QString("Ore visualization: ON")
         : QString("Ore visualization: OFF");
-    return r;
+    return response;
 }
 
 void InputController::setOreAnimationTime(float time) {
@@ -594,116 +641,147 @@ bool InputController::isOreVisualizationEnabled() const {
 }
 
 HexSphereModel* InputController::getModel() {
-    // �������� ������ �� �����
     return &scene_.modelMutable();
 }
 
 InputController::Response InputController::setOreAnimationSpeed(float speed) {
     oreAnimationSpeed_ = std::clamp(speed, 0.0f, 2.0f);
 
-    Response r;
-    r.requestUpdate = true;
-    r.hudMessage = QString("Ore animation speed: %1").arg(oreAnimationSpeed_);
-    return r;
+    Response response;
+    response.requestUpdate = true;
+    response.hudMessage = QString("Ore animation speed: %1").arg(oreAnimationSpeed_);
+    return response;
 }
 
 InputController::Response InputController::regenerateOreDeposits() {
-    Response r;
-    r.requestUpdate = true;
-    r.hudMessage = QString("Ore deposits regenerated");
-    return r;
+    Response response;
+    response.requestUpdate = true;
+    response.hudMessage = QString("Ore deposits regenerated");
+    return response;
 }
 
-void InputController::applyAnimation(int entityId, int targetCell, float speed, float bounceHeight) {
+bool InputController::applyAnimation(int entityId, int targetCell, float speed, float bounceHeight) {
     auto* entity = ecs_.getEntity(entityId);
     if (!entity) {
         qDebug() << "Entity" << entityId << "not found for animation";
-        return;
+        return false;
+    }
+
+    if (ecs_.get<ecs::Animation>(entityId)) {
+        return false;
     }
 
     auto* transform = ecs_.get<ecs::Transform>(entityId);
     if (!transform) {
         qDebug() << "Entity" << entityId << "has no transform component";
-        return;
+        return false;
     }
 
-    // Получаем текущую ячейку
-    int startCell = entity->currentCell;
+    const int startCell = entity->currentCell;
     if (startCell < 0 || startCell >= scene_.model().cellCount()) {
         qDebug() << "Entity" << entityId << "has invalid current cell:" << startCell;
-        return;
+        return false;
+    }
+    if (targetCell < 0 || targetCell >= scene_.model().cellCount()) {
+        return false;
+    }
+    if (targetCell == startCell) {
+        transform->position = computeSurfacePoint(scene_, targetCell, scene_.heightStep(), kEntitySurfaceOffset);
+        return true;
     }
 
-    // Вычисляем начальную и целевую позиции
-    QVector3D startPos = computeSurfacePoint(scene_, startCell, scene_.heightStep(), scene_.pathBias());
-    QVector3D targetPos = computeSurfacePoint(scene_, targetCell, scene_.heightStep(), scene_.pathBias());
+    PathBuilder pb(scene_.model());
+    pb.build();
+    const auto cellPath = pb.astar(startCell, targetCell);
+    if (cellPath.empty()) {
+        return false;
+    }
 
-    // Строим путь по тем же правилам, что и визуализация (A* + polylineOnSphere).
-    // Если путь не построился — fallback на прямую интерполяцию start->target.
+    const auto rawPathPoints = pb.polylineOnSphere(cellPath, kPathSegmentsPerEdge, scene_.pathBias(), scene_.heightStep());
+    if (rawPathPoints.empty()) {
+        return false;
+    }
+
+    const auto& cells = scene_.model().cells();
+    const Cell& targetData = cells[static_cast<size_t>(targetCell)];
+    const float entityOffsetDelta = kEntitySurfaceOffset - scene_.pathBias();
+
     std::vector<QVector3D> pathPoints;
-    {
-        PathBuilder pb(scene_.model());
-        pb.build();
-        const auto ids = pb.astar(startCell, targetCell);
-        if (!ids.empty()) {
-            pathPoints = pb.polylineOnSphere(ids, /*segmentsPerEdge=*/8, scene_.pathBias(), scene_.heightStep());
-        }
+    pathPoints.reserve(rawPathPoints.size());
+    for (const QVector3D& point : rawPathPoints) {
+        pathPoints.push_back(point.normalized() * (point.length() + entityOffsetDelta));
     }
 
-    // Важно: пока идёт анимация, рендерер должен брать позицию из Transform, а не из currentCell.
-    // В EntityRenderer::renderEntities() позиция берётся из currentCell, если он >= 0.
-    // Поэтому на время анимации переключаемся в режим "позиция задаётся Transform".
-    entity->currentCell = -1;
-    transform->position = !pathPoints.empty() ? pathPoints.front() : startPos;
+    const QVector3D startPos = computeSurfacePoint(scene_, startCell, scene_.heightStep(), kEntitySurfaceOffset);
+    const QVector3D targetPos = computeSurfacePoint(scene_, targetCell, scene_.heightStep(), kEntitySurfaceOffset);
 
-    // Создаём анимацию через emplace (публичный метод ComponentStorage)
+    entity->currentCell = -1;
+    transform->position = pathPoints.front();
+
     ecs::Animation& anim = ecs_.emplace<ecs::Animation>(entityId);
     anim.type = ecs::Animation::Type::MoveTo;
-    // duration теперь считается от длины пути (или расстояния), чтобы скорость была стабильной
-    speed = std::max(0.01f, speed);
-    anim.duration = 0.0f; // установим ниже, когда будет известна длина
+    anim.duration = 0.0f;
     anim.elapsed = 0.0f;
     anim.startPos = startPos;
     anim.targetPos = targetPos;
     anim.startCell = startCell;
     anim.targetCell = targetCell;
-    anim.bounceHeight = bounceHeight;
     anim.pathPoints = std::move(pathPoints);
-    anim.pathCumulative.clear();
+    anim.pathCumulative.assign(anim.pathPoints.size(), 0.0f);
     anim.pathTotalLength = 0.0f;
-    if (!anim.pathPoints.empty()) {
-        anim.pathCumulative.resize(anim.pathPoints.size(), 0.0f);
-        for (size_t i = 1; i < anim.pathPoints.size(); ++i) {
-            anim.pathTotalLength += (anim.pathPoints[i] - anim.pathPoints[i - 1]).length();
-            anim.pathCumulative[i] = anim.pathTotalLength;
+
+    size_t pointIndex = 0;
+    for (size_t edgeIndex = 0; edgeIndex + 1 < cellPath.size() && pointIndex + 1 < anim.pathPoints.size(); ++edgeIndex) {
+        const Cell& from = cells[static_cast<size_t>(cellPath[edgeIndex])];
+        const Cell& to = cells[static_cast<size_t>(cellPath[edgeIndex + 1])];
+        const float angularDistance = PathBuilder::edgeAngularDistance(from, to);
+        const float traversalCost = PathBuilder::traversalCost(from, to);
+        const float speedFactor = (angularDistance > 1e-6f && std::isfinite(traversalCost))
+            ? (traversalCost / angularDistance)
+            : PathBuilder::biomeTraversalFactor(to.biome);
+
+        for (int segment = 0; segment < kPathSegmentsPerEdge && pointIndex + 1 < anim.pathPoints.size(); ++segment) {
+            const QVector3D& prev = anim.pathPoints[pointIndex];
+            const QVector3D& next = anim.pathPoints[pointIndex + 1];
+            ++pointIndex;
+            anim.pathTotalLength += (next - prev).length() * speedFactor;
+            anim.pathCumulative[pointIndex] = anim.pathTotalLength;
         }
-        // Чтобы финальная точка совпадала с расчётной поверхностью, используем последнюю точку пути, если она есть.
-        targetPos = anim.pathPoints.back();
-        anim.targetPos = targetPos;
     }
-    else {
+
+    while (pointIndex + 1 < anim.pathPoints.size()) {
+        const QVector3D& prev = anim.pathPoints[pointIndex];
+        const QVector3D& next = anim.pathPoints[pointIndex + 1];
+        ++pointIndex;
+        anim.pathTotalLength += (next - prev).length();
+        anim.pathCumulative[pointIndex] = anim.pathTotalLength;
+    }
+
+    if (anim.pathTotalLength <= 1e-6f) {
         anim.pathTotalLength = (targetPos - startPos).length();
+        if (!anim.pathCumulative.empty()) {
+            anim.pathCumulative.back() = anim.pathTotalLength;
+        }
     }
 
-    anim.duration = std::max(0.05f, anim.pathTotalLength / speed);
-
-    // Коллбек по завершению анимации
+    speed = std::max(0.01f, speed);
+    anim.bounceHeight = std::min(std::max(0.0f, bounceHeight), bounceHeightForBiome(targetData.biome));
+    if (anim.bounceHeight <= 0.0f) {
+        anim.bounceHeight = bounceHeightForBiome(targetData.biome);
+    }
+    anim.arcPeakT = arcPeakForBiome(targetData.biome);
+    anim.softLanding = usesSoftLanding(targetData.biome);
+    anim.duration = std::max(0.1f, (anim.pathTotalLength / speed) * landingDurationMultiplier(targetData.biome));
     anim.onComplete = [this, targetCell, targetPos](int id) {
-        auto* e = ecs_.getEntity(id);
-        if (e) {
-            e->currentCell = targetCell;
-            qDebug() << "Animation complete: entity" << id << "reached cell" << targetCell;
-
-            // Удаляем компонент анимации после завершения
-            // (можно оставить, если хочешь, чтобы он удалился автоматически в update)
+        if (auto* completedEntity = ecs_.getEntity(id)) {
+            completedEntity->currentCell = targetCell;
         }
-        if (auto* t = ecs_.get<ecs::Transform>(id)) {
-            t->position = targetPos;
+        if (auto* completedTransform = ecs_.get<ecs::Transform>(id)) {
+            completedTransform->position = targetPos;
         }
-        };
+    };
 
-    qDebug() << "Animation started for entity" << entityId
-        << "from cell" << startCell << "to cell" << targetCell;
+    return true;
 }
 
 void InputController::updateAnimations(float dt) {
