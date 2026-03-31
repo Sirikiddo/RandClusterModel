@@ -41,6 +41,91 @@ void ModelHandler::clearCache() {
     cache_.clear();
 }
 
+void ModelHandler::parsePartsFromMesh() {
+    parts_.clear();
+
+    if (mesh_.positions.empty()) return;
+
+    // Ствол - первые 8 вершин
+    ModelPart trunk;
+    trunk.name = "trunk";
+
+    size_t trunkVertexCount = 8;
+    size_t trunkVertexBytes = trunkVertexCount * 3;
+
+    trunk.positions.assign(
+        mesh_.positions.begin(),
+        mesh_.positions.begin() + trunkVertexBytes
+    );
+
+    // Копируем нормали ствола
+    if (!mesh_.normals.empty()) {
+        trunk.normals.assign(
+            mesh_.normals.begin(),
+            mesh_.normals.begin() + trunkVertexBytes
+        );
+    }
+
+    for (size_t i = 0; i < mesh_.indices.size(); i += 3) {
+        uint32_t i0 = mesh_.indices[i];
+        uint32_t i1 = mesh_.indices[i + 1];
+        uint32_t i2 = mesh_.indices[i + 2];
+
+        if (i0 < trunkVertexCount && i1 < trunkVertexCount && i2 < trunkVertexCount) {
+            trunk.indices.push_back(i0);
+            trunk.indices.push_back(i1);
+            trunk.indices.push_back(i2);
+        }
+    }
+
+    trunk.indexCount = trunk.indices.size();
+    parts_["trunk"] = trunk;
+
+    // Крона - остальные вершины
+    ModelPart foliage;
+    foliage.name = "foliage";
+
+    size_t foliageStartVertex = 8;
+    size_t foliageVertexCount = mesh_.vertexCount() - foliageStartVertex;
+
+    if (foliageVertexCount > 0) {
+        foliage.positions.assign(
+            mesh_.positions.begin() + foliageStartVertex * 3,
+            mesh_.positions.end()
+        );
+
+        // Копируем нормали кроны
+        if (!mesh_.normals.empty()) {
+            foliage.normals.assign(
+                mesh_.normals.begin() + foliageStartVertex * 3,
+                mesh_.normals.end()
+            );
+        }
+
+        for (size_t i = 0; i < mesh_.indices.size(); i += 3) {
+            uint32_t i0 = mesh_.indices[i];
+            uint32_t i1 = mesh_.indices[i + 1];
+            uint32_t i2 = mesh_.indices[i + 2];
+
+            if (i0 >= foliageStartVertex && i1 >= foliageStartVertex && i2 >= foliageStartVertex) {
+                foliage.indices.push_back(i0 - foliageStartVertex);
+                foliage.indices.push_back(i1 - foliageStartVertex);
+                foliage.indices.push_back(i2 - foliageStartVertex);
+            }
+        }
+
+        foliage.indexCount = foliage.indices.size();
+        parts_["foliage"] = foliage;
+    }
+
+    qDebug() << "Model split: trunk vertices" << trunk.positions.size() / 3
+        << "normals" << (trunk.normals.empty() ? 0 : trunk.normals.size() / 3)
+        << "indices" << trunk.indices.size()
+        << "foliage vertices" << foliage.positions.size() / 3
+        << "normals" << (foliage.normals.empty() ? 0 : foliage.normals.size() / 3)
+        << "indices" << foliage.indices.size();
+}
+
 QString ModelHandler::canonicalPath(const QString& path) {
     QFileInfo fi(path);
     if (fi.exists()) {
@@ -114,24 +199,77 @@ bool ModelHandler::loadFromFile(const QString& path) {
 
 void ModelHandler::uploadToGPU() {
     if (mesh_.positions.empty()) {
-        qDebug() << "No mesh data to upload";
         return;
     }
 
-    qDebug() << "Tree model has normals:" << (!mesh_.normals.empty() ? "YES" : "NO");
-    qDebug() << "Tree model has UVs:" << (hasUVs_ ? "YES" : "NO");
-    qDebug() << "Tree model vertices:" << mesh_.positions.size() / 3;
-    qDebug() << "Tree model UV count:" << mesh_.texcoords.size() / 2;
+    parsePartsFromMesh();
 
     if (!QOpenGLContext::currentContext()) {
-        qDebug() << "No OpenGL context current!";
         return;
     }
 
     if (!glInitialized_) {
         initializeOpenGLFunctions();
         glInitialized_ = true;
-        qDebug() << "OpenGL functions initialized";
+    }
+
+    // Загружаем каждую часть
+    for (auto& [name, part] : parts_) {
+        if (part.positions.empty() || part.indices.empty()) continue;
+
+        glGenVertexArrays(1, &part.vao);
+        glGenBuffers(1, &part.vbo);
+        glGenBuffers(1, &part.ibo);
+
+        glBindVertexArray(part.vao);
+
+        // Позиции (location = 0)
+        glBindBuffer(GL_ARRAY_BUFFER, part.vbo);
+        glBufferData(GL_ARRAY_BUFFER,
+            part.positions.size() * sizeof(float),
+            part.positions.data(),
+            GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glEnableVertexAttribArray(0);
+
+        // Нормали (location = 1) - если есть
+        if (!part.normals.empty()) {
+            // Создаем отдельный VBO для нормалей или используем тот же с оффсетом
+            // Для простоты создадим отдельный VBO
+            GLuint vboNorm;
+            glGenBuffers(1, &vboNorm);
+            glBindBuffer(GL_ARRAY_BUFFER, vboNorm);
+            glBufferData(GL_ARRAY_BUFFER,
+                part.normals.size() * sizeof(float),
+                part.normals.data(),
+                GL_STATIC_DRAW);
+            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+            glEnableVertexAttribArray(1);
+            // Сохраняем в part для очистки позже
+            const_cast<ModelPart&>(part).vboNorm = vboNorm;
+        }
+        else {
+            // Если нет нормалей, используем заглушку (вверх)
+            // Это не идеально, но лучше чем ничего
+            qDebug() << "Warning: Part" << name.c_str() << "has no normals!";
+        }
+
+        // Индексы
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, part.ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+            part.indices.size() * sizeof(uint32_t),
+            part.indices.data(),
+            GL_STATIC_DRAW);
+
+        part.indexCount = part.indices.size();
+        part.initialized = true;
+
+        glBindVertexArray(0);
+
+        qDebug() << "Uploaded part:" << name.c_str()
+            << "vertices:" << part.positions.size() / 3
+            << "normals:" << (part.normals.empty() ? 0 : part.normals.size() / 3)
+            << "indices:" << part.indices.size();
     }
 
     if (vao_ || vboPos_ || vboNorm_ || vboUV_ || ibo_) {
@@ -189,6 +327,37 @@ void ModelHandler::uploadToGPU() {
     glBindVertexArray(0);
 }
 
+void ModelHandler::drawPart(const QString& partName, GLuint shader,
+    const QMatrix4x4& mvp,
+    const QMatrix4x4& modelMatrix,
+    const QMatrix4x4& viewMatrix) {
+    // Конвертируем QString в std::string для поиска в map
+    std::string name = partName.toStdString();
+    auto it = parts_.find(name);
+    if (it == parts_.end() || !it->second.initialized || it->second.indexCount == 0) {
+        return;
+    }
+
+    const ModelPart& part = it->second;
+
+    glUseProgram(shader);
+
+    GLint uMVP = glGetUniformLocation(shader, "uMVP");
+    GLint uModel = glGetUniformLocation(shader, "uModel");
+
+    if (uMVP >= 0) glUniformMatrix4fv(uMVP, 1, GL_FALSE, mvp.constData());
+    if (uModel >= 0) glUniformMatrix4fv(uModel, 1, GL_FALSE, modelMatrix.constData());
+
+    glBindVertexArray(part.vao);
+    glDrawElements(GL_TRIANGLES, part.indexCount, GL_UNSIGNED_INT, nullptr);
+    glBindVertexArray(0);
+}
+
+bool ModelHandler::hasPart(const QString& partName) const {
+    std::string name = partName.toStdString();
+    return parts_.find(name) != parts_.end();
+}
+
 void ModelHandler::draw(GLuint shader,
     const QMatrix4x4& mvp,
     const QMatrix4x4& modelMatrix,
@@ -232,17 +401,23 @@ void ModelHandler::clear() {
 }
 
 void ModelHandler::clearGPUResources() {
-    if (QOpenGLContext::currentContext() &&
-        glInitialized_ &&
-        QOpenGLContext::currentContext()->isValid())
-    {
-        if (vao_) { glDeleteVertexArrays(1, &vao_); vao_ = 0; }
-        if (vboPos_) { glDeleteBuffers(1, &vboPos_);   vboPos_ = 0; }
-        if (vboNorm_) { glDeleteBuffers(1, &vboNorm_);  vboNorm_ = 0; }
-        if (vboUV_) { glDeleteBuffers(1, &vboUV_);    vboUV_ = 0; }
-        if (ibo_) { glDeleteBuffers(1, &ibo_);      ibo_ = 0; }
-    }
-    else {
+    if (QOpenGLContext::currentContext() && glInitialized_) {
+        for (auto& [name, part] : parts_) {
+            if (part.vao) glDeleteVertexArrays(1, &part.vao);
+            if (part.vbo) glDeleteBuffers(1, &part.vbo);
+            if (part.vboNorm) glDeleteBuffers(1, &part.vboNorm);
+            if (part.ibo) glDeleteBuffers(1, &part.ibo);
+            part.initialized = false;
+        }
+        parts_.clear();
+
+        // Очистка старых ресурсов для обратной совместимости
+        if (vao_) glDeleteVertexArrays(1, &vao_);
+        if (vboPos_) glDeleteBuffers(1, &vboPos_);
+        if (vboNorm_) glDeleteBuffers(1, &vboNorm_);
+        if (vboUV_) glDeleteBuffers(1, &vboUV_);
+        if (ibo_) glDeleteBuffers(1, &ibo_);
+
         vao_ = vboPos_ = vboNorm_ = vboUV_ = ibo_ = 0;
     }
     glInitialized_ = false;

@@ -215,7 +215,9 @@ void main() {
 }
 )GLSL";
 
-// --- МОДЕЛЬНЫЙ ШЕЙДЕР (ТОЛЬКО ОДИН РАЗ!) ---
+// --- ОБЪЕДИНЕННЫЙ МОДЕЛЬНЫЙ ШЕЙДЕР ---
+// Для машин: используется логика из второй версии (текстуры, вершинные цвета, блики)
+// Для деревьев: используется логика из первой версии (оригинальное освещение)
 static const char* VS_MODEL = R"GLSL(
 #version 330 core
 layout(location=0) in vec3 aPos;
@@ -256,48 +258,85 @@ uniform vec3 uColor;
 uniform bool uUseTexture;
 uniform bool uUseVertexColor;
 uniform int uIsCar;
+
+// Uniform'ы для деревьев (из первой версии)
+uniform bool uUseFoliageColor;
+uniform vec3 uFoliageColor;
+uniform vec3 uTrunkColor;
+
 uniform sampler2D uTexture;
 
 void main() {
     vec3 N = normalize(vNormal);
-    vec3 L = normalize(-uLightDir);
-    vec3 V = normalize(uViewPos - vWorldPos);
     
-    float diff = max(dot(N, L), 0.0);
+    vec3 L;
+    float diff;
     
-    vec3 baseColor = uColor;
     if (uIsCar == 1) {
-        // Для машины сохраняем рисунок текстуры, но делаем непрозрачно-жёлтый вид:
-        // - альфу текстуры НЕ используем в итоговом цвете (иначе будет "прозрачность/дырки")
-        // - если текстура premultiplied, восстанавливаем rgb через rgb/a
-        // - затем тонируем в жёлтый через luminance-маску
+        // ========== МАШИНА: свет инвертирован ==========
+        L = normalize(-uLightDir);  // Для машин uLightDir уже положительный, используем как есть
+        diff = max(dot(N, L), 0.0);
+        
+        vec3 baseColor = uColor;
+        
         if (uUseTexture) {
             baseColor *= texture(uTexture, vUV).rgb;
-            // Убираем "провалы" в ноль (тёмные пиксели текстуры делали участок чёрным/неокрашенным).
-            const float lumMin = 0.6; // гарантируем минимум ярко-жёлтого (чтобы верх не уходил в "черно")
         }
         if (uUseVertexColor) {
             baseColor *= vColor;
         }
-    }
-
-    vec3 finalColor = baseColor;
-    
-    vec3 ambient = 0.3 * finalColor;
-    vec3 diffuse = 0.7 * diff * finalColor;
-
-    // Specular-блик только для машины (делает покрытие "реальным").
-    vec3 specular = vec3(0.0);
-    if (uIsCar == 1) {
+        
+        // Ambient + Diffuse для машины
+        vec3 ambient = 0.3 * baseColor;
+        vec3 diffuse = 0.7 * diff * baseColor;
+        
+        // Specular-блик для машины
+        vec3 V = normalize(uViewPos - vWorldPos);
         vec3 H = normalize(L + V);
         float ndh = max(dot(N, H), 0.0);
         float shininess = 64.0;
         float carSpec = pow(ndh, shininess);
-        specular = 0.45 * carSpec * vec3(1.0, 1.0, 0.9);
+        vec3 specular = 0.45 * carSpec * vec3(1.0, 1.0, 0.9);
+        
+        FragColor = vec4(ambient + diffuse + specular, 1.0);
+        return;
     }
-
-    vec3 outColor = ambient + diffuse + specular;
-
-    FragColor = vec4(outColor, 1.0);
+    else {
+        // ========== ДЕРЕВО: свет отрицательный (как в оригинале) ==========
+        L = normalize(uLightDir);  // Для деревьев инвертируем, как в FS_TERRAIN
+        diff = max(dot(N, L), 0.0);
+        
+        vec3 baseColor;
+        
+        if (uUseFoliageColor) {
+            // Крона
+            baseColor = uFoliageColor;
+            
+            // Добавляем небольшую вариацию для объема
+            float leafVar = 0.85 + (sin(vUV.x * 20.0 + vUV.y * 30.0) * 0.15);
+            baseColor = baseColor * leafVar;
+            
+            // Подсветка верхушек
+            if (vUV.y > 0.7) {
+                float highlight = (vUV.y - 0.7) * 1.5;
+                baseColor += vec3(0.15, 0.1, 0.05) * highlight;
+            }
+        } else {
+            // Ствол
+            baseColor = uTrunkColor;
+            
+            // Текстура коры
+            float barkVar = 0.8 + (sin(vUV.x * 50.0) * 0.2);
+            baseColor = baseColor * barkVar;
+        }
+        
+        // ОРИГИНАЛЬНОЕ ОСВЕЩЕНИЕ из первой версии
+        vec3 ambient = 0.3 * baseColor;
+        vec3 diffuse = 0.7 * diff * baseColor;
+        vec3 result = ambient + diffuse;
+        
+        FragColor = vec4(result, 1.0);
+        return;
+    }
 }
 )GLSL";

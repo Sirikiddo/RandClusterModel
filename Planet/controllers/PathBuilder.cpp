@@ -5,12 +5,12 @@
 
 namespace {
 
-float slopePenalty(int climbDelta) {
-    if (climbDelta <= 0) {
-        return 1.0f + float(-climbDelta) * 0.08f;
+    float slopePenalty(int climbDelta) {
+        if (climbDelta <= 0) {
+            return 1.0f + float(-climbDelta) * 0.08f;
+        }
+        return 1.0f + float(climbDelta) * 0.35f;
     }
-    return 1.0f + float(climbDelta) * 0.35f;
-}
 
 } // namespace
 
@@ -81,8 +81,8 @@ std::vector<int> PathBuilder::astar(int startId, int goalId) const {
 
     auto heuristic = [&](int a, int b) {
         return edgeAngularDistance(model_.cells()[static_cast<size_t>(a)],
-                                   model_.cells()[static_cast<size_t>(b)]);
-    };
+            model_.cells()[static_cast<size_t>(b)]);
+        };
 
     constexpr float INF = std::numeric_limits<float>::infinity();
     std::vector<float> g(n, INF);
@@ -144,9 +144,9 @@ std::vector<int> PathBuilder::astar(int startId, int goalId) const {
 }
 
 std::vector<QVector3D> PathBuilder::polylineOnSphere(const std::vector<int>& path,
-                                                     int segmentsPerEdge,
-                                                     float bias,
-                                                     float heightStep) const {
+    int segmentsPerEdge,
+    float bias,
+    float heightStep) const {
     std::vector<QVector3D> out;
     if (path.size() < 2) {
         return out;
@@ -164,8 +164,8 @@ std::vector<QVector3D> PathBuilder::polylineOnSphere(const std::vector<int>& pat
         }
         const float sinAngle = std::sin(angle);
         return (std::sin((1.0f - t) * angle) / sinAngle) * an +
-               (std::sin(t * angle) / sinAngle) * bn;
-    };
+            (std::sin(t * angle) / sinAngle) * bn;
+        };
 
     const auto& cells = model_.cells();
     out.reserve((path.size() - 1) * static_cast<size_t>(segmentsPerEdge) + 1);

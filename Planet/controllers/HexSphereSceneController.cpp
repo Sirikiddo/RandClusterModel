@@ -5,7 +5,7 @@
 #include <random>
 #include <cmath>
 
-// �?обавляем н�?жн�?е include
+// �?обавляем н�?жн�?е include
 #include "generation/MeshGenerators/WireMeshGenerator.h"
 #include "generation/MeshGenerators/SelectionOutlineGenerator.h"
 #include <QVector3D>
@@ -105,12 +105,12 @@ std::optional<std::vector<QVector3D>> HexSphereSceneController::buildPathPolylin
 }
 
 std::vector<float> HexSphereSceneController::buildWireVertices() const {
-    // WireMeshGenerator ожидае�? const HexSphereModel&
+    // WireMeshGenerator ожидае�? const HexSphereModel&
     return WireMeshGenerator::buildWireVertices(model_);
 }
 
 std::vector<float> HexSphereSceneController::buildSelectionOutlineVertices() const {
-    // SelectionOutlineGenerator ожидае�?: const HexSphereModel&, const QSet<int>&, float, float, bool
+    // SelectionOutlineGenerator ожидае�?: const HexSphereModel&, const QSet<int>&, float, float, bool
     return SelectionOutlineGenerator::buildSelectionOutlineVertices(
         model_, selectedCells_, heightStep_, outlineBias_, smoothOneStep_);
 }
@@ -168,38 +168,176 @@ void HexSphereSceneController::generateTreePlacements() {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<float> distBary(0.1f, 0.8f);
-    std::uniform_real_distribution<float> distScale(0.8f, 1.2f);
+    std::uniform_real_distribution<float> distScale(0.7f, 1.3f);
     std::uniform_real_distribution<float> distRot(0.0f, 2.0f * 3.14159f);
 
-    // �?Р�?�?�?НН�?: с�?авим де�?ев�?я на все кле�?ки с биомом Grass
+    // Зеленые оттенки
+    std::uniform_real_distribution<float> distGreenR(0.15f, 0.45f);
+    std::uniform_real_distribution<float> distGreenG(0.55f, 0.85f);
+    std::uniform_real_distribution<float> distGreenB(0.1f, 0.35f);
+
+    // Зеленые оттенки для ёлочек (более темные, синеватые)
+    std::uniform_real_distribution<float> distFirR(0.1f, 0.35f);
+    std::uniform_real_distribution<float> distFirG(0.35f, 0.65f);
+    std::uniform_real_distribution<float> distFirB(0.2f, 0.45f);
+
+    // Оранжевые оттенки
+    std::uniform_real_distribution<float> distAutumnR(0.7f, 1.0f);
+    std::uniform_real_distribution<float> distAutumnG(0.4f, 0.7f);
+    std::uniform_real_distribution<float> distAutumnB(0.1f, 0.3f);
+
+    // Ствол
+    std::uniform_real_distribution<float> distTrunkR(0.4f, 0.65f);
+    std::uniform_real_distribution<float> distTrunkG(0.25f, 0.4f);
+    std::uniform_real_distribution<float> distTrunkB(0.1f, 0.2f);
+
+    // Ствол для ёлочек
+    std::uniform_real_distribution<float> distFirTrunkR(0.35f, 0.55f);
+    std::uniform_real_distribution<float> distFirTrunkG(0.2f, 0.35f);
+    std::uniform_real_distribution<float> distFirTrunkB(0.1f, 0.18f);
+
+    int greenCount = 0;
+    int firCount = 0;
+    int autumnCount = 0;
+
     for (size_t i = 0; i < cells.size(); ++i) {
-        if (cells[i].biome == Biome::Grass) {  // Уб�?али �?словие i % 3 == 0
-            TreePlacement placement;
-            placement.cellId = static_cast<int>(i);
+        const auto& cell = cells[i];
 
-            if (!cells[i].poly.empty()) {
-                std::uniform_int_distribution<int> distTri(0, cells[i].poly.size() - 1);
-                placement.triangleIdx = distTri(gen);
+        bool shouldPlaceTree = false;
+        TreeType treeTypeToPlace = TreeType::Oak;
+
+        if (cell.biome == Biome::Grass) {
+            shouldPlaceTree = true;
+            // 70% обычные деревья, 30% ёлочки
+            std::uniform_real_distribution<float> distTreeType(0.0f, 1.0f);
+            if (distTreeType(gen) < 0.3f) {
+                treeTypeToPlace = TreeType::Fir;
             }
-
-            float u = distBary(gen);
-            float v = distBary(gen);
-            if (u + v > 1.0f) {
-                u = 1.0f - u;
-                v = 1.0f - v;
+            else {
+                treeTypeToPlace = TreeType::Oak;
             }
-            placement.baryU = u;
-            placement.baryV = v;
-            placement.baryW = 1.0f - u - v;
-
-            placement.scale = distScale(gen);
-            placement.rotation = distRot(gen);
-
-            treePlacements_.push_back(placement);
         }
+        else if (cell.biome == Biome::Savanna) {
+            shouldPlaceTree = true;
+            treeTypeToPlace = TreeType::Oak;
+        }
+        else if (cell.biome == Biome::Snow) {
+            std::uniform_real_distribution<float> distSnowTree(0.0f, 1.0f);
+            if (distSnowTree(gen) < 0.4f) {
+                shouldPlaceTree = true;
+                treeTypeToPlace = TreeType::Fir;
+            }
+        }
+        else if (cell.biome == Biome::Tundra) {
+            std::uniform_real_distribution<float> distTundraTree(0.0f, 1.0f);
+            if (distTundraTree(gen) < 0.25f) {
+                shouldPlaceTree = true;
+                treeTypeToPlace = TreeType::Fir;
+            }
+        }
+
+        if (!shouldPlaceTree) continue;
+
+        TreePlacement placement;
+        placement.cellId = static_cast<int>(i);
+        placement.treeType = treeTypeToPlace;
+
+        if (!cell.poly.empty()) {
+            std::uniform_int_distribution<int> distTri(0, cell.poly.size() - 1);
+            placement.triangleIdx = distTri(gen);
+        }
+
+        float u = distBary(gen);
+        float v = distBary(gen);
+        if (u + v > 1.0f) {
+            u = 1.0f - u;
+            v = 1.0f - v;
+        }
+        placement.baryU = u;
+        placement.baryV = v;
+        placement.baryW = 1.0f - u - v;
+
+        if (cell.biome == Biome::Savanna) {
+            // Осенние деревья
+            placement.colorType = TreePlacement::TreeColorType::Autumn;
+            placement.isYellowCellTree = true;
+            autumnCount++;
+
+            placement.foliageColor = QVector3D(
+                distAutumnR(gen),
+                distAutumnG(gen),
+                distAutumnB(gen)
+            );
+
+            placement.trunkColor = QVector3D(
+                distTrunkR(gen) * 0.7f,
+                distTrunkG(gen) * 0.6f,
+                distTrunkB(gen) * 0.5f
+            );
+
+            placement.scale = distScale(gen) * 0.85f;
+        }
+        else if (placement.treeType == TreeType::Fir) {
+            // Ёлочки
+            placement.colorType = TreePlacement::TreeColorType::Green;
+            placement.isYellowCellTree = false;
+            firCount++;
+
+            placement.foliageColor = QVector3D(
+                distFirR(gen),
+                distFirG(gen),
+                distFirB(gen)
+            );
+
+            placement.trunkColor = QVector3D(
+                distFirTrunkR(gen),
+                distFirTrunkG(gen),
+                distFirTrunkB(gen)
+            );
+
+            placement.scale = distScale(gen) * 0.9f;
+        }
+        else {
+            // Зеленые деревья
+            placement.colorType = TreePlacement::TreeColorType::Green;
+            placement.isYellowCellTree = false;
+            greenCount++;
+
+            placement.foliageColor = QVector3D(
+                distGreenR(gen),
+                distGreenG(gen),
+                distGreenB(gen)
+            );
+
+            placement.trunkColor = QVector3D(
+                distTrunkR(gen),
+                distTrunkG(gen),
+                distTrunkB(gen)
+            );
+
+            if (cell.humidity > 0.7f) {
+                placement.scale = distScale(gen) * 1.2f;
+            }
+            else if (cell.humidity < 0.3f) {
+                placement.scale = distScale(gen) * 0.7f;
+            }
+            else {
+                placement.scale = distScale(gen);
+            }
+        }
+
+        placement.rotation = distRot(gen);
+        treePlacements_.push_back(placement);
     }
 
-    qDebug() << "Generated" << treePlacements_.size() << "tree placements (simple mode)";
+    qDebug() << "Generated" << treePlacements_.size() << "tree placements";
+    qDebug() << "  - Green trees:" << greenCount;
+    qDebug() << "  - Fir trees:" << firCount;
+    qDebug() << "  - Autumn trees:" << autumnCount;
+}
+
+void HexSphereSceneController::regenerateTreePlacements() {
+    generateTreePlacements();
 }
 
 static std::vector<QVector3D> convertToQVector3D(const std::vector<float>& positions) {

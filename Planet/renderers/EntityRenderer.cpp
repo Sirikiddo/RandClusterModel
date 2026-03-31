@@ -1,3 +1,5 @@
+// EntityRenderer.cpp - исправленный конструктор
+
 #include "renderers/EntityRenderer.h"
 #include "model/SurfacePlacement.h"
 #include <random>
@@ -24,6 +26,7 @@ namespace {
     }
 }
 
+// ИСПРАВЛЕННЫЙ КОНСТРУКТОР - все параметры соответствуют объявлению
 EntityRenderer::EntityRenderer(QOpenGLFunctions_3_3_Core* gl,
     GLuint progWire,
     GLuint progSel,
@@ -39,6 +42,7 @@ EntityRenderer::EntityRenderer(QOpenGLFunctions_3_3_Core* gl,
     GLuint vaoPyramid,
     const GLsizei& pyramidVertexCount,
     const std::shared_ptr<ModelHandler>& treeModel,
+    const std::shared_ptr<ModelHandler>& firTreeModel,  // ДОБАВЛЯЕМ
     const std::shared_ptr<CarModelHandler>& carModel)
     : gl_(gl)
     , progWire_(progWire)
@@ -55,6 +59,7 @@ EntityRenderer::EntityRenderer(QOpenGLFunctions_3_3_Core* gl,
     , vaoPyramid_(vaoPyramid)
     , pyramidVertexCount_(pyramidVertexCount)
     , treeModel_(treeModel)
+    , firTreeModel_(firTreeModel)  // ИНИЦИАЛИЗИРУЕМ
     , carModel_(carModel) {
 }
 
@@ -122,7 +127,7 @@ void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, cons
         r.setColumn(1, QVector4D(unitUp, 0.0f));
         r.setColumn(2, QVector4D(forwardTangent, 0.0f));
         return r;
-    };
+        };
 
     QMatrix4x4 orientation;
     auto* anim = ctx.graph.ecs.get<ecs::Animation>(entity.id);
@@ -207,12 +212,19 @@ void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, cons
 }
 
 void EntityRenderer::renderTrees(const HexSphereRenderer::RenderContext& ctx) const {
-    if (!treeModel_ || !treeModel_->isInitialized() || progModel_ == 0 || treeModel_->isEmpty()) return;
+    // Проверяем наличие хотя бы одной модели
+    if ((!treeModel_ || !treeModel_->isInitialized()) &&
+        (!firTreeModel_ || !firTreeModel_->isInitialized())) return;
+
+    if (progModel_ == 0) return;
 
     gl_->glUseProgram(progModel_);
 
-    // ???????: ???-????? ??????? ?? ??????????.
-    const GLint uIsCar = gl_->glGetUniformLocation(progModel_, "uIsCar");
+    GLint uIsCar = gl_->glGetUniformLocation(progModel_, "uIsCar");
+    GLint uUseFoliageColor = gl_->glGetUniformLocation(progModel_, "uUseFoliageColor");
+    GLint uFoliageColor = gl_->glGetUniformLocation(progModel_, "uFoliageColor");
+    GLint uTrunkColor = gl_->glGetUniformLocation(progModel_, "uTrunkColor");
+
     if (uIsCar >= 0) gl_->glUniform1i(uIsCar, 0);
 
     QVector3D globalLightDir = QVector3D(0.5f, 1.0f, 0.3f).normalized();
@@ -220,8 +232,6 @@ void EntityRenderer::renderTrees(const HexSphereRenderer::RenderContext& ctx) co
 
     gl_->glUniform3f(uLightDir_, globalLightDir.x(), globalLightDir.y(), globalLightDir.z());
     gl_->glUniform3f(uViewPos_, eye.x(), eye.y(), eye.z());
-    gl_->glUniform3f(uColor_, 0.15f, 0.5f, 0.1f);
-    gl_->glUniform1i(uUseTexture_, treeModel_->hasUVs() ? 1 : 0);
 
     const auto& placements = ctx.graph.scene.getTreePlacements();
 
@@ -231,14 +241,51 @@ void EntityRenderer::renderTrees(const HexSphereRenderer::RenderContext& ctx) co
         QMatrix4x4 model;
         model.translate(treePos);
         orientToSurfaceNormal(model, treePos.normalized());
+        model.rotate(placement.rotation * 180.0f / 3.14159f, 0, 1, 0);
 
-        float scale = 0.05f + 0.02f * (placement.cellId % 5);
+        // Выбираем масштаб в зависимости от типа дерева
+        float baseScale = 0.045f;
+        if (placement.treeType == TreeType::Fir) {
+            baseScale = 0.05f;
+        }
+        float scale = baseScale * placement.scale;
         model.scale(scale);
 
         QMatrix4x4 mvpTree = ctx.camera.projection * ctx.camera.view * model;
-        gl_->glUniformMatrix4fv(uMvpModel_, 1, GL_FALSE, mvpTree.constData());
-        gl_->glUniformMatrix4fv(uModel_, 1, GL_FALSE, model.constData());
 
-        treeModel_->draw(progModel_, mvpTree, model, ctx.camera.view);
+        // Выбираем нужную модель
+        const auto& currentModel = (placement.treeType == TreeType::Fir)
+            ? firTreeModel_
+            : treeModel_;
+
+        if (!currentModel || !currentModel->isInitialized()) continue;
+
+        // ========== РИСУЕМ СТВОЛ ==========
+        if (uUseFoliageColor >= 0) {
+            gl_->glUniform1i(uUseFoliageColor, 0);
+        }
+
+        if (uTrunkColor >= 0) {
+            gl_->glUniform3f(uTrunkColor,
+                placement.trunkColor.x(),
+                placement.trunkColor.y(),
+                placement.trunkColor.z());
+        }
+
+        currentModel->drawPart("trunk", progModel_, mvpTree, model, ctx.camera.view);
+
+        // ========== РИСУЕМ КРОНУ ==========
+        if (uUseFoliageColor >= 0) {
+            gl_->glUniform1i(uUseFoliageColor, 1);
+        }
+
+        if (uFoliageColor >= 0) {
+            gl_->glUniform3f(uFoliageColor,
+                placement.foliageColor.x(),
+                placement.foliageColor.y(),
+                placement.foliageColor.z());
+        }
+
+        currentModel->drawPart("foliage", progModel_, mvpTree, model, ctx.camera.view);
     }
 }

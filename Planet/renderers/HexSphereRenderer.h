@@ -148,6 +148,7 @@ private:
     GLsizei waterIndexCount_ = 0;
 
     std::shared_ptr<ModelHandler> treeModel_;
+    std::shared_ptr<ModelHandler> firTreeModel_;
 
     std::unique_ptr<TerrainRenderer> terrainRenderer_;
     std::unique_ptr<WaterRenderer> waterRenderer_;

@@ -50,6 +50,11 @@ enum class Biome : uint8_t {
     Jungle = 7
 };
 
+enum class TreeType : uint8_t {
+    Oak = 0,      // Обычное дерево (дуб)
+    Fir = 1       // Ёлочка
+};
+
 struct OreVisualParams {
     float density = 0.0f;           // Плотность [0-1]
     float grainSize = 0.05f;        // Размер зерна (0.01-0.1)
@@ -70,6 +75,20 @@ struct TreePlacement {
     float baryW = 0.34f;
     float scale = 1.0f;
     float rotation = 0.0f;
+
+    // НОВОЕ: тип дерева
+    TreeType treeType = TreeType::Oak;
+
+    // Цвета листвы и ствола
+    enum class TreeColorType : uint8_t {
+        Green = 0,
+        Autumn = 1
+    };
+
+    TreeColorType colorType = TreeColorType::Green;
+    QVector3D foliageColor = QVector3D(0.2f, 0.55f, 0.15f);
+    QVector3D trunkColor = QVector3D(0.5f, 0.35f, 0.2f);
+    bool isYellowCellTree = false;
 
     QVector3D getPosition(const HexSphereModel& model) const;
 };

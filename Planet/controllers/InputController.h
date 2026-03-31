@@ -95,7 +95,7 @@ private:
     CameraController& camera_;
     QOpenGLWidget* owner_ = nullptr;
     std::unique_ptr<HexSphereRenderer> renderer_;
-    
+
 
     HexSphereSceneController scene_{};
     ecs::ComponentStorage ecs_{};

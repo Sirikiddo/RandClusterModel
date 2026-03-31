@@ -52,6 +52,7 @@ public:
     void setGeneratorByIndex(int idx);
     void setGenParams(const TerrainParams& params);
     void setSubdivisionLevel(int level);
+    void regenerateTreePlacements();
 
     void setSmoothOneStep(bool on);
     void setStripInset(float value);

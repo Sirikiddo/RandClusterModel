@@ -20,9 +20,9 @@ public:
     std::vector<int> astar(int startId, int goalId) const;
 
     std::vector<QVector3D> polylineOnSphere(const std::vector<int>& path,
-                                            int segmentsPerEdge,
-                                            float bias,
-                                            float heightStep) const;
+        int segmentsPerEdge,
+        float bias,
+        float heightStep) const;
 
     static bool isTraversable(const Cell& from, const Cell& to);
     static float edgeAngularDistance(const Cell& from, const Cell& to);

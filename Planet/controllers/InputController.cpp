@@ -19,77 +19,78 @@
 
 namespace {
 
-constexpr int kPathSegmentsPerEdge = 8;
-constexpr float kEntitySurfaceOffset = 0.0f;
-constexpr float kBaseTraversalSpeed = 0.35f;
+    constexpr int kPathSegmentsPerEdge = 8;
+    constexpr float kEntitySurfaceOffset = 0.0f;
+    constexpr float kBaseTraversalSpeed = 0.35f;
 
-bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
-                   const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
-                   float& tOut) {
-    const float eps = 1e-6f;
-    const QVector3D e1 = v1 - v0;
-    const QVector3D e2 = v2 - v0;
-    const QVector3D p = QVector3D::crossProduct(d, e2);
-    const float det = QVector3D::dotProduct(e1, p);
-    if (std::fabs(det) < eps) return false;
+    bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
+        const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
+        float& tOut) {
+        const float eps = 1e-6f;
+        const QVector3D e1 = v1 - v0;
+        const QVector3D e2 = v2 - v0;
+        const QVector3D p = QVector3D::crossProduct(d, e2);
+        const float det = QVector3D::dotProduct(e1, p);
+        if (std::fabs(det) < eps) return false;
 
-    const float invDet = 1.0f / det;
-    const QVector3D t = o - v0;
-    const float u = QVector3D::dotProduct(t, p) * invDet;
-    if (u < -eps || u > 1.0f + eps) return false;
+        const float invDet = 1.0f / det;
+        const QVector3D t = o - v0;
+        const float u = QVector3D::dotProduct(t, p) * invDet;
+        if (u < -eps || u > 1.0f + eps) return false;
 
-    const QVector3D q = QVector3D::crossProduct(t, e1);
-    const float v = QVector3D::dotProduct(d, q) * invDet;
-    if (v < -eps || u + v > 1.0f + eps) return false;
+        const QVector3D q = QVector3D::crossProduct(t, e1);
+        const float v = QVector3D::dotProduct(d, q) * invDet;
+        if (v < -eps || u + v > 1.0f + eps) return false;
 
-    const float tt = QVector3D::dotProduct(e2, q) * invDet;
-    if (tt <= eps) return false;
+        const float tt = QVector3D::dotProduct(e2, q) * invDet;
+        if (tt <= eps) return false;
 
-    tOut = tt;
-    return true;
-}
-
-void printGlInfo(QOpenGLFunctions_3_3_Core* gl) {
-    const GLubyte* vendor = gl->glGetString(GL_VENDOR);
-    const GLubyte* renderer = gl->glGetString(GL_RENDERER);
-    const GLubyte* version = gl->glGetString(GL_VERSION);
-
-    qDebug() << "=== OpenGL Device Info ===";
-    qDebug() << "GPU Vendor:   " << reinterpret_cast<const char*>(vendor);
-    qDebug() << "GPU Renderer: " << reinterpret_cast<const char*>(renderer);
-    qDebug() << "GL Version:   " << reinterpret_cast<const char*>(version);
-    qDebug() << "===========================";
-}
-
-float landingDurationMultiplier(Biome biome) {
-    switch (biome) {
-    case Biome::Sea:  return 1.25f;
-    case Biome::Snow: return 1.10f;
-    default:          return 1.0f;
+        tOut = tt;
+        return true;
     }
-}
 
-float bounceHeightForBiome(Biome biome) {
-    switch (biome) {
-    case Biome::Sea:  return 0.018f;
-    case Biome::Snow: return 0.028f;
-    case Biome::Rock: return 0.030f;
-    default:          return 0.035f;
+    void printGlInfo(QOpenGLFunctions_3_3_Core* gl) {
+        const GLubyte* vendor = gl->glGetString(GL_VENDOR);
+        const GLubyte* renderer = gl->glGetString(GL_RENDERER);
+        const GLubyte* version = gl->glGetString(GL_VERSION);
+
+        qDebug() << "=== OpenGL Device Info ===";
+        qDebug() << "GPU Vendor:   " << reinterpret_cast<const char*>(vendor);
+        qDebug() << "GPU Renderer: " << reinterpret_cast<const char*>(renderer);
+        qDebug() << "GL Version:   " << reinterpret_cast<const char*>(version);
+        qDebug() << "===========================";
     }
-}
 
-float arcPeakForBiome(Biome biome) {
-    return biome == Biome::Sea ? 0.32f : 0.5f;
-}
+    float landingDurationMultiplier(Biome biome) {
+        switch (biome) {
+        case Biome::Sea:  return 1.25f;
+        case Biome::Snow: return 1.10f;
+        default:          return 1.0f;
+        }
+    }
 
-bool usesSoftLanding(Biome biome) {
-    return biome == Biome::Sea;
-}
+    float bounceHeightForBiome(Biome biome) {
+        switch (biome) {
+        case Biome::Sea:  return 0.018f;
+        case Biome::Snow: return 0.028f;
+        case Biome::Rock: return 0.030f;
+        default:          return 0.035f;
+        }
+    }
+
+    float arcPeakForBiome(Biome biome) {
+        return biome == Biome::Sea ? 0.32f : 0.5f;
+    }
+
+    bool usesSoftLanding(Biome biome) {
+        return biome == Biome::Sea;
+    }
 
 } // namespace
 
 InputController::InputController(CameraController& camera)
-    : camera_(camera) {}
+    : camera_(camera) {
+}
 
 void InputController::initialize(QOpenGLWidget* owner) {
     owner_ = owner;
@@ -153,7 +154,8 @@ InputController::Response InputController::mousePress(QMouseEvent* e) {
 
         if (hit->isEntity) {
             selectEntity(hit->entityId, response);
-        } else if (hit->cellId >= 0) {
+        }
+        else if (hit->cellId >= 0) {
             scene_.toggleCellSelection(hit->cellId);
             uploadSelection();
             moveSelectedEntityToCell(hit->cellId, response);
@@ -266,7 +268,7 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         for (int cid : scene_.selectedCells()) {
             fn(cid);
         }
-    };
+        };
 
     switch (e->key()) {
     case Qt::Key_Plus:
@@ -405,7 +407,8 @@ void InputController::buildAndShowSelectedPath(Response& response) {
     if (renderer_) {
         if (auto poly = scene_.buildPathPolyline()) {
             renderer_->uploadPath(*poly);
-        } else {
+        }
+        else {
             renderer_->uploadPath({});
         }
     }
@@ -420,7 +423,8 @@ void InputController::buildAndShowPathBetween(int startCell, int targetCell, Res
         if (!ids.empty()) {
             const auto poly = pb.polylineOnSphere(ids, kPathSegmentsPerEdge, scene_.pathBias(), scene_.heightStep());
             renderer_->uploadPath(poly);
-        } else {
+        }
+        else {
             renderer_->uploadPath({});
         }
     }
@@ -440,7 +444,8 @@ void InputController::updateBufferUsageStrategy() {
         uploadOptions_.terrainUsage = GL_DYNAMIC_DRAW;
         uploadOptions_.wireUsage = GL_DYNAMIC_DRAW;
         uploadOptions_.useStaticBuffers = false;
-    } else {
+    }
+    else {
         uploadOptions_.terrainUsage = GL_STATIC_DRAW;
         uploadOptions_.wireUsage = GL_STATIC_DRAW;
         uploadOptions_.useStaticBuffers = true;
@@ -526,7 +531,7 @@ std::optional<InputController::PickHit> InputController::pickEntityAt(int sx, in
             bestEntityId = e.id;
             bestPos = ro + rd * t;
         }
-    });
+        });
 
     if (bestEntityId != -1) {
         return PickHit{ -1, bestEntityId, bestPos, bestT, true };

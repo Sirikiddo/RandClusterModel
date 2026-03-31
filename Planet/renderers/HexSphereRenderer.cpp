@@ -218,6 +218,14 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     treeModel_ = ModelHandler::loadShared(modelPath);
     if (treeModel_) {
         treeModel_->uploadToGPU();
+        qDebug() << "Tree model loaded successfully with groups!";
+    }
+
+    const QString firTreePath = "resources/fir_tree.obj";
+    firTreeModel_ = ModelHandler::loadShared(firTreePath);
+    if (firTreeModel_) {
+        firTreeModel_->uploadToGPU();
+        qDebug() << "Fir tree model loaded successfully!";
     }
 
     // В HexSphereRenderer::initialize(), после всех остальных инициализаций:
@@ -251,7 +259,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         gl_, progWire_, progSel_, progModel_,
         uMVP_Wire_, uMVP_Sel_, uMVP_Model_, uModel_Model_,
         uLightDir_Model_, uViewPos_Model_, uColor_Model_, uUseTexture_,
-        vaoPyramid_, pyramidVertexCount_, treeModel_, carModel_);
+        vaoPyramid_, pyramidVertexCount_, treeModel_, firTreeModel_, carModel_);
     overlayRenderer_ = std::make_unique<OverlayRenderer>(gl_, progWire_, progSel_, uMVP_Wire_, uMVP_Sel_, vaoWire_, vaoSel_, vaoPath_, lineVertexCount_, selLineVertexCount_, pathVertexCount_);
 
     glReady_ = true;
