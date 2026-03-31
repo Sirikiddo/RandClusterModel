@@ -16,6 +16,7 @@
 #include "controllers/HexSphereSceneController.h"
 #include "resources/HexSphereWidget_shaders.h"
 #include "model/ModelHandler.h"
+#include "model/CarModelHandler.h"
 
 #include <QMutex>
 #include <QtConcurrent/QtConcurrent>
@@ -82,7 +83,7 @@ public:
     bool ready() const { return glReady_; }
     GLuint envCubemap() const { return envCubemap_; }
 
-    // Для двойной буферизации
+    // пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     struct VisibilityBuffer {
         std::vector<uint32_t> indices;
         bool ready = false;
@@ -109,7 +110,7 @@ private:
     void uploadPathInternal(const std::vector<QVector3D>& points);
     void uploadWaterInternal(const WaterGeometryData& data);
 
-    // НОВЫЙ МЕТОД
+    // пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ
     void recreateTerrainVAO();
 
     HexSphereSceneController* lastScene_ = nullptr;
@@ -163,4 +164,6 @@ private:
     bool firstRenderDone_ = false;
 
     size_t totalIndexCount_ = 0;
+
+    std::shared_ptr<CarModelHandler> carModel_;
 };

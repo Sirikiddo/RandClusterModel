@@ -3,8 +3,76 @@
 
 #include <algorithm>
 #include <cmath>
+#include <QDebug>
+#include <QQuaternion>
 
 namespace ecs {
+
+    static QVector3D projectOntoTangentPlane(const QVector3D& v, const QVector3D& unitNormal) {
+        QVector3D p = v - QVector3D::dotProduct(v, unitNormal) * unitNormal;
+        const float len = p.length();
+        if (len < 1e-6f) return QVector3D();
+        return p / len;
+    }
+
+    static QVector3D defaultTangentForward(const QVector3D& unitNormal) {
+        QVector3D refX(1, 0, 0);
+        QVector3D right = refX - QVector3D::dotProduct(refX, unitNormal) * unitNormal;
+        if (right.length() < 0.01f) {
+            refX = QVector3D(0, 0, 1);
+            right = refX - QVector3D::dotProduct(refX, unitNormal) * unitNormal;
+        }
+        right.normalize();
+        return QVector3D::crossProduct(unitNormal, right).normalized();
+    }
+
+    static QVector3D tangentFromPathSegment(const QVector3D& prevPos, const QVector3D& nextPos, const QVector3D& unitNormal) {
+        QVector3D edge = nextPos - prevPos;
+        QVector3D t = projectOntoTangentPlane(edge, unitNormal);
+        if (t.length() < 1e-6f) return QVector3D();
+        return t.normalized();
+    }
+
+    static QVector3D pathDesiredForward(const Animation& anim, float distanceAlongPath, const QVector3D& unitNormal) {
+        if (anim.pathPoints.size() < 2) return QVector3D();
+
+        const float d = std::clamp(distanceAlongPath, 0.0f, anim.pathTotalLength);
+        if (d >= anim.pathTotalLength - 1e-5f) {
+            const size_t n = anim.pathPoints.size();
+            return tangentFromPathSegment(anim.pathPoints[n - 2], anim.pathPoints[n - 1], unitNormal);
+        }
+
+        size_t i = 1;
+        while (i < anim.pathCumulative.size() && anim.pathCumulative[i] < d) ++i;
+        if (i >= anim.pathPoints.size()) {
+            const size_t n = anim.pathPoints.size();
+            return tangentFromPathSegment(anim.pathPoints[n - 2], anim.pathPoints[n - 1], unitNormal);
+        }
+
+        QVector3D prevPos = (i > 1) ? anim.pathPoints[i - 1] : anim.pathPoints[0];
+        QVector3D nextPos = anim.pathPoints[i];
+        return tangentFromPathSegment(prevPos, nextPos, unitNormal);
+    }
+
+    static QVector3D rotateTowardInTangentPlane(QVector3D current, QVector3D target, const QVector3D& unitNormal, float maxAngleRad) {
+        current = projectOntoTangentPlane(current, unitNormal);
+        target = projectOntoTangentPlane(target, unitNormal);
+        if (current.length() < 1e-6f) return target.length() > 1e-6f ? target : defaultTangentForward(unitNormal);
+        if (target.length() < 1e-6f) return current;
+
+        current.normalize();
+        target.normalize();
+
+        float dotc = std::clamp(QVector3D::dotProduct(current, target), -1.0f, 1.0f);
+        float angle = std::acos(dotc);
+        float crossSign = QVector3D::dotProduct(QVector3D::crossProduct(current, target), unitNormal);
+        float signedAngle = (crossSign >= 0.0f ? 1.0f : -1.0f) * angle;
+        float step = std::copysign(std::min(std::abs(signedAngle), maxAngleRad), signedAngle);
+
+        const QQuaternion q = QQuaternion::fromAxisAndAngle(unitNormal, step * 180.0f / static_cast<float>(M_PI));
+        QVector3D out = q.rotatedVector(current);
+        return projectOntoTangentPlane(out, unitNormal);
+    }
 
     static QVector3D samplePolylineByDistance(const Animation& anim, float distance) {
         if (anim.pathPoints.empty()) return anim.startPos;
@@ -136,14 +204,43 @@ namespace ecs {
         }
 
         std::vector<EntityId> toRemove;
+
         for (auto& [id, anim] : animations_) {
             anim.elapsed += dt;
 
             if (anim.isFinished()) {
-                if (anim.onComplete) {
+                if (!anim.completedFired && anim.onComplete) {
                     anim.onComplete(id);
+                    anim.completedFired = true;
                 }
-                toRemove.push_back(id);
+
+                // На финише важно обновить direction точно по последнему сегменту.
+                // Затем держим анимацию ровно на 1 кадр, чтобы рендер успел показать корректное направление.
+                auto* finishedTransform = get<Transform>(id);
+                if (anim.type == Animation::Type::MoveTo && !anim.pathPoints.empty()) {
+                    const QVector3D unitNormal = anim.targetPos.normalized();
+                    QVector3D desired = pathDesiredForward(anim, anim.pathTotalLength, unitNormal);
+                    if (desired.length() < 1e-6f) {
+                        desired = defaultTangentForward(unitNormal);
+                    }
+                    anim.surfaceForward = desired;
+                    if (finishedTransform) {
+                        finishedTransform->surfaceForward = desired;
+                    }
+
+                    if (anim.finishHoldFrames <= 0) {
+                        anim.finishHoldFrames = 1;
+                        // не удаляем прямо сейчас
+                    }
+                    else {
+                        // следующий update после "холдера" уже удаляем
+                        anim.finishHoldFrames -= 1;
+                        toRemove.push_back(id);
+                    }
+                }
+                else {
+                    toRemove.push_back(id);
+                }
                 continue;
             }
 
@@ -154,11 +251,34 @@ namespace ecs {
                     if (!anim.pathPoints.empty()) {
                         const float d = t * anim.pathTotalLength;
                         transform->position = samplePolylineByDistance(anim, d);
+
+                        if (anim.pathPoints.size() >= 2) {
+                            const QVector3D unitNormal = transform->position.normalized();
+                            QVector3D desired = pathDesiredForward(anim, d, unitNormal);
+                            if (desired.length() < 1e-6f) {
+                                desired = defaultTangentForward(unitNormal);
+                            }
+
+                            const float maxRad = anim.rotationSpeed * static_cast<float>(M_PI) / 180.0f * dt;
+                            if (anim.surfaceForward.length() < 0.5f) {
+                                anim.surfaceForward = desired;
+                            }
+                            else {
+                                anim.surfaceForward = rotateTowardInTangentPlane(anim.surfaceForward, desired, unitNormal, maxRad);
+                                if (anim.surfaceForward.length() < 1e-6f) {
+                                    anim.surfaceForward = desired;
+                                }
+                            }
+
+                            // Сохраняем в Transform, чтобы после удаления Animation направление не сбрасывалось.
+                            transform->surfaceForward = anim.surfaceForward;
+                        }
                     }
                     else {
                         transform->position = anim.startPos * (1.0f - t) + anim.targetPos * t;
                     }
 
+                    // ��������� ������ �������������
                     if (anim.bounceHeight > 0.0f) {
                         const QVector3D up = transform->position.normalized();
                         transform->position += up * arcHeightFactor(anim, t) * anim.bounceHeight;

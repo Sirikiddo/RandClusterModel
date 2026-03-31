@@ -220,6 +220,21 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         treeModel_->uploadToGPU();
     }
 
+    // В HexSphereRenderer::initialize(), после всех остальных инициализаций:
+    owner_->makeCurrent();  // Убеждаемся, что контекст текущий
+
+    const QString carPath = "resources/car/scene.obj";
+    carModel_ = std::make_shared<CarModelHandler>();
+    if (!carModel_->loadFromFile(carPath)) {
+        qDebug() << "Failed to load car model from:" << carPath;
+    }
+    else {
+        carModel_->uploadToGPU();  // Теперь текстуры загрузятся с активным контекстом
+        qDebug() << "Car model loaded successfully";
+    }
+
+    owner_->doneCurrent();  // Можно снять контекст, если нужно
+
     // СОЗДАЁМ РЕНДЕРЕРЫ ПОСЛЕ ВСЕХ ИНИЦИАЛИЗАЦИЙ
     terrainRenderer_ = std::make_unique<TerrainRenderer>(
         gl_,
@@ -232,7 +247,11 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     );
 
     waterRenderer_ = std::make_unique<WaterRenderer>(gl_, progWater_, uMVP_Water_, uTime_Water_, uLightDir_Water_, uViewPos_Water_, uEnvMap_, envCubemap_, vaoWater_, waterIndexCount_);
-    entityRenderer_ = std::make_unique<EntityRenderer>(gl_, progWire_, progSel_, progModel_, uMVP_Wire_, uMVP_Sel_, uMVP_Model_, uModel_Model_, uLightDir_Model_, uViewPos_Model_, uColor_Model_, uUseTexture_, vaoPyramid_, pyramidVertexCount_, treeModel_);
+    entityRenderer_ = std::make_unique<EntityRenderer>(
+        gl_, progWire_, progSel_, progModel_,
+        uMVP_Wire_, uMVP_Sel_, uMVP_Model_, uModel_Model_,
+        uLightDir_Model_, uViewPos_Model_, uColor_Model_, uUseTexture_,
+        vaoPyramid_, pyramidVertexCount_, treeModel_, carModel_);
     overlayRenderer_ = std::make_unique<OverlayRenderer>(gl_, progWire_, progSel_, uMVP_Wire_, uMVP_Sel_, vaoWire_, vaoSel_, vaoPath_, lineVertexCount_, selLineVertexCount_, pathVertexCount_);
 
     glReady_ = true;

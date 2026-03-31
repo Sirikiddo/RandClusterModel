@@ -12,6 +12,11 @@ namespace ecs {
         QVector3D position{ 0.0f, 0.0f, 0.0f };
         QQuaternion rotation{};
         QVector3D scale{ 1.0f, 1.0f, 1.0f };
+        float yawAngle = 0.0f;
+
+        // Направление движения по касательной плоскости (радиус = нормаль сферы).
+        // Нужна, чтобы ориентация не сбрасывалась после удаления `Animation`.
+        QVector3D surfaceForward{ 0.0f, 0.0f, 0.0f };
 
         QMatrix4x4 toMatrix() const {
             QMatrix4x4 m;

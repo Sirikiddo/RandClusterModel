@@ -250,34 +250,55 @@ uniform vec3 uLightDir;
 uniform vec3 uViewPos;
 uniform vec3 uColor;
 uniform bool uUseTexture;
-uniform sampler2D uTreeTexture;
+uniform int uIsCar;
+uniform sampler2D uTexture;
 
 void main() {
     vec3 N = normalize(vNormal);
     vec3 L = normalize(uLightDir);
+    vec3 V = normalize(uViewPos - vWorldPos);
     
     float diff = max(dot(N, L), 0.0);
     
-    vec3 finalColor;
-    
-    if (uUseTexture) {
-        float texCoordX = (vUV.x < 0.2) ? 0.25 : 0.75;
-        vec2 texCoord = vec2(texCoordX, 0.5);
-        vec3 baseColor = texture(uTreeTexture, texCoord).rgb;
-        
-        if (vUV.x >= 0.2) {
-            float variation = sin(vUV.y * 10.0) * 0.1;
-            baseColor.g += variation;
+    vec3 baseColor = uColor;
+    const vec3 carYellow = vec3(1.0, 0.85, 0.05);
+    if (uIsCar == 1) {
+        // Для машины сохраняем рисунок текстуры, но делаем непрозрачно-жёлтый вид:
+        // - альфу текстуры НЕ используем в итоговом цвете (иначе будет "прозрачность/дырки")
+        // - если текстура premultiplied, восстанавливаем rgb через rgb/a
+        // - затем тонируем в жёлтый через luminance-маску
+        if (uUseTexture) {
+            vec4 tex = texture(uTexture, vUV);
+            float a = max(tex.a, 1e-3);
+            vec3 texRGB = clamp(tex.rgb / a, 0.0, 1.0);
+            float lum = dot(texRGB, vec3(0.2126, 0.7152, 0.0722));
+            // Убираем "провалы" в ноль (тёмные пиксели текстуры делали участок чёрным/неокрашенным).
+            float lumClamped = clamp(lum, 0.0, 1.0);
+            const float lumMin = 0.6; // гарантируем минимум ярко-жёлтого (чтобы верх не уходил в "черно")
+            lumClamped = lumMin + (1.0 - lumMin) * lumClamped;
+            baseColor = carYellow * lumClamped;
+        } else {
+            baseColor = carYellow;
         }
-        
-        finalColor = baseColor;
-    } else {
-        finalColor = uColor;
     }
+
+    vec3 finalColor = baseColor;
     
     vec3 ambient = 0.3 * finalColor;
     vec3 diffuse = 0.7 * diff * finalColor;
-    
-    FragColor = vec4(ambient + diffuse, 1.0);
+
+    // Specular-блик только для машины (делает покрытие "реальным").
+    vec3 specular = vec3(0.0);
+    if (uIsCar == 1) {
+        vec3 H = normalize(L + V);
+        float ndh = max(dot(N, H), 0.0);
+        float shininess = 64.0;
+        float carSpec = pow(ndh, shininess);
+        specular = 0.45 * carSpec * vec3(1.0, 1.0, 0.9);
+    }
+
+    vec3 outColor = ambient + diffuse + specular;
+
+    FragColor = vec4(outColor, 1.0);
 }
 )GLSL";

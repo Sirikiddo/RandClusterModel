@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "renderers/HexSphereRenderer.h"
+#include "model/CarModelHandler.h"
 
 class EntityRenderer {
 public:
@@ -22,10 +23,12 @@ public:
         GLint uUseTexture,
         GLuint vaoPyramid,
         const GLsizei& pyramidVertexCount,
-        const std::shared_ptr<ModelHandler>& treeModel);
+        const std::shared_ptr<ModelHandler>& treeModel,
+        const std::shared_ptr<CarModelHandler>& carModel);
 
     void renderEntities(const HexSphereRenderer::RenderContext& ctx) const;
     void renderTrees(const HexSphereRenderer::RenderContext& ctx) const;
+    void renderCar(const HexSphereRenderer::RenderContext& ctx, const ecs::Entity& entity) const;
 
 private:
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
@@ -43,5 +46,5 @@ private:
     GLuint vaoPyramid_ = 0;
     const GLsizei& pyramidVertexCount_;
     std::shared_ptr<ModelHandler> treeModel_;
+    std::shared_ptr<CarModelHandler> carModel_;
 };
-

@@ -229,7 +229,8 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         for (int next : currentCell.neighbors) {
             if (next < 0) continue;
             buildAndShowPathBetween(entity.currentCell, next, response);
-            moved = applyAnimation(entity.id, next, kBaseTraversalSpeed, bounceHeightForBiome(cells[static_cast<size_t>(next)].biome));
+            // Для Explorer-движения хотим прямую "по поверхности", без подпрыгивания
+            moved = applyAnimation(entity.id, next, kBaseTraversalSpeed, 0.0f);
             if (moved) {
                 break;
             }
@@ -596,7 +597,8 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     }
 
     buildAndShowPathBetween(oldCell, cellId, response);
-    if (!applyAnimation(entity->id, cellId, kBaseTraversalSpeed, bounceHeightForBiome(scene_.model().cells()[static_cast<size_t>(cellId)].biome))) {
+    // Для Explorer-движения хотим прямую "по поверхности", без подпрыгивания
+    if (!applyAnimation(entity->id, cellId, kBaseTraversalSpeed, 0.0f)) {
         if (renderer_) {
             renderer_->uploadPath({});
         }
@@ -660,6 +662,7 @@ InputController::Response InputController::regenerateOreDeposits() {
     return response;
 }
 
+
 bool InputController::applyAnimation(int entityId, int targetCell, float speed, float bounceHeight) {
     auto* entity = ecs_.getEntity(entityId);
     if (!entity) {
@@ -718,6 +721,7 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
     entity->currentCell = -1;
     transform->position = pathPoints.front();
 
+    // ������ ��������
     ecs::Animation& anim = ecs_.emplace<ecs::Animation>(entityId);
     anim.type = ecs::Animation::Type::MoveTo;
     anim.duration = 0.0f;
@@ -764,14 +768,35 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
         }
     }
 
-    speed = std::max(0.01f, speed);
-    anim.bounceHeight = std::min(std::max(0.0f, bounceHeight), bounceHeightForBiome(targetData.biome));
-    if (anim.bounceHeight <= 0.0f) {
-        anim.bounceHeight = bounceHeightForBiome(targetData.biome);
+    if (anim.pathPoints.size() >= 2) {
+        const QVector3D unitUp = startPos.normalized();
+        QVector3D edge = anim.pathPoints[1] - anim.pathPoints[0];
+        QVector3D t = edge - QVector3D::dotProduct(edge, unitUp) * unitUp;
+        if (t.length() < 1e-6f) {
+            QVector3D refX(1, 0, 0);
+            QVector3D right = refX - QVector3D::dotProduct(refX, unitUp) * unitUp;
+            if (right.length() < 0.01f) {
+                refX = QVector3D(0, 0, 1);
+                right = refX - QVector3D::dotProduct(refX, unitUp) * unitUp;
+            }
+            right.normalize();
+            anim.surfaceForward = QVector3D::crossProduct(unitUp, right).normalized();
+        }
+        else {
+            anim.surfaceForward = t.normalized();
+        }
     }
+    // Сохраняем направление сразу в Transform, чтобы оно не зависело от наличия Animation.
+    transform->surfaceForward = anim.surfaceForward;
+
+    speed = std::max(0.01f, speed);
+    // Если caller передал 0.0f, подпрыгивание должно полностью отключиться.
+    anim.bounceHeight = std::clamp(bounceHeight, 0.0f, bounceHeightForBiome(targetData.biome));
     anim.arcPeakT = arcPeakForBiome(targetData.biome);
     anim.softLanding = usesSoftLanding(targetData.biome);
     anim.duration = std::max(0.1f, (anim.pathTotalLength / speed) * landingDurationMultiplier(targetData.biome));
+    anim.rotationSpeed = 540.0f;
+
     anim.onComplete = [this, targetCell, targetPos](int id) {
         if (auto* completedEntity = ecs_.getEntity(id)) {
             completedEntity->currentCell = targetCell;
@@ -779,7 +804,7 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
         if (auto* completedTransform = ecs_.get<ecs::Transform>(id)) {
             completedTransform->position = targetPos;
         }
-    };
+        };
 
     return true;
 }
