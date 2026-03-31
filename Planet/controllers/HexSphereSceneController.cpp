@@ -97,7 +97,7 @@ std::optional<std::vector<QVector3D>> HexSphereSceneController::buildPathPolylin
     ++it;
     const int b = *it;
 
-    PathBuilder pb(model_);
+    PathBuilder pb(model_, smoothOneStep_ ? 1 : 0);
     pb.build();
     auto ids = pb.astar(a, b);
     auto poly = pb.polylineOnSphere(ids, /*segmentsPerEdge=*/8, pathBias_, heightStep_);

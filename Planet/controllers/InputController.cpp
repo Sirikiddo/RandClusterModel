@@ -86,6 +86,14 @@ namespace {
         return biome == Biome::Sea;
     }
 
+    int pathSmoothDelta(const HexSphereSceneController& scene) {
+        return scene.smoothOneStep() ? 1 : 0;
+    }
+
+    int pathClimbLimit(const HexSphereSceneController& scene) {
+        return PathBuilder::effectiveMaxClimbDelta(pathSmoothDelta(scene));
+    }
+
 } // namespace
 
 InputController::InputController(CameraController& camera)
@@ -417,7 +425,7 @@ void InputController::buildAndShowSelectedPath(Response& response) {
 
 void InputController::buildAndShowPathBetween(int startCell, int targetCell, Response& response) {
     if (renderer_) {
-        PathBuilder pb(scene_.model());
+        PathBuilder pb(scene_.model(), pathSmoothDelta(scene_));
         pb.build();
         const auto ids = pb.astar(startCell, targetCell);
         if (!ids.empty()) {
@@ -607,7 +615,7 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
         if (renderer_) {
             renderer_->uploadPath({});
         }
-        response.hudMessage = QString("No traversable path. Max climb is %1 cells.").arg(PathBuilder::kMaxClimbDelta);
+        response.hudMessage = QString("No traversable path. Max smooth climb is %1 cells.").arg(pathClimbLimit(scene_));
         deselectEntity();
         response.requestUpdate = true;
         return;
@@ -698,7 +706,7 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
         return true;
     }
 
-    PathBuilder pb(scene_.model());
+    PathBuilder pb(scene_.model(), pathSmoothDelta(scene_));
     pb.build();
     const auto cellPath = pb.astar(startCell, targetCell);
     if (cellPath.empty()) {
@@ -744,7 +752,7 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
         const Cell& from = cells[static_cast<size_t>(cellPath[edgeIndex])];
         const Cell& to = cells[static_cast<size_t>(cellPath[edgeIndex + 1])];
         const float angularDistance = PathBuilder::edgeAngularDistance(from, to);
-        const float traversalCost = PathBuilder::traversalCost(from, to);
+        const float traversalCost = pb.traversalCost(from, to);
         const float speedFactor = (angularDistance > 1e-6f && std::isfinite(traversalCost))
             ? (traversalCost / angularDistance)
             : PathBuilder::biomeTraversalFactor(to.biome);

@@ -14,6 +14,10 @@ namespace {
 
 } // namespace
 
+int PathBuilder::effectiveMaxClimbDelta(int smoothMaxDelta) {
+    return std::clamp(smoothMaxDelta, 0, kMaxClimbDelta);
+}
+
 void PathBuilder::build(PathBuilder::WeightFn w) const {
     const auto& cells = model_.cells();
     const int n = static_cast<int>(cells.size());
@@ -35,8 +39,12 @@ void PathBuilder::build(PathBuilder::WeightFn w) const {
     }
 }
 
-bool PathBuilder::isTraversable(const Cell& from, const Cell& to) {
-    return (to.height - from.height) <= kMaxClimbDelta;
+bool PathBuilder::isTraversable(const Cell& from, const Cell& to) const {
+    const int climbDelta = to.height - from.height;
+    if (climbDelta <= 0) {
+        return true;
+    }
+    return climbDelta <= smoothMaxDelta_;
 }
 
 float PathBuilder::edgeAngularDistance(const Cell& from, const Cell& to) {
@@ -61,7 +69,7 @@ float PathBuilder::biomeTraversalFactor(Biome biome) {
     }
 }
 
-float PathBuilder::traversalCost(const Cell& from, const Cell& to) {
+float PathBuilder::traversalCost(const Cell& from, const Cell& to) const {
     if (!isTraversable(from, to)) {
         return std::numeric_limits<float>::infinity();
     }
