@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "controllers/InputController.h"
-#include "OreSystem.h"
+#include "model/OreSystem.h"
 
 class CameraController;
 struct TerrainParams;

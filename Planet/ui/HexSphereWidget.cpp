@@ -15,41 +15,7 @@
 #include "controllers/CameraController.h"
 #include "controllers/InputController.h"
 
-#include "OreSystem.h"
-
-//HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputController& inputController, QWidget* parent)
-//    : QOpenGLWidget(parent)
-//    , cameraController_(cameraController)
-//    , inputController_(inputController)
-//    , oreSystem_(nullptr) {
-//
-//    qDebug() << "HexSphereWidget constructor start";
-//
-//    setFocusPolicy(Qt::StrongFocus);
-//
-//    auto* hud = new QLabel(this);
-//    qDebug() << "HUD created";
-//
-//    hud->setAttribute(Qt::WA_TransparentForMouseEvents);
-//    hud->setStyleSheet("QLabel { background: rgba(0,0,0,140); color: white; padding: 6px; }");
-//    hud->move(10, 10);
-//    hud->setText("LMB: select | C: clear path | P: build path | +/-: height | 1-8: biomes | S: smooth | W: move | O: ore viz");
-//    hud->adjustSize();
-//
-//    waterTimer_ = new QTimer(this);
-//
-//    qDebug() << "Timer created";
-//
-//    qDebug() << "HexSphereWidget constructor end";
-//
-//    connect(waterTimer_, &QTimer::timeout, this, [this]() {
-//        applyResponse(inputController_.advanceWaterTime(0.016f));
-//
-//        // ��������� �������� ����
-//        inputController_.setOreAnimationTime(inputController_.getOreAnimationTime() + 0.016f * 0.1f);
-//        update(); // ����������� �����������
-//        });
-//}
+#include "model/OreSystem.h"
 
 HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputController& inputController, QWidget* parent)
     : QOpenGLWidget(parent)
