@@ -221,6 +221,7 @@ static const char* VS_MODEL = R"GLSL(
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aNormal;
 layout(location=2) in vec2 aUV;
+layout(location=3) in vec3 aColor;
 
 uniform mat4 uMVP;
 uniform mat4 uModel;
@@ -228,12 +229,14 @@ uniform mat4 uModel;
 out vec3 vNormal;
 out vec3 vWorldPos;
 out vec2 vUV;
+out vec3 vColor;
 
 void main() {
     vec4 worldPos = uModel * vec4(aPos, 1.0);
     vWorldPos = worldPos.xyz;
-    vNormal = mat3(uModel) * aNormal;
+    vNormal = mat3(transpose(inverse(uModel))) * aNormal;
     vUV = aUV;
+    vColor = aColor;
     gl_Position = uMVP * vec4(aPos, 1.0);
 }
 )GLSL";
@@ -243,6 +246,7 @@ static const char* FS_MODEL = R"GLSL(
 in vec3 vNormal;
 in vec3 vWorldPos;
 in vec2 vUV;
+in vec3 vColor;
 
 out vec4 FragColor;
 
@@ -250,35 +254,30 @@ uniform vec3 uLightDir;
 uniform vec3 uViewPos;
 uniform vec3 uColor;
 uniform bool uUseTexture;
+uniform bool uUseVertexColor;
 uniform int uIsCar;
 uniform sampler2D uTexture;
 
 void main() {
     vec3 N = normalize(vNormal);
-    vec3 L = normalize(uLightDir);
+    vec3 L = normalize(-uLightDir);
     vec3 V = normalize(uViewPos - vWorldPos);
     
     float diff = max(dot(N, L), 0.0);
     
     vec3 baseColor = uColor;
-    const vec3 carYellow = vec3(1.0, 0.85, 0.05);
     if (uIsCar == 1) {
         // Для машины сохраняем рисунок текстуры, но делаем непрозрачно-жёлтый вид:
         // - альфу текстуры НЕ используем в итоговом цвете (иначе будет "прозрачность/дырки")
         // - если текстура premultiplied, восстанавливаем rgb через rgb/a
         // - затем тонируем в жёлтый через luminance-маску
         if (uUseTexture) {
-            vec4 tex = texture(uTexture, vUV);
-            float a = max(tex.a, 1e-3);
-            vec3 texRGB = clamp(tex.rgb / a, 0.0, 1.0);
-            float lum = dot(texRGB, vec3(0.2126, 0.7152, 0.0722));
+            baseColor *= texture(uTexture, vUV).rgb;
             // Убираем "провалы" в ноль (тёмные пиксели текстуры делали участок чёрным/неокрашенным).
-            float lumClamped = clamp(lum, 0.0, 1.0);
             const float lumMin = 0.6; // гарантируем минимум ярко-жёлтого (чтобы верх не уходил в "черно")
-            lumClamped = lumMin + (1.0 - lumMin) * lumClamped;
-            baseColor = carYellow * lumClamped;
-        } else {
-            baseColor = carYellow;
+        }
+        if (uUseVertexColor) {
+            baseColor *= vColor;
         }
     }
 

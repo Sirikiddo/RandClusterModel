@@ -71,9 +71,6 @@ void EntityRenderer::renderEntities(const HexSphereRenderer::RenderContext& ctx)
 void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, const ecs::Entity& entity) const {
     if (!carModel_ || !carModel_->isReady()) return;
 
-    // ?????? ?????? ???? ????????????.
-    gl_->glDisable(GL_BLEND);
-
     QVector3D surfacePos;
     if (entity.currentCell >= 0) {
         surfacePos = computeSurfacePoint(ctx.graph.scene, entity.currentCell, ctx.graph.heightStep, 0.0f);
@@ -86,6 +83,18 @@ void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, cons
 
     const float heightOffset = 0.005f;
     QVector3D elevatedPos = surfacePos.normalized() * (surfacePos.length() + heightOffset);
+
+    const GLboolean depthTestWasEnabled = gl_->glIsEnabled(GL_DEPTH_TEST);
+    const GLboolean blendWasEnabled = gl_->glIsEnabled(GL_BLEND);
+    const GLboolean cullWasEnabled = gl_->glIsEnabled(GL_CULL_FACE);
+    GLboolean depthWriteMask = GL_TRUE;
+    gl_->glGetBooleanv(GL_DEPTH_WRITEMASK, &depthWriteMask);
+
+    // Keep the car opaque and double-sided: the imported OBJ has mixed winding on some parts.
+    gl_->glDisable(GL_BLEND);
+    gl_->glEnable(GL_DEPTH_TEST);
+    gl_->glDepthMask(GL_TRUE);
+    gl_->glDisable(GL_CULL_FACE);
 
     QMatrix4x4 model;
     model.translate(elevatedPos);
@@ -159,7 +168,42 @@ void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, cons
     gl_->glUniform3f(uColor_, 1.0f, 1.0f, 1.0f);
     gl_->glUniform1i(uUseTexture_, 1);
 
-    carModel_->draw(progModel_, mvpCar, model, ctx.camera.view);
+    float wheelSpinDegrees = 0.0f;
+    if (const float localWheelRadius = carModel_->wheelRadius(); localWheelRadius > 1e-5f) {
+        auto& wheelState = wheelAnimationStates_[entity.id];
+        if (wheelState.initialized) {
+            const QVector3D worldDelta = elevatedPos - wheelState.lastWorldPosition;
+            float signedDistance = worldDelta.length();
+            if (forwardTangent.length() > 1e-4f) {
+                signedDistance = QVector3D::dotProduct(worldDelta, forwardTangent.normalized());
+            }
+
+            const float wheelScale = entity.selected ? (carScale * 1.2f) : carScale;
+            const float worldWheelRadius = localWheelRadius * wheelScale;
+            if (worldWheelRadius > 1e-5f) {
+                constexpr float kRadiansToDegrees = 57.2957795f;
+                wheelState.spinDegrees += -signedDistance / worldWheelRadius * kRadiansToDegrees;
+                wheelState.spinDegrees = std::fmod(wheelState.spinDegrees, 360.0f);
+            }
+        }
+
+        wheelState.lastWorldPosition = elevatedPos;
+        wheelState.initialized = true;
+        wheelSpinDegrees = wheelState.spinDegrees;
+    }
+
+    carModel_->draw(progModel_, mvpCar, model, ctx.camera.view, wheelSpinDegrees);
+
+    if (blendWasEnabled) gl_->glEnable(GL_BLEND);
+    else gl_->glDisable(GL_BLEND);
+
+    if (cullWasEnabled) gl_->glEnable(GL_CULL_FACE);
+    else gl_->glDisable(GL_CULL_FACE);
+
+    if (depthTestWasEnabled) gl_->glEnable(GL_DEPTH_TEST);
+    else gl_->glDisable(GL_DEPTH_TEST);
+
+    gl_->glDepthMask(depthWriteMask);
 }
 
 void EntityRenderer::renderTrees(const HexSphereRenderer::RenderContext& ctx) const {

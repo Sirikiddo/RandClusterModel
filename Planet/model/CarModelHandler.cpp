@@ -1,12 +1,19 @@
 #include "model/CarModelHandler.h"
+#include <QDir>
+#include <QDebug>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
-#include <QDebug>
 #include <QOpenGLContext>
-#include <sstream>
-#include <charconv>
 #include <QRegularExpression>
+#include <QVector4D>
+
+#include <charconv>
+#include <cmath>
+#include <limits>
+#include <map>
+#include <sstream>
+#include <string_view>
 
 CarModelHandler::~CarModelHandler() {
     clearGPUResources();
@@ -18,6 +25,78 @@ static QString canonicalPath(const QString& path) {
         return fi.absoluteFilePath();
     }
     return path;
+}
+
+namespace {
+    bool hasWheelTag(const QString& name) {
+        const QString lowered = name.toLower();
+        return lowered.contains("wheel") || lowered.contains("whl") || lowered.contains("rim");
+    }
+
+    bool isWheelSubMesh(const QString& objectName, const QString& materialName) {
+        const QString combined = (objectName + " " + materialName).toLower();
+        if (combined.contains("calip")) {
+            return false;
+        }
+        return hasWheelTag(objectName) || hasWheelTag(materialName);
+    }
+
+    struct VertexKey {
+        int v = -1;
+        int vt = -1;
+        int vn = -1;
+
+        bool operator==(const VertexKey& other) const {
+            return v == other.v && vt == other.vt && vn == other.vn;
+        }
+    };
+
+    struct VertexKeyHash {
+        size_t operator()(const VertexKey& key) const noexcept {
+            const size_t h1 = std::hash<int>{}(key.v);
+            const size_t h2 = std::hash<int>{}(key.vt);
+            const size_t h3 = std::hash<int>{}(key.vn);
+            return h1 ^ (h2 << 1) ^ (h3 << 2);
+        }
+    };
+
+    std::vector<std::string_view> splitWhitespace(std::string_view sv, size_t startIndex) {
+        std::vector<std::string_view> tokens;
+        size_t i = startIndex;
+        while (i < sv.size()) {
+            while (i < sv.size() && (sv[i] == ' ' || sv[i] == '\t')) {
+                ++i;
+            }
+            if (i >= sv.size()) {
+                break;
+            }
+            size_t j = i;
+            while (j < sv.size() && sv[j] != ' ' && sv[j] != '\t') {
+                ++j;
+            }
+            tokens.push_back(sv.substr(i, j - i));
+            i = j;
+        }
+        return tokens;
+    }
+
+    int resolveObjIndex(int rawIndex, int count) {
+        if (rawIndex > 0) {
+            return rawIndex - 1;
+        }
+        if (rawIndex < 0) {
+            return count + rawIndex;
+        }
+        return -1;
+    }
+
+    QString resolvePathNearFile(const QFileInfo& baseFile, const QString& relativeOrAbsolutePath) {
+        QFileInfo pathInfo(relativeOrAbsolutePath);
+        if (pathInfo.isAbsolute()) {
+            return canonicalPath(pathInfo.filePath());
+        }
+        return canonicalPath(baseFile.dir().filePath(relativeOrAbsolutePath));
+    }
 }
 
 bool CarModelHandler::loadFromFile(const QString& path) {
@@ -51,15 +130,24 @@ bool CarModelHandler::loadFromFile(const QString& path) {
 
     std::istringstream stream(std::string(raw.constData(), raw.size()));
 
-    std::vector<float> tmpPos, tmpNorm, tmpUV;
+    std::vector<float> tmpPos, tmpNorm, tmpUV, tmpColor;
+    std::vector<uint8_t> tmpHasColor;
     std::string line;
 
     struct FaceCorner {
         int v = 0, vt = -1, vn = -1;
     };
 
-    std::unordered_map<QString, std::vector<FaceCorner>> materialFaces;
+    struct FaceBatch {
+        QString objectName;
+        QString materialName;
+        std::vector<FaceCorner> faces;
+    };
+
+    std::unordered_map<QString, FaceBatch> faceBatches;
     QString currentMaterial;
+    QString currentObject;
+    materialLibraryPath_.clear();
 
     auto parseFaceCorner = [](const std::string_view& tok) -> FaceCorner {
         FaceCorner fc;
@@ -107,24 +195,37 @@ bool CarModelHandler::loadFromFile(const QString& path) {
 
         if (sv.empty() || sv[0] == '#') continue;
 
-        if (sv.size() >= 2 && sv[0] == 'v' && sv[1] == ' ') {
-            // vertex
-            std::vector<std::string_view> toks;
-            size_t i = 2;
-            while (i < sv.size()) {
-                while (i < sv.size() && (sv[i] == ' ' || sv[i] == '\t')) ++i;
-                if (i >= sv.size()) break;
-                size_t j = i;
-                while (j < sv.size() && sv[j] != ' ' && sv[j] != '\t') ++j;
-                toks.push_back(sv.substr(i, j - i));
-                i = j;
+        if (sv.rfind("mtllib ", 0) == 0) {
+            const QString mtllibRef = QString::fromStdString(std::string(sv.substr(7))).trimmed();
+            if (!mtllibRef.isEmpty()) {
+                materialLibraryPath_ = resolvePathNearFile(fi, mtllibRef);
             }
+        }
+        else if (sv.size() >= 2 && sv[0] == 'v' && sv[1] == ' ') {
+            const auto toks = splitWhitespace(sv, 2);
             if (toks.size() >= 3) {
-                float x, y, z;
+                float x = 0.0f;
+                float y = 0.0f;
+                float z = 0.0f;
                 std::from_chars(toks[0].data(), toks[0].data() + toks[0].size(), x);
                 std::from_chars(toks[1].data(), toks[1].data() + toks[1].size(), y);
                 std::from_chars(toks[2].data(), toks[2].data() + toks[2].size(), z);
                 tmpPos.insert(tmpPos.end(), { x, y, z });
+
+                if (toks.size() >= 6) {
+                    float r = 1.0f;
+                    float g = 1.0f;
+                    float b = 1.0f;
+                    std::from_chars(toks[3].data(), toks[3].data() + toks[3].size(), r);
+                    std::from_chars(toks[4].data(), toks[4].data() + toks[4].size(), g);
+                    std::from_chars(toks[5].data(), toks[5].data() + toks[5].size(), b);
+                    tmpColor.insert(tmpColor.end(), { r, g, b });
+                    tmpHasColor.push_back(1);
+                }
+                else {
+                    tmpColor.insert(tmpColor.end(), { 1.0f, 1.0f, 1.0f });
+                    tmpHasColor.push_back(0);
+                }
             }
         }
         else if (sv.size() >= 3 && sv[0] == 'v' && sv[1] == 't' && sv[2] == ' ') {
@@ -166,8 +267,11 @@ bool CarModelHandler::loadFromFile(const QString& path) {
                 tmpNorm.insert(tmpNorm.end(), { x, y, z });
             }
         }
+        else if (sv.rfind("o ", 0) == 0 || sv.rfind("g ", 0) == 0) {
+            currentObject = QString::fromStdString(std::string(sv.substr(2))).trimmed();
+        }
         else if (sv.rfind("usemtl ", 0) == 0) {
-            currentMaterial = QString::fromStdString(std::string(sv.substr(7)));
+            currentMaterial = QString::fromStdString(std::string(sv.substr(7))).trimmed();
         }
         else if (sv.size() >= 2 && sv[0] == 'f' && sv[1] == ' ') {
             // face
@@ -186,30 +290,45 @@ bool CarModelHandler::loadFromFile(const QString& path) {
                 for (auto tok : toks) {
                     corners.push_back(parseFaceCorner(tok));
                 }
+                const QString batchKey = currentObject + "|" + currentMaterial;
+                FaceBatch& batch = faceBatches[batchKey];
+                batch.objectName = currentObject;
+                batch.materialName = currentMaterial;
                 // triangulate fan
                 for (size_t k = 1; k + 1 < corners.size(); ++k) {
-                    materialFaces[currentMaterial].push_back(corners[0]);
-                    materialFaces[currentMaterial].push_back(corners[k]);
-                    materialFaces[currentMaterial].push_back(corners[k + 1]);
+                    batch.faces.push_back(corners[0]);
+                    batch.faces.push_back(corners[k]);
+                    batch.faces.push_back(corners[k + 1]);
                 }
             }
         }
     }
 
-    // Build meshes per material
-    for (auto& [matName, faces] : materialFaces) {
+    averageWheelRadius_ = 0.0f;
+    float wheelRadiusSum = 0.0f;
+    int wheelCount = 0;
+
+    // Build meshes per object+material batch
+    for (auto& [batchKey, batch] : faceBatches) {
+        Q_UNUSED(batchKey);
+        auto& faces = batch.faces;
         if (faces.empty()) continue;
 
         SubMesh sub;
-        sub.materialName = matName;
+        sub.objectName = batch.objectName;
+        sub.materialName = batch.materialName;
 
-        std::unordered_map<uint64_t, uint32_t> vertexMap;
+        std::unordered_map<VertexKey, uint32_t, VertexKeyHash> vertexMap;
         auto addVertex = [&](const FaceCorner& fc) -> uint32_t {
-            int v = fc.v > 0 ? fc.v - 1 : (int)(tmpPos.size() / 3) + fc.v;
-            int vt = fc.vt >= 0 ? (fc.vt > 0 ? fc.vt - 1 : (int)(tmpUV.size() / 2) + fc.vt) : -1;
-            int vn = fc.vn >= 0 ? (fc.vn > 0 ? fc.vn - 1 : (int)(tmpNorm.size() / 3) + fc.vn) : -1;
+            const int v = resolveObjIndex(fc.v, static_cast<int>(tmpPos.size() / 3));
+            const int vt = (fc.vt == -1) ? -1 : resolveObjIndex(fc.vt, static_cast<int>(tmpUV.size() / 2));
+            const int vn = (fc.vn == -1) ? -1 : resolveObjIndex(fc.vn, static_cast<int>(tmpNorm.size() / 3));
 
-            uint64_t key = (uint64_t(v) << 32) | (uint64_t(vt) << 16) | uint64_t(vn);
+            if (v < 0 || static_cast<size_t>(v) * 3 + 2 >= tmpPos.size()) {
+                return std::numeric_limits<uint32_t>::max();
+            }
+
+            const VertexKey key{ v, vt, vn };
             auto it = vertexMap.find(key);
             if (it != vertexMap.end()) return it->second;
 
@@ -223,10 +342,34 @@ bool CarModelHandler::loadFromFile(const QString& path) {
                 sub.normals.push_back(tmpNorm[vn * 3 + 1]);
                 sub.normals.push_back(tmpNorm[vn * 3 + 2]);
             }
+            else {
+                sub.normals.push_back(0.0f);
+                sub.normals.push_back(1.0f);
+                sub.normals.push_back(0.0f);
+            }
 
             if (vt >= 0 && (size_t)vt * 2 + 1 < tmpUV.size()) {
                 sub.texcoords.push_back(tmpUV[vt * 2]);
                 sub.texcoords.push_back(tmpUV[vt * 2 + 1]);
+                sub.hasTexcoords = true;
+            }
+            else {
+                sub.texcoords.push_back(0.0f);
+                sub.texcoords.push_back(0.0f);
+            }
+
+            if ((size_t)v * 3 + 2 < tmpColor.size()) {
+                sub.colors.push_back(tmpColor[v * 3]);
+                sub.colors.push_back(tmpColor[v * 3 + 1]);
+                sub.colors.push_back(tmpColor[v * 3 + 2]);
+                if ((size_t)v < tmpHasColor.size() && tmpHasColor[v] != 0) {
+                    sub.hasVertexColors = true;
+                }
+            }
+            else {
+                sub.colors.push_back(1.0f);
+                sub.colors.push_back(1.0f);
+                sub.colors.push_back(1.0f);
             }
 
             vertexMap[key] = idx;
@@ -237,14 +380,57 @@ bool CarModelHandler::loadFromFile(const QString& path) {
             uint32_t i0 = addVertex(faces[f]);
             uint32_t i1 = addVertex(faces[f + 1]);
             uint32_t i2 = addVertex(faces[f + 2]);
+            if (i0 == std::numeric_limits<uint32_t>::max() ||
+                i1 == std::numeric_limits<uint32_t>::max() ||
+                i2 == std::numeric_limits<uint32_t>::max()) {
+                continue;
+            }
             sub.indices.push_back(i0);
             sub.indices.push_back(i1);
             sub.indices.push_back(i2);
         }
 
-        if (!sub.positions.empty()) {
+        if (!sub.positions.empty() && !sub.indices.empty()) {
+            sub.isWheel = isWheelSubMesh(sub.objectName, sub.materialName);
+            if (sub.isWheel) {
+                QVector3D minPos(
+                    std::numeric_limits<float>::max(),
+                    std::numeric_limits<float>::max(),
+                    std::numeric_limits<float>::max());
+                QVector3D maxPos(
+                    -std::numeric_limits<float>::max(),
+                    -std::numeric_limits<float>::max(),
+                    -std::numeric_limits<float>::max());
+
+                for (size_t i = 0; i + 2 < sub.positions.size(); i += 3) {
+                    const QVector3D p(sub.positions[i], sub.positions[i + 1], sub.positions[i + 2]);
+                    minPos.setX(std::min(minPos.x(), p.x()));
+                    minPos.setY(std::min(minPos.y(), p.y()));
+                    minPos.setZ(std::min(minPos.z(), p.z()));
+                    maxPos.setX(std::max(maxPos.x(), p.x()));
+                    maxPos.setY(std::max(maxPos.y(), p.y()));
+                    maxPos.setZ(std::max(maxPos.z(), p.z()));
+                }
+
+                sub.localCenter = (minPos + maxPos) * 0.5f;
+                float radius = 0.0f;
+                for (size_t i = 0; i + 2 < sub.positions.size(); i += 3) {
+                    const float dy = sub.positions[i + 1] - sub.localCenter.y();
+                    const float dz = sub.positions[i + 2] - sub.localCenter.z();
+                    radius = std::max(radius, std::sqrt(dy * dy + dz * dz));
+                }
+                sub.localWheelRadius = radius;
+                if (radius > 1e-5f) {
+                    wheelRadiusSum += radius;
+                    ++wheelCount;
+                }
+            }
             meshes_.push_back(std::move(sub));
         }
+    }
+
+    if (wheelCount > 0) {
+        averageWheelRadius_ = wheelRadiusSum / static_cast<float>(wheelCount);
     }
 
     if (meshes_.empty()) {
@@ -260,7 +446,9 @@ bool CarModelHandler::loadFromFile(const QString& path) {
 // �������� ����� loadMaterials �� ����:
 void CarModelHandler::loadMaterials(const QString& objPath) {
     QFileInfo objInfo(objPath);
-    QString mtlPath = objInfo.path() + "/" + objInfo.baseName() + ".mtl";
+    QString mtlPath = materialLibraryPath_.isEmpty()
+        ? canonicalPath(objInfo.path() + "/" + objInfo.baseName() + ".mtl")
+        : materialLibraryPath_;
     QFile mtlFile(mtlPath);
     if (!mtlFile.open(QIODevice::ReadOnly)) {
         qDebug() << "Cannot open MTL file:" << mtlPath;
@@ -271,8 +459,6 @@ void CarModelHandler::loadMaterials(const QString& objPath) {
     std::map<QString, QString> textureMap;
     std::map<QString, QVector3D> kdMap;
 
-    QVector3D currentKd(1.0f, 1.0f, 1.0f);
-
     QRegularExpression wsRe(QStringLiteral("\\s+"));
     while (!mtlFile.atEnd()) {
         const QString line = QString::fromUtf8(mtlFile.readLine()).trimmed();
@@ -282,24 +468,17 @@ void CarModelHandler::loadMaterials(const QString& objPath) {
         if (parts.isEmpty()) continue;
 
         if (parts[0] == "newmtl") {
-            if (parts.size() >= 2) {
-                currentMat = parts[1];
-            }
-            currentKd = QVector3D(1.0f, 1.0f, 1.0f);
+            currentMat = line.mid(7).trimmed();
         }
         else if (parts[0] == "Kd" && parts.size() >= 4) {
-            // Diffuse color (Kd r g b)
             const float r = parts[1].toFloat();
             const float g = parts[2].toFloat();
             const float b = parts[3].toFloat();
-            currentKd = QVector3D(r, g, b);
-            kdMap[currentMat] = currentKd;
+            kdMap[currentMat] = QVector3D(r, g, b);
         }
         else if (parts[0] == "map_Kd" && parts.size() >= 2) {
-            QString texPath = parts[1];
-            if (QFileInfo(texPath).isRelative()) {
-                texPath = objInfo.path() + "/" + texPath;
-            }
+            QString texPath = line.mid(QStringLiteral("map_Kd").size()).trimmed();
+            texPath = resolvePathNearFile(QFileInfo(mtlPath), texPath);
             textureMap[currentMat] = texPath;
         }
     }
@@ -326,14 +505,16 @@ GLuint CarModelHandler::loadTexture(const QString& path) {
         return 0;
     }
 
-    auto cached = textureCache_.find(path);
+    const QString normalized = canonicalPath(path);
+
+    auto cached = textureCache_.find(normalized);
     if (cached != textureCache_.end()) {
         return cached->second;
     }
 
     QImage img;
-    if (!img.load(path)) {
-        qDebug() << "Failed to load texture:" << path;
+    if (!img.load(normalized)) {
+        qDebug() << "Failed to load texture:" << normalized;
         return 0;
     }
 
@@ -348,8 +529,9 @@ GLuint CarModelHandler::loadTexture(const QString& path) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
-    textureCache_[path] = texId;
+    textureCache_[normalized] = texId;
     return texId;
 }
 
@@ -368,6 +550,13 @@ void CarModelHandler::uploadToGPU() {
 void CarModelHandler::uploadSubMeshToGPU(SubMesh& sub) {
     if (sub.positions.empty()) return;
 
+    if (sub.vao != 0) {
+        if (!sub.texturePath.isEmpty() && sub.textureId == 0) {
+            sub.textureId = loadTexture(sub.texturePath);
+        }
+        return;
+    }
+
     // Проверяем, есть ли активный контекст
     if (!QOpenGLContext::currentContext()) {
         qDebug() << "No OpenGL context for uploading submesh!";
@@ -378,6 +567,7 @@ void CarModelHandler::uploadSubMeshToGPU(SubMesh& sub) {
     glGenBuffers(1, &sub.vboPos);
     if (!sub.normals.empty()) glGenBuffers(1, &sub.vboNorm);
     if (!sub.texcoords.empty()) glGenBuffers(1, &sub.vboUV);
+    if (!sub.colors.empty()) glGenBuffers(1, &sub.vboColor);
     glGenBuffers(1, &sub.ibo);
 
     glBindVertexArray(sub.vao);
@@ -410,6 +600,16 @@ void CarModelHandler::uploadSubMeshToGPU(SubMesh& sub) {
         glEnableVertexAttribArray(2);
     }
 
+    if (!sub.colors.empty()) {
+        glBindBuffer(GL_ARRAY_BUFFER, sub.vboColor);
+        glBufferData(GL_ARRAY_BUFFER,
+            sub.colors.size() * sizeof(float),
+            sub.colors.data(),
+            GL_STATIC_DRAW);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glEnableVertexAttribArray(3);
+    }
+
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sub.ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,
         sub.indices.size() * sizeof(uint32_t),
@@ -428,7 +628,8 @@ void CarModelHandler::uploadSubMeshToGPU(SubMesh& sub) {
 void CarModelHandler::draw(GLuint shader,
     const QMatrix4x4& mvp,
     const QMatrix4x4& modelMatrix,
-    const QMatrix4x4& viewMatrix) {
+    const QMatrix4x4& viewMatrix,
+    float wheelSpinDegrees) {
     if (!glReady_ || meshes_.empty()) return;
 
     glUseProgram(shader);
@@ -439,19 +640,31 @@ void CarModelHandler::draw(GLuint shader,
     GLint uLightDir = glGetUniformLocation(shader, "uLightDir");
     GLint uUseTexture = glGetUniformLocation(shader, "uUseTexture");
     GLint uTexture = glGetUniformLocation(shader, "uTexture");
+    GLint uUseVertexColor = glGetUniformLocation(shader, "uUseVertexColor");
     GLint uColor = glGetUniformLocation(shader, "uColor");  // <-- получаем location цвета
-
-    if (uMVP >= 0) glUniformMatrix4fv(uMVP, 1, GL_FALSE, mvp.constData());
-    if (uModel >= 0) glUniformMatrix4fv(uModel, 1, GL_FALSE, modelMatrix.constData());
 
     QVector3D eye = (viewMatrix.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
     if (uViewPos >= 0) glUniform3f(uViewPos, eye.x(), eye.y(), eye.z());
     if (uLightDir >= 0) glUniform3f(uLightDir, 0.5f, 1.0f, 0.3f);
+    glActiveTexture(GL_TEXTURE0);
+
+    const QMatrix4x4 viewProjection = mvp * modelMatrix.inverted();
 
     // ������������� uColor per-submesh �� Kd (���� �������� ��� � ����� ��������� ���� MTL).
 
     for (auto& sub : meshes_) {
         if (sub.indexCount == 0) continue;
+
+        QMatrix4x4 subModel = modelMatrix;
+        if (sub.isWheel && std::fabs(wheelSpinDegrees) > 1e-4f) {
+            subModel.translate(sub.localCenter);
+            subModel.rotate(wheelSpinDegrees, 1.0f, 0.0f, 0.0f);
+            subModel.translate(-sub.localCenter);
+        }
+        const QMatrix4x4 subMvp = viewProjection * subModel;
+
+        if (uMVP >= 0) glUniformMatrix4fv(uMVP, 1, GL_FALSE, subMvp.constData());
+        if (uModel >= 0) glUniformMatrix4fv(uModel, 1, GL_FALSE, subModel.constData());
 
         // Lazy texture load:
         // � ��������� ��������� �������� ����� �� ������ ������������ � uploadToGPU().
@@ -466,6 +679,16 @@ void CarModelHandler::draw(GLuint shader,
             glUniform3f(uColor, sub.kdColor.x(), sub.kdColor.y(), sub.kdColor.z());
         }
 
+        if (uUseVertexColor >= 0) {
+            const bool useVertexColor =
+                sub.hasVertexColors &&
+                sub.textureId == 0 &&
+                sub.kdColor.x() >= 0.99f &&
+                sub.kdColor.y() >= 0.99f &&
+                sub.kdColor.z() >= 0.99f;
+            glUniform1i(uUseVertexColor, useVertexColor ? 1 : 0);
+        }
+
         if (uUseTexture >= 0) {
             // Используем текстуры, если они есть
             // �����: �������� ������ �������� ��� UV.
@@ -473,13 +696,15 @@ void CarModelHandler::draw(GLuint shader,
             // � ����� �������� ����� ��������� ��� "���������".
             // ������������� �� ������� texcoords � �������� ���������.
             // ��� �������, ��� ��������� vboUV (�� ������� �� ����, ����� �� ����������� �����).
-            int useTex = (sub.textureId != 0 && !sub.texcoords.empty()) ? 1 : 0;
+            int useTex = (sub.textureId != 0 && sub.hasTexcoords) ? 1 : 0;
             glUniform1i(uUseTexture, useTex);
 
-            if (sub.textureId != 0 && uTexture >= 0) {
-                glActiveTexture(GL_TEXTURE0);
+            if (useTex && uTexture >= 0) {
                 glBindTexture(GL_TEXTURE_2D, sub.textureId);
                 glUniform1i(uTexture, 0);
+            }
+            else {
+                glBindTexture(GL_TEXTURE_2D, 0);
             }
         }
 
@@ -488,12 +713,14 @@ void CarModelHandler::draw(GLuint shader,
     }
 
     glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void CarModelHandler::clear() {
     clearGPUResources();
     meshes_.clear();
     path_.clear();
+    materialLibraryPath_.clear();
 }
 
 // Исправить clearGPUResources — добавить проверку контекста:
@@ -507,16 +734,15 @@ void CarModelHandler::clearGPUResources() {
             glDeleteBuffers(1, &sub.vboPos);
             if (sub.vboNorm) glDeleteBuffers(1, &sub.vboNorm);
             if (sub.vboUV) glDeleteBuffers(1, &sub.vboUV);
+            if (sub.vboColor) glDeleteBuffers(1, &sub.vboColor);
             if (sub.ibo) glDeleteBuffers(1, &sub.ibo);
-        }
-        if (sub.textureId && hasContext) {
-            glDeleteTextures(1, &sub.textureId);
         }
         sub = SubMesh{};
     }
 
     if (hasContext) {
         for (auto& [path, tex] : textureCache_) {
+            Q_UNUSED(path);
             if (tex) glDeleteTextures(1, &tex);
         }
     }
@@ -531,6 +757,7 @@ void CarModelHandler::clearSubMesh(SubMesh& sub) {
         glDeleteBuffers(1, &sub.vboPos);
         if (sub.vboNorm) glDeleteBuffers(1, &sub.vboNorm);
         if (sub.vboUV) glDeleteBuffers(1, &sub.vboUV);
+        if (sub.vboColor) glDeleteBuffers(1, &sub.vboColor);
         if (sub.ibo) glDeleteBuffers(1, &sub.ibo);
     }
     sub = SubMesh{};

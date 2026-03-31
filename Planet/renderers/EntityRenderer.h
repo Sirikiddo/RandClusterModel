@@ -3,6 +3,7 @@
 #include <QOpenGLFunctions_3_3_Core>
 #include <QtOpenGL>
 #include <memory>
+#include <unordered_map>
 
 #include "renderers/HexSphereRenderer.h"
 #include "model/CarModelHandler.h"
@@ -31,6 +32,12 @@ public:
     void renderCar(const HexSphereRenderer::RenderContext& ctx, const ecs::Entity& entity) const;
 
 private:
+    struct WheelAnimationState {
+        QVector3D lastWorldPosition{ 0.0f, 0.0f, 0.0f };
+        float spinDegrees = 0.0f;
+        bool initialized = false;
+    };
+
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
     GLuint progWire_ = 0;
     GLuint progSel_ = 0;
@@ -47,4 +54,5 @@ private:
     const GLsizei& pyramidVertexCount_;
     std::shared_ptr<ModelHandler> treeModel_;
     std::shared_ptr<CarModelHandler> carModel_;
+    mutable std::unordered_map<ecs::EntityId, WheelAnimationState> wheelAnimationStates_;
 };
