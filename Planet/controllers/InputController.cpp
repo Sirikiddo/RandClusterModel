@@ -615,7 +615,8 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
         if (renderer_) {
             renderer_->uploadPath({});
         }
-        response.hudMessage = QString("No traversable path. Max smooth climb is %1 cells.").arg(pathClimbLimit(scene_));
+        response.hudMessage = QString("No traversable path. Max smooth delta is %1 cells, sea cells are blocked.")
+            .arg(pathClimbLimit(scene_));
         deselectEntity();
         response.requestUpdate = true;
         return;

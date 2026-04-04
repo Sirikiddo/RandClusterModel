@@ -40,11 +40,12 @@ void PathBuilder::build(PathBuilder::WeightFn w) const {
 }
 
 bool PathBuilder::isTraversable(const Cell& from, const Cell& to) const {
-    const int climbDelta = to.height - from.height;
-    if (climbDelta <= 0) {
-        return true;
+    if (to.biome == Biome::Sea) {
+        return false;
     }
-    return climbDelta <= smoothMaxDelta_;
+
+    const int climbDelta = to.height - from.height;
+    return std::abs(climbDelta) <= smoothMaxDelta_;
 }
 
 float PathBuilder::edgeAngularDistance(const Cell& from, const Cell& to) {
