@@ -57,6 +57,9 @@
     <ClCompile Include="core\main.cpp">
       <Filter>core</Filter>
     </ClCompile>
+    <ClCompile Include="core\ProcessDagSmoke.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
     <ClCompile Include="controllers\CameraController.cpp">
       <Filter>controllers</Filter>
     </ClCompile>
@@ -89,6 +92,9 @@
     </ClCompile>
     <ClCompile Include="generation\MeshGenerators\WireMeshGenerator.cpp">
       <Filter>generation\MeshGenerators</Filter>
+    </ClCompile>
+    <ClCompile Include="model\CarModelHandler.cpp">
+      <Filter>model</Filter>
     </ClCompile>
     <ClCompile Include="model\HexSphereModel.cpp">
       <Filter>model</Filter>
@@ -141,7 +147,9 @@
     <ClCompile Include="tools\model_cache_test.cpp">
       <Filter>tools</Filter>
     </ClCompile>
-    <ClCompile Include="OreSystem.cpp" />
+    <ClCompile Include="model\OreSystem.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
     <ClCompile Include="core\EngineFacade.cpp">
       <Filter>core</Filter>
     </ClCompile>
@@ -179,6 +187,9 @@
     </ClInclude>
     <ClInclude Include="generation\MeshGenerators\WireMeshGenerator.h">
       <Filter>generation\MeshGenerators</Filter>
+    </ClInclude>
+    <ClInclude Include="model\CarModelHandler.h">
+      <Filter>model</Filter>
     </ClInclude>
     <ClInclude Include="model\DebugModel.h">
       <Filter>model</Filter>
@@ -264,7 +275,9 @@
     <ClInclude Include="tools\converters\DataAdapters.h">
       <Filter>tools\converters</Filter>
     </ClInclude>
-    <ClInclude Include="OreSystem.h" />
+    <ClInclude Include="model\OreSystem.h">
+      <Filter>model</Filter>
+    </ClInclude>
     <ClInclude Include="core\DebugOverlay.h">
       <Filter>core</Filter>
     </ClInclude>
@@ -277,6 +290,9 @@
       <Filter>resources</Filter>
     </None>
     <None Include="docs\rendering_refactor_task.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="trunsuction_plan.md">
       <Filter>docs</Filter>
     </None>
   </ItemGroup>

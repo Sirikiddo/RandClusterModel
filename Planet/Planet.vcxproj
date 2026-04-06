@@ -69,6 +69,8 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <LanguageStandard>stdcpplatest</LanguageStandard>
+      <BuildStlModules>true</BuildStlModules>
+      <TranslateIncludes>false</TranslateIncludes>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -101,8 +103,14 @@
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <EnableModules>true</EnableModules>
+      <BuildStlModules>true</BuildStlModules>
+      <ScanSourceForModuleDependencies>true</ScanSourceForModuleDependencies>
+      <TranslateIncludes>false</TranslateIncludes>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
@@ -134,13 +142,14 @@
     <ClInclude Include="generation\MeshGenerators\TerrainMeshGenerator.h" />
     <ClInclude Include="generation\MeshGenerators\WaterMeshGenerator.h" />
     <ClInclude Include="generation\MeshGenerators\WireMeshGenerator.h" />
+    <ClInclude Include="model\CarModelHandler.h" />
     <ClInclude Include="model\DebugModel.h" />
     <ClInclude Include="model\HexSphereModel.h" />
     <ClInclude Include="model\ModelHandler.h" />
     <ClInclude Include="model\SceneEntity.h" />
     <ClInclude Include="model\SurfacePlacement.h" />
     <ClInclude Include="model\simple3d_parser.hpp" />
-    <ClInclude Include="OreSystem.h" />
+    <ClInclude Include="model\OreSystem.h" />
     <ClInclude Include="renderers\EntityRenderer.h" />
     <ClInclude Include="renderers\HexSphereRenderer.h" />
     <ClInclude Include="renderers\TerrainRenderer.h" />
@@ -166,6 +175,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\CameraController.cpp" />
+    <ClCompile Include="core\ProcessDagSmoke.cpp" />
     <ClCompile Include="controllers\HexSphereSceneController.cpp" />
     <ClCompile Include="controllers\InputController.cpp" />
     <ClCompile Include="controllers\PathBuilder.cpp" />
@@ -178,9 +188,10 @@
     <ClCompile Include="generation\MeshGenerators\TerrainMeshGenerator.cpp" />
     <ClCompile Include="generation\MeshGenerators\WaterMeshGenerator.cpp" />
     <ClCompile Include="generation\MeshGenerators\WireMeshGenerator.cpp" />
+    <ClCompile Include="model\CarModelHandler.cpp" />
     <ClCompile Include="model\HexSphereModel.cpp" />
     <ClCompile Include="model\ModelHandler.cpp" />
-    <ClCompile Include="OreSystem.cpp" />
+    <ClCompile Include="model\OreSystem.cpp" />
     <ClCompile Include="renderers\EntityRenderer.cpp" />
     <ClCompile Include="renderers\HexSphereRenderer.cpp" />
     <ClCompile Include="renderers\TerrainRenderer.cpp" />
@@ -203,6 +214,12 @@
   <ItemGroup>
     <None Include="resources\HexSphereWidget_shaders.h" />
     <None Include="docs\rendering_refactor_task.md" />
+    <None Include="trunsuction_plan.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ProcessDAG\ProcessDag\ProcessDAG.vcxproj">
+      <Project>{62B257EA-F3C9-4798-8E1E-C61CDA731DE2}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
