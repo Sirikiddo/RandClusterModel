@@ -217,7 +217,7 @@
     <None Include="trunsuction_plan.md" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\ProcessDAG\ProcessDag\ProcessDAG.vcxproj">
+    <ProjectReference Include="third_party\ProcessDAG\ProcessDAG.vcxproj">
       <Project>{62B257EA-F3C9-4798-8E1E-C61CDA731DE2}</Project>
     </ProjectReference>
   </ItemGroup>
