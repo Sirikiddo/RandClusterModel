@@ -24,7 +24,7 @@ HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputContro
     , oreSystem_(nullptr) {
 
     inputController_.attachEngine(engine_.get());
-    engine_->attachTerrainAdapter(&inputController_);
+    engine_->attachTerrainBridge(&inputController_);
 
     setFocusPolicy(Qt::StrongFocus);
 

@@ -14,6 +14,7 @@
 
 #include "controllers/CameraController.h"
 #include "controllers/PathBuilder.h"
+#include "dag/EngineFacade.h"
 #include "ECS/Transform.h"
 #include "model/SurfacePlacement.h"
 
@@ -331,20 +332,19 @@ InputController::Response InputController::setSubdivisionLevel(int L) {
     Response response;
     if (scene_.subdivisionLevel() != L) {
         stats_.setSubdivisionLevel(L);
-        updateBufferUsageStrategy();
+        updateBufferUsageStrategy(L);
         if (engine_) {
             engine_->setSubdivisionLevel(L);
-            if (engine_->usesDagTerrainPath()) {
-                engine_->regenerateTerrain();
+            const auto result = engine_->regenerateTerrain();
+            if (!result) {
+                response.hudMessage = QString::fromStdString(result.message);
+                return response;
             }
-            uploadBuffers();
-            response.requestUpdate = true;
         }
         else {
             scene_.setSubdivisionLevel(L);
-            uploadBuffers();
-            response.requestUpdate = true;
         }
+        uploadBuffers();
         response.requestUpdate = true;
     }
     return response;
@@ -390,7 +390,11 @@ InputController::Response InputController::setGeneratorByIndex(int idx) {
 InputController::Response InputController::regenerateTerrain() {
     Response response;
     if (engine_) {
-        engine_->regenerateTerrain();
+        const auto result = engine_->regenerateTerrain();
+        if (!result) {
+            response.hudMessage = QString::fromStdString(result.message);
+            return response;
+        }
     }
     else {
         scene_.regenerateTerrain();
@@ -446,27 +450,27 @@ void InputController::uploadBuffers() {
     }
 }
 
-void InputController::legacySetTerrainParams(const TerrainParams& params) {
+void InputController::stageTerrainParams(const TerrainParams& params) {
     scene_.setGenParams(params);
 }
 
-void InputController::legacySetGeneratorByIndex(int idx) {
+void InputController::stageGeneratorByIndex(int idx) {
     scene_.setGeneratorByIndex(idx);
 }
 
-void InputController::legacySetSubdivisionLevel(int level) {
-    scene_.setSubdivisionLevel(level);
+void InputController::stageSubdivisionLevel(int level) {
+    scene_.stageSubdivisionLevel(level);
 }
 
-void InputController::legacyRegenerateTerrain() {
-    scene_.regenerateTerrain();
+void InputController::rebuildTerrainFromInputs() {
+    scene_.rebuildTerrainFromInputs();
 }
 
 TerrainSnapshot InputController::captureTerrainSnapshot() const {
     return scene_.captureTerrainSnapshot();
 }
 
-void InputController::applyTerrainSnapshot(const TerrainSnapshot& snapshot) {
+void InputController::projectTerrainSnapshot(const TerrainSnapshot& snapshot) {
     scene_.applyTerrainSnapshot(snapshot);
 }
 
@@ -505,8 +509,8 @@ void InputController::clearPath(Response& response) {
     response.requestUpdate = true;
 }
 
-void InputController::updateBufferUsageStrategy() {
-    const int L = scene_.subdivisionLevel();
+void InputController::updateBufferUsageStrategy(int subdivisionLevel) {
+    const int L = subdivisionLevel;
     if (L >= 4) {
         uploadOptions_.terrainUsage = GL_DYNAMIC_DRAW;
         uploadOptions_.wireUsage = GL_DYNAMIC_DRAW;

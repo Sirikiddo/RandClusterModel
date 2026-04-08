@@ -27,12 +27,25 @@ void HexSphereSceneController::setGenParams(const TerrainParams& params) {
 }
 
 void HexSphereSceneController::setSubdivisionLevel(int level) {
+    stageSubdivisionLevel(level);
+    rebuildTerrainFromInputs();
+}
+
+void HexSphereSceneController::stageSubdivisionLevel(int level) {
     if (L_ == level) {
         return;
     }
     L_ = level;
     heightStep_ = autoHeightStep();
-    rebuildModel();
+    topologyDirty_ = true;
+}
+
+void HexSphereSceneController::rebuildTerrainFromInputs() {
+    if (topologyDirty_) {
+        rebuildModel();
+        return;
+    }
+    regenerateTerrain();
 }
 
 void HexSphereSceneController::setSmoothOneStep(bool on) {
@@ -54,6 +67,7 @@ void HexSphereSceneController::rebuildTopology() {
 
 void HexSphereSceneController::rebuildModel() {
     rebuildTopology();
+    topologyDirty_ = false;
     regenerateTerrain();
 }
 
@@ -157,6 +171,7 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
     generator_ = createTerrainGeneratorByIndex(generatorIndex_);
     genParams_ = snapshot.params;
     L_ = snapshot.subdivisionLevel;
+    topologyDirty_ = false;
 
     rebuildTopology();
 

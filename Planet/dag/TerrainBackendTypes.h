@@ -1,15 +1,10 @@
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "generation/TerrainGenerator.h"
 #include "model/HexSphereModel.h"
-
-enum class BackendMode {
-    Legacy = 0,
-    Mixed = 1,
-    DagTerrainOnly = 2,
-};
 
 struct TerrainCellSnapshot {
     int height = 0;
@@ -31,5 +26,25 @@ struct TerrainSnapshot {
 
     bool empty() const noexcept {
         return cells.empty();
+    }
+};
+
+struct TerrainRegenerationResult {
+    bool ok = true;
+    std::string message;
+
+    explicit operator bool() const noexcept {
+        return ok;
+    }
+
+    static TerrainRegenerationResult success() {
+        return {};
+    }
+
+    static TerrainRegenerationResult failure(std::string text) {
+        TerrainRegenerationResult result;
+        result.ok = false;
+        result.message = std::move(text);
+        return result;
     }
 };

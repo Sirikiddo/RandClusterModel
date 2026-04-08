@@ -81,6 +81,9 @@
     <ClCompile Include="core\main.cpp">
       <Filter>core</Filter>
     </ClCompile>
+    <ClCompile Include="dag\DagTerrainBackend.cpp">
+      <Filter>dag</Filter>
+    </ClCompile>
     <ClCompile Include="dag\ProcessDagSmoke.cpp">
       <Filter>dag</Filter>
     </ClCompile>
@@ -213,6 +216,9 @@
     <ClCompile Include="dag\EngineFacade.cpp">
       <Filter>dag</Filter>
     </ClCompile>
+    <ClCompile Include="dag\LegacyTerrainBackend.cpp">
+      <Filter>dag</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="controllers\CameraController.h">
@@ -226,6 +232,9 @@
     </ClInclude>
     <ClInclude Include="controllers\PathBuilder.h">
       <Filter>controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\DagTerrainBackend.h">
+      <Filter>dag</Filter>
     </ClInclude>
     <ClInclude Include="generation\ClimateBiomeGenerator.h">
       <Filter>generation</Filter>
@@ -416,6 +425,15 @@
     <ClInclude Include="dag\EngineFacade.h">
       <Filter>dag</Filter>
     </ClInclude>
+    <ClInclude Include="dag\LegacyTerrainBackend.h">
+      <Filter>dag</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\TerrainBackendContract.h">
+      <Filter>dag</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\TerrainBackendSelector.h">
+      <Filter>dag</Filter>
+    </ClInclude>
     <ClInclude Include="dag\TerrainBackendTypes.h">
       <Filter>dag</Filter>
     </ClInclude>
@@ -431,7 +449,7 @@
       <Filter>docs</Filter>
     </None>
     <None Include="third_party\ProcessDAG\ProcessDag.Embedded.props">
-      <Filter>ProcessDAG</Filter>
+      <Filter>ProcessDAG\proc</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "controllers/HexSphereSceneController.h"
-#include "dag/EngineFacade.h"
+#include "dag/TerrainBackendContract.h"
 #include "renderers/HexSphereRenderer.h"
 #include "ui/PerformanceStats.h"
 #include "ECS/ComponentStorage.h"
@@ -19,9 +19,10 @@ class QKeyEvent;
 class QOpenGLWidget;
 
 class CameraController;
+class EngineFacade;
 class HexSphereModel;
 
-class InputController : public ITerrainBackendAdapter {
+class InputController : public ITerrainSceneBridge {
 public:
     struct Response {
         bool requestUpdate = false;
@@ -69,12 +70,12 @@ public:
     ecs::ComponentStorage& getECS() { return ecs_; }
     const ecs::ComponentStorage& getECS() const { return ecs_; }
 
-    void legacySetTerrainParams(const TerrainParams& params) override;
-    void legacySetGeneratorByIndex(int idx) override;
-    void legacySetSubdivisionLevel(int level) override;
-    void legacyRegenerateTerrain() override;
+    void stageTerrainParams(const TerrainParams& params) override;
+    void stageGeneratorByIndex(int idx) override;
+    void stageSubdivisionLevel(int level) override;
+    void rebuildTerrainFromInputs() override;
     TerrainSnapshot captureTerrainSnapshot() const override;
-    void applyTerrainSnapshot(const TerrainSnapshot& snapshot) override;
+    void projectTerrainSnapshot(const TerrainSnapshot& snapshot) override;
 
 private:
     struct PickHit {
@@ -91,7 +92,7 @@ private:
     void buildAndShowSelectedPath(Response& response);
     void buildAndShowPathBetween(int startCell, int targetCell, Response& response);
     void clearPath(Response& response);
-    void updateBufferUsageStrategy();
+    void updateBufferUsageStrategy(int subdivisionLevel);
 
     std::optional<int> pickCellAt(int sx, int sy) const;
     std::optional<PickHit> pickTerrainAt(int sx, int sy) const;

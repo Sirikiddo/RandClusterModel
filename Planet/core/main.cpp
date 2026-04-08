@@ -1,6 +1,7 @@
-﻿#include <QApplication>
+#include <QApplication>
 #include <QSurfaceFormat>
 #include <windows.h>
+
 #include "ui/MainWindow.h"
 
 extern "C" {
@@ -9,13 +10,12 @@ extern "C" {
 }
 
 int main(int argc, char** argv) {
-    // СНАЧАЛА устанавливаем формат (до QApplication!)
     QSurfaceFormat fmt;
     fmt.setVersion(3, 3);
     fmt.setProfile(QSurfaceFormat::CoreProfile);
     fmt.setDepthBufferSize(24);
     fmt.setStencilBufferSize(8);
-    fmt.setSamples(4); // MSAA
+    fmt.setSamples(4);
     QSurfaceFormat::setDefaultFormat(fmt);
 
     QApplication app(argc, argv);
@@ -23,7 +23,6 @@ int main(int argc, char** argv) {
     MainWindow w;
 
     w.resize(1280, 800);
-
     w.show();
 
     return app.exec();

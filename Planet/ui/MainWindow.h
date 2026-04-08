@@ -1,6 +1,7 @@
 #pragma once
 #include <QMainWindow>
 #include <memory>
+
 class QSpinBox; class QAction; class QLabel;
 class HexSphereWidget;
 class CameraController;

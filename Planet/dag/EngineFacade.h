@@ -3,19 +3,7 @@
 #include <memory>
 
 #include "DebugOverlay.h"
-#include "TerrainBackendTypes.h"
-
-class ITerrainBackendAdapter {
-public:
-    virtual ~ITerrainBackendAdapter() = default;
-
-    virtual void legacySetTerrainParams(const TerrainParams& params) = 0;
-    virtual void legacySetGeneratorByIndex(int idx) = 0;
-    virtual void legacySetSubdivisionLevel(int level) = 0;
-    virtual void legacyRegenerateTerrain() = 0;
-    virtual TerrainSnapshot captureTerrainSnapshot() const = 0;
-    virtual void applyTerrainSnapshot(const TerrainSnapshot& snapshot) = 0;
-};
+#include "TerrainBackendContract.h"
 
 class EngineFacade {
 public:
@@ -27,16 +15,13 @@ public:
     EngineFacade(const EngineFacade&) = delete;
     EngineFacade& operator=(const EngineFacade&) = delete;
 
-    void attachTerrainAdapter(ITerrainBackendAdapter* adapter);
+    void attachTerrainBridge(ITerrainSceneBridge* bridge);
     void initializeTerrainState();
-
-    BackendMode backendMode() const;
-    bool usesDagTerrainPath() const;
 
     void setTerrainParams(const TerrainParams& params);
     void setGeneratorByIndex(int idx);
     void setSubdivisionLevel(int level);
-    bool regenerateTerrain();
+    TerrainRegenerationResult regenerateTerrain();
 
     const TerrainSnapshot* currentTerrainSnapshot() const;
 

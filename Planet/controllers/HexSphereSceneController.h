@@ -52,6 +52,8 @@ public:
     void setGeneratorByIndex(int idx);
     void setGenParams(const TerrainParams& params);
     void setSubdivisionLevel(int level);
+    void stageSubdivisionLevel(int level);
+    void rebuildTerrainFromInputs();
     void regenerateTreePlacements();
 
     void setSmoothOneStep(bool on);
@@ -195,6 +197,7 @@ private:
     int generatorIndex_ = 3;
 
     int L_ = 2;
+    bool topologyDirty_ = false;
     float heightStep_ = 0.06f;
     bool smoothOneStep_ = true;
     float outlineBias_ = 0.004f;

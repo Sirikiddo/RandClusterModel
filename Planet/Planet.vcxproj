@@ -163,8 +163,12 @@
     <ClInclude Include="controllers\HexSphereSceneController.h" />
     <ClInclude Include="controllers\InputController.h" />
     <ClInclude Include="controllers\PathBuilder.h" />
+    <ClInclude Include="dag\DagTerrainBackend.h" />
     <ClInclude Include="dag\DebugOverlay.h" />
     <ClInclude Include="dag\EngineFacade.h" />
+    <ClInclude Include="dag\LegacyTerrainBackend.h" />
+    <ClInclude Include="dag\TerrainBackendContract.h" />
+    <ClInclude Include="dag\TerrainBackendSelector.h" />
     <ClInclude Include="dag\TerrainBackendTypes.h" />
     <ClInclude Include="generation\ClimateBiomeGenerator.h" />
     <ClInclude Include="generation\PerlinNoise.h" />
@@ -218,11 +222,13 @@
     <ClCompile Include="third_party\ProcessDAG\proc\Proc.FileSchema.ixx" Condition="'$(ProcessDagIncludeFileSchema)'=='1'" />
     <ClCompile Include="third_party\ProcessDAG\proc\Proc.Scenario.ixx" Condition="'$(ProcessDagIncludeScenario)'=='1'" />
     <ClCompile Include="third_party\ProcessDAG\boundary\ScenarioReader.cpp" Condition="'$(ProcessDagIncludeScenario)'=='1'" />
+    <ClCompile Include="dag\DagTerrainBackend.cpp" />
     <ClCompile Include="dag\ProcessDagSmoke.cpp" />
     <ClCompile Include="controllers\HexSphereSceneController.cpp" />
     <ClCompile Include="controllers\InputController.cpp" />
     <ClCompile Include="controllers\PathBuilder.cpp" />
     <ClCompile Include="dag\EngineFacade.cpp" />
+    <ClCompile Include="dag\LegacyTerrainBackend.cpp" />
     <ClCompile Include="core\main.cpp" />
     <ClCompile Include="generation\ClimateBiomeGenerator.cpp" />
     <ClCompile Include="generation\PerlinNoise.cpp" />
