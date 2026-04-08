@@ -39,3 +39,6 @@ class ClimateBiomeTerrainGenerator final : public ITerrainGenerator {
 public:
     void generate(HexSphereModel& model, const TerrainParams& p) override;
 };
+
+int normalizeTerrainGeneratorIndex(int idx);
+std::unique_ptr<ITerrainGenerator> createTerrainGeneratorByIndex(int idx);

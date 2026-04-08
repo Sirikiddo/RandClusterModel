@@ -8,6 +8,7 @@
 class CameraController {
 public:
     CameraController();
+    ~CameraController();
 
     void resize(int width, int height, float devicePixelRatio);
     void reset();

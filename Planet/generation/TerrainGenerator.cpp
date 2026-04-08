@@ -2,9 +2,35 @@
 #include "model/HexSphereModel.h"
 #include "generation/ClimateBiomeGenerator.h"
 #include "generation/PerlinNoise.h"
-#include "tools/converters/DataAdapters.h"
+#include "dag/DataAdapters.h"
 #include <cmath>
 #include <QString>
+
+int normalizeTerrainGeneratorIndex(int idx) {
+    switch (idx) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+        return idx;
+    default:
+        return 3;
+    }
+}
+
+std::unique_ptr<ITerrainGenerator> createTerrainGeneratorByIndex(int idx) {
+    switch (normalizeTerrainGeneratorIndex(idx)) {
+    case 0:
+        return std::make_unique<NoOpTerrainGenerator>();
+    case 1:
+        return std::make_unique<SineTerrainGenerator>();
+    case 2:
+        return std::make_unique<PerlinTerrainGenerator>();
+    case 3:
+    default:
+        return std::make_unique<ClimateBiomeTerrainGenerator>();
+    }
+}
 
 //void NoOpTerrainGenerator::generate(HexSphereModel& model, const TerrainParams& p) {
 //    (void)model; (void)p;

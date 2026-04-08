@@ -22,7 +22,7 @@ class HexSphereWidget : public QOpenGLWidget
 {
     Q_OBJECT
 public:
-    HexSphereWidget(CameraController& cameraController, InputController& inputController, QWidget* parent = nullptr);
+    explicit HexSphereWidget(QWidget* parent = nullptr);
     ~HexSphereWidget() override;
 
 public slots:
@@ -57,8 +57,8 @@ private:
     void initOreSystem();
     void updateOreAnimation(float deltaTime);
 
-    CameraController& cameraController_;
-    InputController& inputController_;
+    std::unique_ptr<CameraController> cameraController_;
+    std::unique_ptr<InputController> inputController_;
 
     std::unique_ptr<OreSystem> oreSystem_;
     float oreAnimationTime_ = 0.0f;

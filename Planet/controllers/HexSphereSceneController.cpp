@@ -12,23 +12,14 @@
 #include <QElapsedTimer>
 
 HexSphereSceneController::HexSphereSceneController()
-    : generator_(std::make_unique<ClimateBiomeTerrainGenerator>()) {
+    : generator_(createTerrainGeneratorByIndex(generatorIndex_)) {
     genParams_ = TerrainParams{ /*seed=*/12345u, /*seaLevel=*/3, /*scale=*/3.0f };
     rebuildModel();
 }
 
-void HexSphereSceneController::setGenerator(std::unique_ptr<ITerrainGenerator> generator) {
-    generator_ = std::move(generator);
-}
-
 void HexSphereSceneController::setGeneratorByIndex(int idx) {
-    switch (idx) {
-    case 0: setGenerator(std::make_unique<NoOpTerrainGenerator>()); break;
-    case 1: setGenerator(std::make_unique<SineTerrainGenerator>()); break;
-    case 2: setGenerator(std::make_unique<PerlinTerrainGenerator>()); break;
-    case 3: setGenerator(std::make_unique<ClimateBiomeTerrainGenerator>()); break;
-    default: setGenerator(std::make_unique<ClimateBiomeTerrainGenerator>()); break;
-    }
+    generatorIndex_ = normalizeTerrainGeneratorIndex(idx);
+    generator_ = createTerrainGeneratorByIndex(generatorIndex_);
 }
 
 void HexSphereSceneController::setGenParams(const TerrainParams& params) {
@@ -56,11 +47,14 @@ void HexSphereSceneController::setOutlineBias(float value) {
     outlineBias_ = std::max(0.0f, value);
 }
 
-void HexSphereSceneController::rebuildModel() {
+void HexSphereSceneController::rebuildTopology() {
     ico_ = icoBuilder_.build(L_);
     model_.rebuildFromIcosphere(ico_);
+}
+
+void HexSphereSceneController::rebuildModel() {
+    rebuildTopology();
     regenerateTerrain();
-    generateTreePlacements();
 }
 
 void HexSphereSceneController::regenerateTerrain() {
@@ -69,6 +63,21 @@ void HexSphereSceneController::regenerateTerrain() {
     }
     updateTerrainMesh();
     generateTreePlacements();
+}
+
+void HexSphereSceneController::clearForShutdown() {
+    selectedCells_.clear();
+    treePlacements_.clear();
+    treeOccupiedCells_.clear();
+    triangleCache_.clear();
+    cacheValid_ = false;
+    velocity_ = QVector3D();
+    cameraPos_ = QVector3D();
+    lastCameraPos_ = QVector3D();
+    terrainCPU_ = TerrainMesh{};
+    model_ = HexSphereModel{};
+    ico_ = IcoMesh{};
+    generator_.reset();
 }
 
 void HexSphereSceneController::clearSelection() {
@@ -119,6 +128,59 @@ WaterGeometryData HexSphereSceneController::buildWaterGeometry() const {
     return WaterMeshGenerator::buildWaterGeometry(model_);
 }
 
+TerrainSnapshot HexSphereSceneController::captureTerrainSnapshot() const {
+    TerrainSnapshot snapshot;
+    snapshot.subdivisionLevel = L_;
+    snapshot.generatorIndex = generatorIndex_;
+    snapshot.params = genParams_;
+    snapshot.cells.reserve(model_.cells().size());
+
+    for (const auto& cell : model_.cells()) {
+        TerrainCellSnapshot cellSnapshot;
+        cellSnapshot.height = cell.height;
+        cellSnapshot.biome = cell.biome;
+        cellSnapshot.temperature = cell.temperature;
+        cellSnapshot.humidity = cell.humidity;
+        cellSnapshot.pressure = cell.pressure;
+        cellSnapshot.oreDensity = cell.oreDensity;
+        cellSnapshot.oreType = cell.oreType;
+        cellSnapshot.oreVisual = cell.oreVisual;
+        cellSnapshot.oreNoiseOffset = cell.oreNoiseOffset;
+        snapshot.cells.push_back(cellSnapshot);
+    }
+
+    return snapshot;
+}
+
+void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snapshot) {
+    generatorIndex_ = normalizeTerrainGeneratorIndex(snapshot.generatorIndex);
+    generator_ = createTerrainGeneratorByIndex(generatorIndex_);
+    genParams_ = snapshot.params;
+    L_ = snapshot.subdivisionLevel;
+
+    rebuildTopology();
+
+    auto& cells = model_.cells();
+    const size_t count = std::min(cells.size(), snapshot.cells.size());
+    for (size_t i = 0; i < count; ++i) {
+        const auto& source = snapshot.cells[i];
+        auto& target = cells[i];
+        target.height = source.height;
+        target.biome = source.biome;
+        target.temperature = source.temperature;
+        target.humidity = source.humidity;
+        target.pressure = source.pressure;
+        target.oreDensity = source.oreDensity;
+        target.oreType = source.oreType;
+        target.oreVisual = source.oreVisual;
+        target.oreNoiseOffset = source.oreNoiseOffset;
+    }
+
+    selectedCells_.clear();
+    updateTerrainMesh();
+    generateTreePlacements();
+}
+
 float HexSphereSceneController::autoHeightStep() const {
     const float baseStep = 0.05f;
     const float reductionFactor = 0.4f;
@@ -165,8 +227,11 @@ void HexSphereSceneController::generateTreePlacements() {
     treePlacements_.clear();
     const auto& cells = model_.cells();
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    const uint32_t deterministicSeed =
+        genParams_.seed ^
+        (static_cast<uint32_t>(generatorIndex_ + 1) * 0x9e3779b9u) ^
+        (static_cast<uint32_t>(L_ + 1) * 0x85ebca6bu);
+    std::mt19937 gen(deterministicSeed);
     std::uniform_real_distribution<float> distBary(0.1f, 0.8f);
     std::uniform_real_distribution<float> distScale(0.7f, 1.3f);
     std::uniform_real_distribution<float> distRot(0.0f, 2.0f * 3.14159f);
@@ -417,3 +482,4 @@ void HexSphereSceneController::validateCache() const {
         rebuildCache();
     }
 }
+

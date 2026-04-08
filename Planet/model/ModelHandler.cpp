@@ -8,8 +8,15 @@
 // ====== ПЕРЕХОД НА ПАРСЕР ЧЕРЕЗ POС ПОТОК ======
 #include <sstream>
 
-std::map<QString, std::weak_ptr<ModelHandler>> ModelHandler::cache_;
-std::mutex ModelHandler::cacheMutex_;
+std::map<QString, std::weak_ptr<ModelHandler>>& ModelHandler::cache() {
+    static auto* instance = new std::map<QString, std::weak_ptr<ModelHandler>>();
+    return *instance;
+}
+
+std::mutex& ModelHandler::cacheMutex() {
+    static auto* instance = new std::mutex();
+    return *instance;
+}
 
 ModelHandler::~ModelHandler() {
     clearGPUResources();
@@ -18,9 +25,10 @@ ModelHandler::~ModelHandler() {
 std::shared_ptr<ModelHandler> ModelHandler::loadShared(const QString& path) {
     const QString normalized = ModelHandler::canonicalPath(path);
 
-    std::lock_guard<std::mutex> lock(cacheMutex_);
-    auto it = cache_.find(normalized);
-    if (it != cache_.end()) {
+    std::lock_guard<std::mutex> lock(cacheMutex());
+    auto& cacheRef = cache();
+    auto it = cacheRef.find(normalized);
+    if (it != cacheRef.end()) {
         if (auto cached = it->second.lock()) {
             qDebug() << "Reusing cached model for" << normalized;
             return cached;
@@ -32,13 +40,13 @@ std::shared_ptr<ModelHandler> ModelHandler::loadShared(const QString& path) {
         return nullptr;
     }
 
-    cache_[normalized] = handler;
+    cacheRef[normalized] = handler;
     return handler;
 }
 
 void ModelHandler::clearCache() {
-    std::lock_guard<std::mutex> lock(cacheMutex_);
-    cache_.clear();
+    std::lock_guard<std::mutex> lock(cacheMutex());
+    cache().clear();
 }
 
 void ModelHandler::parsePartsFromMesh() {
@@ -251,7 +259,7 @@ void ModelHandler::uploadToGPU() {
         else {
             // Если нет нормалей, используем заглушку (вверх)
             // Это не идеально, но лучше чем ничего
-            qDebug() << "Warning: Part" << name.c_str() << "has no normals!";
+            qDebug() << "Warning: Part" << name << "has no normals!";
         }
 
         // Индексы
@@ -266,7 +274,7 @@ void ModelHandler::uploadToGPU() {
 
         glBindVertexArray(0);
 
-        qDebug() << "Uploaded part:" << name.c_str()
+        qDebug() << "Uploaded part:" << name
             << "vertices:" << part.positions.size() / 3
             << "normals:" << (part.normals.empty() ? 0 : part.normals.size() / 3)
             << "indices:" << part.indices.size();
@@ -332,8 +340,7 @@ void ModelHandler::drawPart(const QString& partName, GLuint shader,
     const QMatrix4x4& modelMatrix,
     const QMatrix4x4& viewMatrix) {
     // Конвертируем QString в std::string для поиска в map
-    std::string name = partName.toStdString();
-    auto it = parts_.find(name);
+    auto it = parts_.find(partName);
     if (it == parts_.end() || !it->second.initialized || it->second.indexCount == 0) {
         return;
     }
@@ -354,8 +361,7 @@ void ModelHandler::drawPart(const QString& partName, GLuint shader,
 }
 
 bool ModelHandler::hasPart(const QString& partName) const {
-    std::string name = partName.toStdString();
-    return parts_.find(name) != parts_.end();
+    return parts_.find(partName) != parts_.end();
 }
 
 void ModelHandler::draw(GLuint shader,

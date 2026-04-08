@@ -9,6 +9,8 @@ CameraController::CameraController() {
     updateView();
 }
 
+CameraController::~CameraController() = default;
+
 void CameraController::resize(int width, int height, float devicePixelRatio) {
     const int pw = int(width * devicePixelRatio);
     const int ph = int(height * devicePixelRatio);

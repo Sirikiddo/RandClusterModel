@@ -1,11 +1,10 @@
 #include "model/CarModelHandler.h"
-#include <QDir>
 #include <QDebug>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
 #include <QOpenGLContext>
-#include <QRegularExpression>
 #include <QVector4D>
 
 #include <charconv>
@@ -14,6 +13,9 @@
 #include <map>
 #include <sstream>
 #include <string_view>
+
+namespace {
+}
 
 CarModelHandler::~CarModelHandler() {
     clearGPUResources();
@@ -80,6 +82,20 @@ namespace {
         return tokens;
     }
 
+    bool parseAsciiFloat(std::string_view sv, float& out) {
+        const char* first = sv.data();
+        const char* last = first + sv.size();
+        auto result = std::from_chars(first, last, out);
+        if (result.ec == std::errc{} && result.ptr == last) {
+            return true;
+        }
+
+        std::string tmp(sv);
+        char* end = nullptr;
+        out = std::strtof(tmp.c_str(), &end);
+        return end != nullptr && *end == '\0';
+    }
+
     int resolveObjIndex(int rawIndex, int count) {
         if (rawIndex > 0) {
             return rawIndex - 1;
@@ -96,6 +112,28 @@ namespace {
             return canonicalPath(pathInfo.filePath());
         }
         return canonicalPath(baseFile.dir().filePath(relativeOrAbsolutePath));
+    }
+
+    QString stripInlineComment(QString line) {
+        const qsizetype commentPos = line.indexOf('#');
+        if (commentPos >= 0) {
+            line.truncate(commentPos);
+        }
+        return line.trimmed();
+    }
+
+    QString parseObjDirectiveValue(std::string_view sv, size_t prefixLength) {
+        if (sv.size() <= prefixLength) {
+            return {};
+        }
+
+        std::string_view value = sv.substr(prefixLength);
+        const size_t commentPos = value.find('#');
+        if (commentPos != std::string_view::npos) {
+            value = value.substr(0, commentPos);
+        }
+
+        return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size())).trimmed();
     }
 }
 
@@ -144,7 +182,7 @@ bool CarModelHandler::loadFromFile(const QString& path) {
         std::vector<FaceCorner> faces;
     };
 
-    std::unordered_map<QString, FaceBatch> faceBatches;
+    std::map<QString, FaceBatch> faceBatches;
     QString currentMaterial;
     QString currentObject;
     materialLibraryPath_.clear();
@@ -184,7 +222,9 @@ bool CarModelHandler::loadFromFile(const QString& path) {
         return fc;
         };
 
+    qsizetype objLineNumber = 0;
     while (std::getline(stream, line)) {
+        ++objLineNumber;
         std::string_view sv(line);
         // trim
         size_t start = 0;
@@ -196,7 +236,7 @@ bool CarModelHandler::loadFromFile(const QString& path) {
         if (sv.empty() || sv[0] == '#') continue;
 
         if (sv.rfind("mtllib ", 0) == 0) {
-            const QString mtllibRef = QString::fromStdString(std::string(sv.substr(7))).trimmed();
+            const QString mtllibRef = parseObjDirectiveValue(sv, 7);
             if (!mtllibRef.isEmpty()) {
                 materialLibraryPath_ = resolvePathNearFile(fi, mtllibRef);
             }
@@ -268,10 +308,10 @@ bool CarModelHandler::loadFromFile(const QString& path) {
             }
         }
         else if (sv.rfind("o ", 0) == 0 || sv.rfind("g ", 0) == 0) {
-            currentObject = QString::fromStdString(std::string(sv.substr(2))).trimmed();
+            currentObject = parseObjDirectiveValue(sv, 2);
         }
         else if (sv.rfind("usemtl ", 0) == 0) {
-            currentMaterial = QString::fromStdString(std::string(sv.substr(7))).trimmed();
+            currentMaterial = parseObjDirectiveValue(sv, 7);
         }
         else if (sv.size() >= 2 && sv[0] == 'f' && sv[1] == ' ') {
             // face
@@ -303,7 +343,6 @@ bool CarModelHandler::loadFromFile(const QString& path) {
             }
         }
     }
-
     averageWheelRadius_ = 0.0f;
     float wheelRadiusSum = 0.0f;
     int wheelCount = 0;
@@ -428,7 +467,6 @@ bool CarModelHandler::loadFromFile(const QString& path) {
             meshes_.push_back(std::move(sub));
         }
     }
-
     if (wheelCount > 0) {
         averageWheelRadius_ = wheelRadiusSum / static_cast<float>(wheelCount);
     }
@@ -459,25 +497,51 @@ void CarModelHandler::loadMaterials(const QString& objPath) {
     std::map<QString, QString> textureMap;
     std::map<QString, QVector3D> kdMap;
 
-    QRegularExpression wsRe(QStringLiteral("\\s+"));
+    qsizetype mtlLineNumber = 0;
     while (!mtlFile.atEnd()) {
-        const QString line = QString::fromUtf8(mtlFile.readLine()).trimmed();
-        if (line.isEmpty() || line.startsWith('#')) continue;
-
-        const QStringList parts = line.split(wsRe, Qt::SkipEmptyParts);
-        if (parts.isEmpty()) continue;
-
-        if (parts[0] == "newmtl") {
-            currentMat = line.mid(7).trimmed();
+        ++mtlLineNumber;
+        const QByteArray rawLine = mtlFile.readLine();
+        std::string_view sv(rawLine.constData(), static_cast<size_t>(rawLine.size()));
+        size_t start = 0;
+        while (start < sv.size() && (sv[start] == ' ' || sv[start] == '\t' || sv[start] == '\r')) {
+            ++start;
         }
-        else if (parts[0] == "Kd" && parts.size() >= 4) {
-            const float r = parts[1].toFloat();
-            const float g = parts[2].toFloat();
-            const float b = parts[3].toFloat();
+        size_t end = sv.size();
+        while (end > start && (sv[end - 1] == ' ' || sv[end - 1] == '\t' || sv[end - 1] == '\r' || sv[end - 1] == '\n')) {
+            --end;
+        }
+        sv = sv.substr(start, end - start);
+        const size_t commentPos = sv.find('#');
+        if (commentPos != std::string_view::npos) {
+            sv = sv.substr(0, commentPos);
+            while (!sv.empty() && (sv.back() == ' ' || sv.back() == '\t' || sv.back() == '\r')) {
+                sv.remove_suffix(1);
+            }
+        }
+        if (sv.empty()) continue;
+
+        if (sv.rfind("newmtl ", 0) == 0) {
+            currentMat = parseObjDirectiveValue(sv, 7);
+        }
+        else if (sv.rfind("Kd ", 0) == 0) {
+            const auto parts = splitWhitespace(sv, 3);
+            if (parts.size() < 3) {
+                continue;
+            }
+
+            float r = 0.0f;
+            float g = 0.0f;
+            float b = 0.0f;
+            if (!parseAsciiFloat(parts[0], r) || !parseAsciiFloat(parts[1], g) || !parseAsciiFloat(parts[2], b)) {
+                continue;
+            }
             kdMap[currentMat] = QVector3D(r, g, b);
         }
-        else if (parts[0] == "map_Kd" && parts.size() >= 2) {
-            QString texPath = line.mid(QStringLiteral("map_Kd").size()).trimmed();
+        else if (sv.rfind("map_Kd ", 0) == 0) {
+            QString texPath = parseObjDirectiveValue(sv, 7);
+            if (texPath.isEmpty()) {
+                continue;
+            }
             texPath = resolvePathNearFile(QFileInfo(mtlPath), texPath);
             textureMap[currentMat] = texPath;
         }

@@ -4,7 +4,6 @@
 #include <memory>
 #include <mutex>
 #include <vector>
-#include <string>  // Добавить этот include
 #include <QOpenGLFunctions_3_3_Core>
 #include <QMatrix4x4>
 #include <QString>
@@ -16,7 +15,7 @@ struct ModelPart {
     std::vector<float> normals;
     std::vector<float> texcoords;
     std::vector<uint32_t> indices;
-    std::string name;
+    QString name;
 
     GLuint vao = 0;
     GLuint vbo = 0;
@@ -71,13 +70,12 @@ public:
 private:
     static QString canonicalPath(const QString& path);
     void parsePartsFromMesh();
-
-    static std::map<QString, std::weak_ptr<ModelHandler>> cache_;
-    static std::mutex cacheMutex_;
+    static std::map<QString, std::weak_ptr<ModelHandler>>& cache();
+    static std::mutex& cacheMutex();
 
     QString path_;
     simple3d::Mesh mesh_;
-    std::map<std::string, ModelPart> parts_;
+    std::map<QString, ModelPart> parts_;
 
     GLsizei indexCount_ = 0;
     bool glInitialized_ = false;

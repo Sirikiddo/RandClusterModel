@@ -47,6 +47,30 @@
     <Filter Include="tests">
       <UniqueIdentifier>{66922ee6-bff0-415e-996a-f4b02002e8e4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="dag">
+      <UniqueIdentifier>{6A5F233F-F1A3-4F65-9671-5B3435B61A59}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ProcessDAG">
+      <UniqueIdentifier>{2D8102F4-B3EA-4BFD-940C-B01C1F5E9225}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ProcessDAG\boundary">
+      <UniqueIdentifier>{56FE4F77-C3B1-42A2-9CE0-FD164BAF5820}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ProcessDAG\core">
+      <UniqueIdentifier>{0D7B611D-4D65-4A89-A758-E17110AE1680}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ProcessDAG\DAG">
+      <UniqueIdentifier>{8245E20C-BA2E-4BF4-BCE8-7901780F6588}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ProcessDAG\include">
+      <UniqueIdentifier>{D883E0D9-B293-4A65-8A09-11D8C051B9AA}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ProcessDAG\include\proc">
+      <UniqueIdentifier>{6834F100-F38D-4C3C-B3D1-410A53F04C39}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ProcessDAG\proc">
+      <UniqueIdentifier>{E20C0472-7567-4218-BE26-B299D3A64A1D}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="resources\Planet.qrc">
@@ -57,8 +81,44 @@
     <ClCompile Include="core\main.cpp">
       <Filter>core</Filter>
     </ClCompile>
-    <ClCompile Include="core\ProcessDagSmoke.cpp">
-      <Filter>core</Filter>
+    <ClCompile Include="dag\ProcessDagSmoke.cpp">
+      <Filter>dag</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\proc\Proc.ixx">
+      <Filter>ProcessDAG\proc</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\proc\Proc.Core.ixx">
+      <Filter>ProcessDAG\proc</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\proc\Proc.Schema.ixx">
+      <Filter>ProcessDAG\proc</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\core\DataSpecV2.cpp">
+      <Filter>ProcessDAG\core</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\core\NodeFactory.cpp">
+      <Filter>ProcessDAG\core</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\DAG\Commit.cpp">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\DAG\DagEngine.cpp">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\proc\Proc.Logging.ixx">
+      <Filter>ProcessDAG\proc</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\boundary\Logger.cpp">
+      <Filter>ProcessDAG\boundary</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\proc\Proc.FileSchema.ixx">
+      <Filter>ProcessDAG\proc</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\proc\Proc.Scenario.ixx">
+      <Filter>ProcessDAG\proc</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\boundary\ScenarioReader.cpp">
+      <Filter>ProcessDAG\boundary</Filter>
     </ClCompile>
     <ClCompile Include="controllers\CameraController.cpp">
       <Filter>controllers</Filter>
@@ -141,8 +201,8 @@
     <ClCompile Include="scene\SceneGraph.cpp">
       <Filter>scene</Filter>
     </ClCompile>
-    <ClCompile Include="tools\converters\DataAdapters.cpp">
-      <Filter>tools\converters</Filter>
+    <ClCompile Include="dag\DataAdapters.cpp">
+      <Filter>dag</Filter>
     </ClCompile>
     <ClCompile Include="tools\model_cache_test.cpp">
       <Filter>tools</Filter>
@@ -150,8 +210,8 @@
     <ClCompile Include="model\OreSystem.cpp">
       <Filter>model</Filter>
     </ClCompile>
-    <ClCompile Include="core\EngineFacade.cpp">
-      <Filter>core</Filter>
+    <ClCompile Include="dag\EngineFacade.cpp">
+      <Filter>dag</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -272,17 +332,92 @@
     <ClInclude Include="scene\Transform.h">
       <Filter>scene</Filter>
     </ClInclude>
-    <ClInclude Include="tools\converters\DataAdapters.h">
-      <Filter>tools\converters</Filter>
+    <ClInclude Include="dag\DataAdapters.h">
+      <Filter>dag</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\include\proc\ProcessDag.h">
+      <Filter>ProcessDAG\include\proc</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\include\proc\Schema.h">
+      <Filter>ProcessDAG\include\proc</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\include\proc\Logging.h">
+      <Filter>ProcessDAG\include\proc</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\include\proc\FileSchema.h">
+      <Filter>ProcessDAG\include\proc</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\include\proc\ScenarioReader.h">
+      <Filter>ProcessDAG\include\proc</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\core\BuiltinRegistries.h">
+      <Filter>ProcessDAG\core</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\core\GraphSchema.h">
+      <Filter>ProcessDAG\core</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\core\GraphSchemaCompile.h">
+      <Filter>ProcessDAG\core</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\core\NodeFactory.h">
+      <Filter>ProcessDAG\core</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\core\SpecBinding.h">
+      <Filter>ProcessDAG\core</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\Commit.h">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\CoreV2.h">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\DagEngine.h">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\DagEngine.inl">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\DagStorage.h">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\Executor.h">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\LayeredState.h">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\MemoryPolicy.h">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\Planner.h">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\PortStates.h">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\ProcTypes.h">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\RuntimeOperationRegistry.h">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\StateTypes.h">
+      <Filter>ProcessDAG\DAG</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\StoreTypes.h">
+      <Filter>ProcessDAG\DAG</Filter>
     </ClInclude>
     <ClInclude Include="model\OreSystem.h">
       <Filter>model</Filter>
     </ClInclude>
-    <ClInclude Include="core\DebugOverlay.h">
-      <Filter>core</Filter>
+    <ClInclude Include="dag\DebugOverlay.h">
+      <Filter>dag</Filter>
     </ClInclude>
-    <ClInclude Include="core\EngineFacade.h">
-      <Filter>core</Filter>
+    <ClInclude Include="dag\EngineFacade.h">
+      <Filter>dag</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\TerrainBackendTypes.h">
+      <Filter>dag</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -294,6 +429,9 @@
     </None>
     <None Include="trunsuction_plan.md">
       <Filter>docs</Filter>
+    </None>
+    <None Include="third_party\ProcessDAG\ProcessDag.Embedded.props">
+      <Filter>ProcessDAG</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

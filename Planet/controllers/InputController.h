@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "controllers/HexSphereSceneController.h"
+#include "dag/EngineFacade.h"
 #include "renderers/HexSphereRenderer.h"
 #include "ui/PerformanceStats.h"
 #include "ECS/ComponentStorage.h"
@@ -20,7 +21,7 @@ class QOpenGLWidget;
 class CameraController;
 class HexSphereModel;
 
-class InputController {
+class InputController : public ITerrainBackendAdapter {
 public:
     struct Response {
         bool requestUpdate = false;
@@ -28,7 +29,9 @@ public:
     };
 
     explicit InputController(CameraController& camera);
+    ~InputController();
 
+    void attachEngine(EngineFacade* engine) { engine_ = engine; }
     void initialize(QOpenGLWidget* owner);
     void resize(int w, int h, float devicePixelRatio);
     Response render();
@@ -66,6 +69,13 @@ public:
     ecs::ComponentStorage& getECS() { return ecs_; }
     const ecs::ComponentStorage& getECS() const { return ecs_; }
 
+    void legacySetTerrainParams(const TerrainParams& params) override;
+    void legacySetGeneratorByIndex(int idx) override;
+    void legacySetSubdivisionLevel(int level) override;
+    void legacyRegenerateTerrain() override;
+    TerrainSnapshot captureTerrainSnapshot() const override;
+    void applyTerrainSnapshot(const TerrainSnapshot& snapshot) override;
+
 private:
     struct PickHit {
         int cellId;
@@ -93,6 +103,7 @@ private:
     void moveSelectedEntityToCell(int cellId, Response& response);
 
     CameraController& camera_;
+    EngineFacade* engine_ = nullptr;
     QOpenGLWidget* owner_ = nullptr;
     std::unique_ptr<HexSphereRenderer> renderer_;
 

@@ -1,4 +1,4 @@
-#pragma once
+п»ї#pragma once
 
 #include <QElapsedTimer>
 #include <QSet>
@@ -10,6 +10,7 @@
 #include <optional>
 #include <vector>
 
+#include "dag/TerrainBackendTypes.h"
 #include "controllers/PathBuilder.h"
 #include "generation/MeshGenerators/TerrainMeshGenerator.h"
 #include "generation/MeshGenerators/WaterMeshGenerator.h"
@@ -17,29 +18,29 @@
 #include "model/HexSphereModel.h"
 
 struct CachedTriangle {
-    QVector3D center;      // Центр треугольника в world-space
-    uint32_t i0, i1, i2;   // Индексы вершин
-    float cachedDot;        // Кэшированное значение dot product (опционально)
+    QVector3D center;      // Р¦РµРЅС‚СЂ С‚СЂРµСѓРіРѕР»СЊРЅРёРєР° РІ world-space
+    uint32_t i0, i1, i2;   // РРЅРґРµРєСЃС‹ РІРµСЂС€РёРЅ
+    float cachedDot;        // РљСЌС€РёСЂРѕРІР°РЅРЅРѕРµ Р·РЅР°С‡РµРЅРёРµ dot product (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
 };
 
 struct VisibilityConfig {
-    float baseThreshold = 0.1f;        // Базовый порог движения
-    float farDistance = 5.0f;           // Расстояние, с которого начинается "далеко"
-    float nearDistance = 2.0f;          // Расстояние, с которого начинается "близко"
-    float fastSpeed = 1.0f;             // Порог быстрой скорости
-    float mediumSpeed = 0.1f;           // Порог средней скорости
-    float fastUpdateInterval = 0.2f;     // Интервал обновления при быстрой скорости (сек)
-    float mediumUpdateInterval = 0.5f;   // Интервал при средней скорости
-    float slowUpdateInterval = 1.0f;     // Интервал при медленной скорости
-    float forceUpdateDistance = 2.0f;    // Принудительное обновление при таком перемещении
+    float baseThreshold = 0.1f;        // Р‘Р°Р·РѕРІС‹Р№ РїРѕСЂРѕРі РґРІРёР¶РµРЅРёСЏ
+    float farDistance = 5.0f;           // Р Р°СЃСЃС‚РѕСЏРЅРёРµ, СЃ РєРѕС‚РѕСЂРѕРіРѕ РЅР°С‡РёРЅР°РµС‚СЃСЏ "РґР°Р»РµРєРѕ"
+    float nearDistance = 2.0f;          // Р Р°СЃСЃС‚РѕСЏРЅРёРµ, СЃ РєРѕС‚РѕСЂРѕРіРѕ РЅР°С‡РёРЅР°РµС‚СЃСЏ "Р±Р»РёР·РєРѕ"
+    float fastSpeed = 1.0f;             // РџРѕСЂРѕРі Р±С‹СЃС‚СЂРѕР№ СЃРєРѕСЂРѕСЃС‚Рё
+    float mediumSpeed = 0.1f;           // РџРѕСЂРѕРі СЃСЂРµРґРЅРµР№ СЃРєРѕСЂРѕСЃС‚Рё
+    float fastUpdateInterval = 0.2f;     // РРЅС‚РµСЂРІР°Р» РѕР±РЅРѕРІР»РµРЅРёСЏ РїСЂРё Р±С‹СЃС‚СЂРѕР№ СЃРєРѕСЂРѕСЃС‚Рё (СЃРµРє)
+    float mediumUpdateInterval = 0.5f;   // РРЅС‚РµСЂРІР°Р» РїСЂРё СЃСЂРµРґРЅРµР№ СЃРєРѕСЂРѕСЃС‚Рё
+    float slowUpdateInterval = 1.0f;     // РРЅС‚РµСЂРІР°Р» РїСЂРё РјРµРґР»РµРЅРЅРѕР№ СЃРєРѕСЂРѕСЃС‚Рё
+    float forceUpdateDistance = 2.0f;    // РџСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕРµ РѕР±РЅРѕРІР»РµРЅРёРµ РїСЂРё С‚Р°РєРѕРј РїРµСЂРµРјРµС‰РµРЅРёРё
 };
 
 struct VisibilityPrediction {
-    std::vector<uint32_t> indicesNow;        // Для текущей позиции
-    std::vector<uint32_t> indicesPredicted;  // Для предсказанной позиции
-    QVector3D predictedPos;                   // Предсказанная позиция
-    float predictionTime = 0.1f;               // Время предсказания (сек)
-    bool usePrediction = false;                // Флаг использования предсказания
+    std::vector<uint32_t> indicesNow;        // Р”Р»СЏ С‚РµРєСѓС‰РµР№ РїРѕР·РёС†РёРё
+    std::vector<uint32_t> indicesPredicted;  // Р”Р»СЏ РїСЂРµРґСЃРєР°Р·Р°РЅРЅРѕР№ РїРѕР·РёС†РёРё
+    QVector3D predictedPos;                   // РџСЂРµРґСЃРєР°Р·Р°РЅРЅР°СЏ РїРѕР·РёС†РёСЏ
+    float predictionTime = 0.1f;               // Р’СЂРµРјСЏ РїСЂРµРґСЃРєР°Р·Р°РЅРёСЏ (СЃРµРє)
+    bool usePrediction = false;                // Р¤Р»Р°Рі РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ РїСЂРµРґСЃРєР°Р·Р°РЅРёСЏ
 };
 
 
@@ -48,7 +49,6 @@ class HexSphereSceneController {
 public:
     HexSphereSceneController();
 
-    void setGenerator(std::unique_ptr<ITerrainGenerator> generator);
     void setGeneratorByIndex(int idx);
     void setGenParams(const TerrainParams& params);
     void setSubdivisionLevel(int level);
@@ -60,6 +60,7 @@ public:
 
     void rebuildModel();
     void regenerateTerrain();
+    void clearForShutdown();
 
     void clearSelection();
     void toggleCellSelection(int cellId);
@@ -69,6 +70,8 @@ public:
     std::vector<float> buildWireVertices() const;
     std::vector<float> buildSelectionOutlineVertices() const;
     WaterGeometryData buildWaterGeometry() const;
+    TerrainSnapshot captureTerrainSnapshot() const;
+    void applyTerrainSnapshot(const TerrainSnapshot& snapshot);
 
     const HexSphereModel& model() const { return model_; }
     HexSphereModel& modelMutable() { return model_; }
@@ -76,6 +79,7 @@ public:
     const QSet<int>& selectedCells() const { return selectedCells_; }
 
     int subdivisionLevel() const { return L_; }
+    int generatorIndex() const { return generatorIndex_; }
     float heightStep() const { return heightStep_; }
     float outlineBias() const { return outlineBias_; }
     float stripInset() const { return stripInset_; }
@@ -176,6 +180,7 @@ public:
 
 private:
     float autoHeightStep() const;
+    void rebuildTopology();
     void updateTerrainMesh();
 
     void updateTreeOccupiedCells();
@@ -187,6 +192,7 @@ private:
 
     std::unique_ptr<ITerrainGenerator> generator_;
     TerrainParams genParams_{};
+    int generatorIndex_ = 3;
 
     int L_ = 2;
     float heightStep_ = 0.06f;
@@ -200,8 +206,8 @@ private:
     std::vector<TreePlacement> treePlacements_;
     QSet<int> treeOccupiedCells_;
 
-    QVector3D cameraPos_{ 0, 0, 5 };      // Текущая позиция камеры (начальное значение)
-    QVector3D lastCameraPos_{ 0, 0, 5 };  // Позиция на прошлом кадре для детекта движения
+    QVector3D cameraPos_{ 0, 0, 5 };      // РўРµРєСѓС‰Р°СЏ РїРѕР·РёС†РёСЏ РєР°РјРµСЂС‹ (РЅР°С‡Р°Р»СЊРЅРѕРµ Р·РЅР°С‡РµРЅРёРµ)
+    QVector3D lastCameraPos_{ 0, 0, 5 };  // РџРѕР·РёС†РёСЏ РЅР° РїСЂРѕС€Р»РѕРј РєР°РґСЂРµ РґР»СЏ РґРµС‚РµРєС‚Р° РґРІРёР¶РµРЅРёСЏ
     mutable std::vector<CachedTriangle> triangleCache_;
     mutable bool cacheValid_ = false;
     mutable QVector3D lastCacheCameraPos_;
@@ -209,7 +215,7 @@ private:
     void rebuildCache() const;
     void validateCache() const;
 
-    // Новые поля для детектора скорости
+    // РќРѕРІС‹Рµ РїРѕР»СЏ РґР»СЏ РґРµС‚РµРєС‚РѕСЂР° СЃРєРѕСЂРѕСЃС‚Рё
     mutable QVector3D velocity_;
     mutable QElapsedTimer speedTimer_;
     mutable bool speedTimerStarted_ = false;
@@ -219,3 +225,4 @@ private:
 
     VisibilityConfig visibilityConfig_;
 };
+

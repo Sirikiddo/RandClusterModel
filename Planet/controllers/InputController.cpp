@@ -100,6 +100,14 @@ InputController::InputController(CameraController& camera)
     : camera_(camera) {
 }
 
+InputController::~InputController() {
+    renderer_.reset();
+    ecs_.clear();
+    scene_.clearForShutdown();
+    engine_ = nullptr;
+    owner_ = nullptr;
+}
+
 void InputController::initialize(QOpenGLWidget* owner) {
     owner_ = owner;
     owner_->makeCurrent();
@@ -239,7 +247,7 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         for (int next : currentCell.neighbors) {
             if (next < 0) continue;
             buildAndShowPathBetween(entity.currentCell, next, response);
-            // Для Explorer-движения хотим прямую "по поверхности", без подпрыгивания
+            // Р”Р»СЏ Explorer-РґРІРёР¶РµРЅРёСЏ С…РѕС‚РёРј РїСЂСЏРјСѓСЋ "РїРѕ РїРѕРІРµСЂС…РЅРѕСЃС‚Рё", Р±РµР· РїРѕРґРїСЂС‹РіРёРІР°РЅРёСЏ
             moved = applyAnimation(entity.id, next, kBaseTraversalSpeed, 0.0f);
             if (moved) {
                 break;
@@ -322,10 +330,21 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
 InputController::Response InputController::setSubdivisionLevel(int L) {
     Response response;
     if (scene_.subdivisionLevel() != L) {
-        scene_.setSubdivisionLevel(L);
         stats_.setSubdivisionLevel(L);
         updateBufferUsageStrategy();
-        rebuildModel(response);
+        if (engine_) {
+            engine_->setSubdivisionLevel(L);
+            if (engine_->usesDagTerrainPath()) {
+                engine_->regenerateTerrain();
+            }
+            uploadBuffers();
+            response.requestUpdate = true;
+        }
+        else {
+            scene_.setSubdivisionLevel(L);
+            uploadBuffers();
+            response.requestUpdate = true;
+        }
         response.requestUpdate = true;
     }
     return response;
@@ -348,20 +367,36 @@ InputController::Response InputController::clearSelection() {
 
 InputController::Response InputController::setTerrainParams(const TerrainParams& p) {
     Response response;
-    scene_.setGenParams(p);
+    if (engine_) {
+        engine_->setTerrainParams(p);
+    }
+    else {
+        scene_.setGenParams(p);
+    }
     return response;
 }
 
 InputController::Response InputController::setGeneratorByIndex(int idx) {
     Response response;
-    scene_.setGeneratorByIndex(idx);
+    if (engine_) {
+        engine_->setGeneratorByIndex(idx);
+    }
+    else {
+        scene_.setGeneratorByIndex(idx);
+    }
     return response;
 }
 
 InputController::Response InputController::regenerateTerrain() {
     Response response;
-    scene_.regenerateTerrain();
-    rebuildModel(response);
+    if (engine_) {
+        engine_->regenerateTerrain();
+    }
+    else {
+        scene_.regenerateTerrain();
+    }
+    uploadBuffers();
+    response.requestUpdate = true;
     return response;
 }
 
@@ -409,6 +444,30 @@ void InputController::uploadBuffers() {
     if (renderer_) {
         renderer_->uploadScene(scene_, uploadOptions_);
     }
+}
+
+void InputController::legacySetTerrainParams(const TerrainParams& params) {
+    scene_.setGenParams(params);
+}
+
+void InputController::legacySetGeneratorByIndex(int idx) {
+    scene_.setGeneratorByIndex(idx);
+}
+
+void InputController::legacySetSubdivisionLevel(int level) {
+    scene_.setSubdivisionLevel(level);
+}
+
+void InputController::legacyRegenerateTerrain() {
+    scene_.regenerateTerrain();
+}
+
+TerrainSnapshot InputController::captureTerrainSnapshot() const {
+    return scene_.captureTerrainSnapshot();
+}
+
+void InputController::applyTerrainSnapshot(const TerrainSnapshot& snapshot) {
+    scene_.applyTerrainSnapshot(snapshot);
 }
 
 void InputController::buildAndShowSelectedPath(Response& response) {
@@ -610,7 +669,7 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     }
 
     buildAndShowPathBetween(oldCell, cellId, response);
-    // Для Explorer-движения хотим прямую "по поверхности", без подпрыгивания
+    // Р”Р»СЏ Explorer-РґРІРёР¶РµРЅРёСЏ С…РѕС‚РёРј РїСЂСЏРјСѓСЋ "РїРѕ РїРѕРІРµСЂС…РЅРѕСЃС‚Рё", Р±РµР· РїРѕРґРїСЂС‹РіРёРІР°РЅРёСЏ
     if (!applyAnimation(entity->id, cellId, kBaseTraversalSpeed, 0.0f)) {
         if (renderer_) {
             renderer_->uploadPath({});
@@ -735,7 +794,7 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
     entity->currentCell = -1;
     transform->position = pathPoints.front();
 
-    // ������ ��������
+    // пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     ecs::Animation& anim = ecs_.emplace<ecs::Animation>(entityId);
     anim.type = ecs::Animation::Type::MoveTo;
     anim.duration = 0.0f;
@@ -800,11 +859,11 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
             anim.surfaceForward = t.normalized();
         }
     }
-    // Сохраняем направление сразу в Transform, чтобы оно не зависело от наличия Animation.
+    // РЎРѕС…СЂР°РЅСЏРµРј РЅР°РїСЂР°РІР»РµРЅРёРµ СЃСЂР°Р·Сѓ РІ Transform, С‡С‚РѕР±С‹ РѕРЅРѕ РЅРµ Р·Р°РІРёСЃРµР»Рѕ РѕС‚ РЅР°Р»РёС‡РёСЏ Animation.
     transform->surfaceForward = anim.surfaceForward;
 
     speed = std::max(0.01f, speed);
-    // Если caller передал 0.0f, подпрыгивание должно полностью отключиться.
+    // Р•СЃР»Рё caller РїРµСЂРµРґР°Р» 0.0f, РїРѕРґРїСЂС‹РіРёРІР°РЅРёРµ РґРѕР»Р¶РЅРѕ РїРѕР»РЅРѕСЃС‚СЊСЋ РѕС‚РєР»СЋС‡РёС‚СЊСЃСЏ.
     anim.bounceHeight = std::clamp(bounceHeight, 0.0f, bounceHeightForBiome(targetData.biome));
     anim.arcPeakT = arcPeakForBiome(targetData.biome);
     anim.softLanding = usesSoftLanding(targetData.biome);
@@ -826,3 +885,4 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
 void InputController::updateAnimations(float dt) {
     ecs_.update(dt);
 }
+

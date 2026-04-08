@@ -63,8 +63,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <ProcessDagIncludeLogging>1</ProcessDagIncludeLogging>
+    <ProcessDagIncludeFileSchema>1</ProcessDagIncludeFileSchema>
+    <ProcessDagIncludeScenario>1</ProcessDagIncludeScenario>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <ProcessDagIncludeLogging>1</ProcessDagIncludeLogging>
+    <ProcessDagIncludeFileSchema>1</ProcessDagIncludeFileSchema>
+    <ProcessDagIncludeScenario>1</ProcessDagIncludeScenario>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -81,7 +87,7 @@
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>C:\Qt\6.8.0\msvc2022_64\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opengl32.lib;Qt6Widgets.lib;Qt6Core.lib;Qt6OpenGL.lib;Qt6OpenGLWidgets.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>opengl32.lib;Qt6Widgetsd.lib;Qt6Cored.lib;Qt6OpenGLd.lib;Qt6OpenGLWidgetsd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
@@ -130,11 +136,36 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="controllers\CameraController.h" />
+    <ClInclude Include="third_party\ProcessDAG\include\proc\ProcessDag.h" />
+    <ClInclude Include="third_party\ProcessDAG\include\proc\Schema.h" />
+    <ClInclude Include="third_party\ProcessDAG\include\proc\Logging.h" />
+    <ClInclude Include="third_party\ProcessDAG\include\proc\FileSchema.h" />
+    <ClInclude Include="third_party\ProcessDAG\include\proc\ScenarioReader.h" />
+    <ClInclude Include="third_party\ProcessDAG\core\BuiltinRegistries.h" />
+    <ClInclude Include="third_party\ProcessDAG\core\GraphSchema.h" />
+    <ClInclude Include="third_party\ProcessDAG\core\GraphSchemaCompile.h" />
+    <ClInclude Include="third_party\ProcessDAG\core\NodeFactory.h" />
+    <ClInclude Include="third_party\ProcessDAG\core\SpecBinding.h" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\Commit.h" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\CoreV2.h" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\DagEngine.h" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\DagEngine.inl" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\DagStorage.h" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\Executor.h" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\LayeredState.h" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\MemoryPolicy.h" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\Planner.h" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\PortStates.h" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\ProcTypes.h" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\RuntimeOperationRegistry.h" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\StateTypes.h" />
+    <ClInclude Include="third_party\ProcessDAG\DAG\StoreTypes.h" />
     <ClInclude Include="controllers\HexSphereSceneController.h" />
     <ClInclude Include="controllers\InputController.h" />
     <ClInclude Include="controllers\PathBuilder.h" />
-    <ClInclude Include="core\DebugOverlay.h" />
-    <ClInclude Include="core\EngineFacade.h" />
+    <ClInclude Include="dag\DebugOverlay.h" />
+    <ClInclude Include="dag\EngineFacade.h" />
+    <ClInclude Include="dag\TerrainBackendTypes.h" />
     <ClInclude Include="generation\ClimateBiomeGenerator.h" />
     <ClInclude Include="generation\PerlinNoise.h" />
     <ClInclude Include="generation\TerrainGenerator.h" />
@@ -171,15 +202,27 @@
     <ClInclude Include="scene\Interaction.h" />
     <ClInclude Include="scene\SceneGraph.h" />
     <ClInclude Include="scene\Transform.h" />
-    <ClInclude Include="tools\converters\DataAdapters.h" />
+    <ClInclude Include="dag\DataAdapters.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\CameraController.cpp" />
-    <ClCompile Include="core\ProcessDagSmoke.cpp" />
+    <ClCompile Include="third_party\ProcessDAG\proc\Proc.ixx" />
+    <ClCompile Include="third_party\ProcessDAG\proc\Proc.Core.ixx" />
+    <ClCompile Include="third_party\ProcessDAG\proc\Proc.Schema.ixx" />
+    <ClCompile Include="third_party\ProcessDAG\core\DataSpecV2.cpp" />
+    <ClCompile Include="third_party\ProcessDAG\core\NodeFactory.cpp" />
+    <ClCompile Include="third_party\ProcessDAG\DAG\Commit.cpp" />
+    <ClCompile Include="third_party\ProcessDAG\DAG\DagEngine.cpp" />
+    <ClCompile Include="third_party\ProcessDAG\proc\Proc.Logging.ixx" Condition="'$(ProcessDagIncludeLogging)'=='1'" />
+    <ClCompile Include="third_party\ProcessDAG\boundary\Logger.cpp" Condition="'$(ProcessDagIncludeLogging)'=='1'" />
+    <ClCompile Include="third_party\ProcessDAG\proc\Proc.FileSchema.ixx" Condition="'$(ProcessDagIncludeFileSchema)'=='1'" />
+    <ClCompile Include="third_party\ProcessDAG\proc\Proc.Scenario.ixx" Condition="'$(ProcessDagIncludeScenario)'=='1'" />
+    <ClCompile Include="third_party\ProcessDAG\boundary\ScenarioReader.cpp" Condition="'$(ProcessDagIncludeScenario)'=='1'" />
+    <ClCompile Include="dag\ProcessDagSmoke.cpp" />
     <ClCompile Include="controllers\HexSphereSceneController.cpp" />
     <ClCompile Include="controllers\InputController.cpp" />
     <ClCompile Include="controllers\PathBuilder.cpp" />
-    <ClCompile Include="core\EngineFacade.cpp" />
+    <ClCompile Include="dag\EngineFacade.cpp" />
     <ClCompile Include="core\main.cpp" />
     <ClCompile Include="generation\ClimateBiomeGenerator.cpp" />
     <ClCompile Include="generation\PerlinNoise.cpp" />
@@ -205,7 +248,7 @@
     <ClCompile Include="ECS\ComponentStorage.cpp" />
     <ClCompile Include="scene\Entity.cpp" />
     <ClCompile Include="scene\SceneGraph.cpp" />
-    <ClCompile Include="tools\converters\DataAdapters.cpp" />
+    <ClCompile Include="dag\DataAdapters.cpp" />
     <ClCompile Include="tools\model_cache_test.cpp">
       <ExcludedFromBuild Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">true</ExcludedFromBuild>
@@ -214,13 +257,10 @@
   <ItemGroup>
     <None Include="resources\HexSphereWidget_shaders.h" />
     <None Include="docs\rendering_refactor_task.md" />
+    <None Include="third_party\ProcessDAG\ProcessDag.Embedded.props" />
     <None Include="trunsuction_plan.md" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="third_party\ProcessDAG\ProcessDAG.vcxproj">
-      <Project>{62B257EA-F3C9-4798-8E1E-C61CDA731DE2}</Project>
-    </ProjectReference>
-  </ItemGroup>
+  <Import Project="third_party\ProcessDAG\ProcessDag.Embedded.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
     <Import Project="$(QtMsBuild)\qt.targets" />
