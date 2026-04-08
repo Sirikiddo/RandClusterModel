@@ -8,15 +8,8 @@
 // ====== ПЕРЕХОД НА ПАРСЕР ЧЕРЕЗ POС ПОТОК ======
 #include <sstream>
 
-std::map<QString, std::weak_ptr<ModelHandler>>& ModelHandler::cache() {
-    static auto* instance = new std::map<QString, std::weak_ptr<ModelHandler>>();
-    return *instance;
-}
-
-std::mutex& ModelHandler::cacheMutex() {
-    static auto* instance = new std::mutex();
-    return *instance;
-}
+std::map<QString, std::weak_ptr<ModelHandler>> ModelHandler::cache_;
+std::mutex ModelHandler::cacheMutex_;
 
 ModelHandler::~ModelHandler() {
     clearGPUResources();
@@ -25,10 +18,9 @@ ModelHandler::~ModelHandler() {
 std::shared_ptr<ModelHandler> ModelHandler::loadShared(const QString& path) {
     const QString normalized = ModelHandler::canonicalPath(path);
 
-    std::lock_guard<std::mutex> lock(cacheMutex());
-    auto& cacheRef = cache();
-    auto it = cacheRef.find(normalized);
-    if (it != cacheRef.end()) {
+    std::lock_guard<std::mutex> lock(cacheMutex_);
+    auto it = cache_.find(normalized);
+    if (it != cache_.end()) {
         if (auto cached = it->second.lock()) {
             qDebug() << "Reusing cached model for" << normalized;
             return cached;
@@ -40,13 +32,13 @@ std::shared_ptr<ModelHandler> ModelHandler::loadShared(const QString& path) {
         return nullptr;
     }
 
-    cacheRef[normalized] = handler;
+    cache_[normalized] = handler;
     return handler;
 }
 
 void ModelHandler::clearCache() {
-    std::lock_guard<std::mutex> lock(cacheMutex());
-    cache().clear();
+    std::lock_guard<std::mutex> lock(cacheMutex_);
+    cache_.clear();
 }
 
 void ModelHandler::parsePartsFromMesh() {

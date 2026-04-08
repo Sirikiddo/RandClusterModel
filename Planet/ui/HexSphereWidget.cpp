@@ -16,15 +16,15 @@
 
 #include "model/OreSystem.h"
 
-HexSphereWidget::HexSphereWidget(QWidget* parent)
+HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputController& inputController, QWidget* parent)
     : QOpenGLWidget(parent)
-    , cameraController_(std::make_unique<CameraController>())
-    , inputController_(std::make_unique<InputController>(*cameraController_))
+    , cameraController_(cameraController)
+    , inputController_(inputController)
     , engine_(std::make_unique<EngineFacade>())
     , oreSystem_(nullptr) {
 
-    inputController_->attachEngine(engine_.get());
-    engine_->attachTerrainAdapter(inputController_.get());
+    inputController_.attachEngine(engine_.get());
+    engine_->attachTerrainAdapter(&inputController_);
 
     setFocusPolicy(Qt::StrongFocus);
 
@@ -38,28 +38,16 @@ HexSphereWidget::HexSphereWidget(QWidget* parent)
     waterTimer_ = new QTimer(this);
 
     connect(waterTimer_, &QTimer::timeout, this, [this]() {
-        applyResponse(inputController_->advanceWaterTime(0.016f));
-        inputController_->setOreAnimationTime(inputController_->getOreAnimationTime() + 0.016f * 0.1f);
+        applyResponse(inputController_.advanceWaterTime(0.016f));
+        inputController_.setOreAnimationTime(inputController_.getOreAnimationTime() + 0.016f * 0.1f);
         update();
         });
 }
 
-HexSphereWidget::~HexSphereWidget() {
-    if (animationTimer_) {
-        animationTimer_->stop();
-    }
-    if (waterTimer_) {
-        waterTimer_->stop();
-    }
-    oreSystem_.reset();
-    inputController_->attachEngine(nullptr);
-    engine_.reset();
-    inputController_.reset();
-    cameraController_.reset();
-}
+HexSphereWidget::~HexSphereWidget() = default;
 
 void HexSphereWidget::initializeGL() {
-    inputController_->initialize(this);
+    inputController_.initialize(this);
     engine_->initializeTerrainState();
 
     animationTimer_ = new QTimer(this);
@@ -72,7 +60,7 @@ void HexSphereWidget::initializeGL() {
         float dt = timer.restart() / 1000.0f;
         dt = std::min(dt, 0.033f);
 
-        inputController_->updateAnimations(dt);
+        inputController_.updateAnimations(dt);
         update();
         });
     animationTimer_->start(16);
@@ -81,7 +69,7 @@ void HexSphereWidget::initializeGL() {
 }
 
 void HexSphereWidget::resizeGL(int w, int h) {
-    inputController_->resize(w, h, devicePixelRatioF());
+    inputController_.resize(w, h, devicePixelRatioF());
 }
 
 
@@ -101,7 +89,7 @@ void HexSphereWidget::paintGL() {
     // inputController_.getECS().update(dt);
 
     engine_->tick(dt);
-    inputController_->render();
+    inputController_.render();
     const auto& o = engine_->overlay();
     overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5")
         .arg(qulonglong(o.sceneVersion))
@@ -125,47 +113,47 @@ void HexSphereWidget::paintEvent(QPaintEvent* e) {
 
 void HexSphereWidget::mousePressEvent(QMouseEvent* e) {
     setFocus(Qt::MouseFocusReason);
-    applyResponse(inputController_->mousePress(e));
+    applyResponse(inputController_.mousePress(e));
 }
 
 void HexSphereWidget::mouseMoveEvent(QMouseEvent* e) {
-    applyResponse(inputController_->mouseMove(e));
+    applyResponse(inputController_.mouseMove(e));
 }
 
 void HexSphereWidget::mouseReleaseEvent(QMouseEvent* e) {
-    inputController_->mouseRelease(e);
+    inputController_.mouseRelease(e);
 }
 
 void HexSphereWidget::wheelEvent(QWheelEvent* e) {
-    applyResponse(inputController_->wheel(e));
+    applyResponse(inputController_.wheel(e));
 }
 
 void HexSphereWidget::keyPressEvent(QKeyEvent* e) {
-    applyResponse(inputController_->keyPress(e));
+    applyResponse(inputController_.keyPress(e));
 }
 
 void HexSphereWidget::setSubdivisionLevel(int L) {
-    applyResponse(inputController_->setSubdivisionLevel(L));
+    applyResponse(inputController_.setSubdivisionLevel(L));
 }
 
 void HexSphereWidget::resetView() {
-    applyResponse(inputController_->resetView());
+    applyResponse(inputController_.resetView());
 }
 
 void HexSphereWidget::clearSelection() {
-    applyResponse(inputController_->clearSelection());
+    applyResponse(inputController_.clearSelection());
 }
 
 void HexSphereWidget::setTerrainParams(const TerrainParams& p) {
-    applyResponse(inputController_->setTerrainParams(p));
+    applyResponse(inputController_.setTerrainParams(p));
 }
 
 void HexSphereWidget::setGeneratorByIndex(int idx) {
-    applyResponse(inputController_->setGeneratorByIndex(idx));
+    applyResponse(inputController_.setGeneratorByIndex(idx));
 }
 
 void HexSphereWidget::regenerateTerrain() {
-    applyResponse(inputController_->regenerateTerrain());
+    applyResponse(inputController_.regenerateTerrain());
 
     // ����� ����������� ���� ������������������ ������� ���
     // ����� ���������, ���� ��� ����� ������������
@@ -175,15 +163,15 @@ void HexSphereWidget::regenerateTerrain() {
 }
 
 void HexSphereWidget::setSmoothOneStep(bool on) {
-    applyResponse(inputController_->setSmoothOneStep(on));
+    applyResponse(inputController_.setSmoothOneStep(on));
 }
 
 void HexSphereWidget::setStripInset(float v) {
-    applyResponse(inputController_->setStripInset(v));
+    applyResponse(inputController_.setStripInset(v));
 }
 
 void HexSphereWidget::setOutlineBias(float v) {
-    applyResponse(inputController_->setOutlineBias(v));
+    applyResponse(inputController_.setOutlineBias(v));
 }
 
 void HexSphereWidget::applyResponse(const InputController::Response& response) {
@@ -200,7 +188,7 @@ void HexSphereWidget::initOreSystem() {
     oreSystem_ = std::make_unique<OreSystem>();
 
     // �������� ������ ����� InputController
-    HexSphereModel* model = inputController_->getModel();
+    HexSphereModel* model = inputController_.getModel();
     if (model) {
         oreSystem_->initialize(*model);
         qDebug() << "OreSystem initialized with" << oreSystem_->getDepositCount() << "deposits";
@@ -213,13 +201,13 @@ void HexSphereWidget::initOreSystem() {
     oreVisualizationEnabled_ = true;
 
     // ��������� ���������� � �������� ��������
-    inputController_->setOreAnimationTime(oreAnimationTime_);
-    inputController_->setOreVisualizationEnabled(oreVisualizationEnabled_);
+    inputController_.setOreAnimationTime(oreAnimationTime_);
+    inputController_.setOreVisualizationEnabled(oreVisualizationEnabled_);
 }
 
 void HexSphereWidget::updateOreAnimation(float deltaTime) {
     oreAnimationTime_ += deltaTime * 0.1f; // �������� ��������
 
     // ��������� ����� �������� � InputController
-    inputController_->setOreAnimationTime(oreAnimationTime_);
+    inputController_.setOreAnimationTime(oreAnimationTime_);
 }

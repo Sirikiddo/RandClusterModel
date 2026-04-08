@@ -70,8 +70,8 @@ public:
 private:
     static QString canonicalPath(const QString& path);
     void parsePartsFromMesh();
-    static std::map<QString, std::weak_ptr<ModelHandler>>& cache();
-    static std::mutex& cacheMutex();
+    static std::map<QString, std::weak_ptr<ModelHandler>> cache_;
+    static std::mutex cacheMutex_;
 
     QString path_;
     simple3d::Mesh mesh_;

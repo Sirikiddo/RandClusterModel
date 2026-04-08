@@ -3,7 +3,6 @@
 
 #include <QOpenGLWidget>
 #include <QTimer>
-#include <optional>
 #include <memory>
 
 #include "controllers/InputController.h"
@@ -22,7 +21,7 @@ class HexSphereWidget : public QOpenGLWidget
 {
     Q_OBJECT
 public:
-    explicit HexSphereWidget(QWidget* parent = nullptr);
+    HexSphereWidget(CameraController& cameraController, InputController& inputController, QWidget* parent = nullptr);
     ~HexSphereWidget() override;
 
 public slots:
@@ -57,8 +56,8 @@ private:
     void initOreSystem();
     void updateOreAnimation(float deltaTime);
 
-    std::unique_ptr<CameraController> cameraController_;
-    std::unique_ptr<InputController> inputController_;
+    CameraController& cameraController_;
+    InputController& inputController_;
 
     std::unique_ptr<OreSystem> oreSystem_;
     float oreAnimationTime_ = 0.0f;

@@ -1,4 +1,6 @@
 #include "ui/MainWindow.h"
+#include "controllers/CameraController.h"
+#include "controllers/InputController.h"
 #include "ui/HexSphereWidget.h"
 #include "ui/PlanetSettingsPanel.h"
 #include "generation/TerrainGenerator.h"
@@ -11,7 +13,10 @@
 #include <QToolBar>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
-    glw_ = new HexSphereWidget(this);
+    cameraController_ = std::make_unique<CameraController>();
+    inputController_ = std::make_unique<InputController>(*cameraController_);
+
+    glw_ = new HexSphereWidget(*cameraController_, *inputController_, this);
     setCentralWidget(glw_);
 
     auto* tb = addToolBar("Controls");
@@ -62,8 +67,4 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         glw_, &HexSphereWidget::regenerateTerrain);
 }
 
-MainWindow::~MainWindow() {
-    glw_ = nullptr;
-    levelSpin_ = nullptr;
-    infoLbl_ = nullptr;
-}
+MainWindow::~MainWindow() = default;
