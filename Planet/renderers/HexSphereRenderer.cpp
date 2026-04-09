@@ -5,6 +5,8 @@
 
 #include <QOpenGLVertexArrayObject> 
 
+#include "contributor/ContributorAsset.h"
+#include "core/AppViewConfig.h"
 #include "resources/HexSphereWidget_shaders.h"
 #include "model/SurfacePlacement.h"
 #include "renderers/EntityRenderer.h"
@@ -228,6 +230,10 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         qDebug() << "Fir tree model loaded successfully!";
     }
 
+    if (defaultAppViewConfig().isContributorMode()) {
+        loadContributorModel();
+    }
+
     // В HexSphereRenderer::initialize(), после всех остальных инициализаций:
     owner_->makeCurrent();  // Убеждаемся, что контекст текущий
 
@@ -263,6 +269,55 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     overlayRenderer_ = std::make_unique<OverlayRenderer>(gl_, progWire_, progSel_, uMVP_Wire_, uMVP_Sel_, vaoWire_, vaoSel_, vaoPath_, lineVertexCount_, selLineVertexCount_, pathVertexCount_);
 
     glReady_ = true;
+}
+
+void HexSphereRenderer::loadContributorModel() {
+    ContributorAsset asset = buildContributorAsset();
+    contributorModelPosition_ = asset.render.position;
+    contributorModelRotationDegrees_ = asset.render.rotationDegrees;
+    contributorModelColor_ = asset.render.fallbackColor;
+    contributorWoodColor_ = asset.woodColor;
+    contributorLeavesColor_ = asset.leavesColor;
+    contributorModelScale_ = asset.render.scale;
+
+    if (asset.source == ContributorAssetSource::ModelFile) {
+        contributorModel_ = ModelHandler::loadShared(asset.modelPath);
+    }
+    else {
+        if (!asset.generatedWoodMesh.positions.empty() && !asset.generatedLeavesMesh.positions.empty()) {
+            contributorWoodModel_ = std::make_shared<ModelHandler>();
+            if (!contributorWoodModel_->loadFromMesh("contributor/generated_wood", std::move(asset.generatedWoodMesh))) {
+                contributorWoodModel_.reset();
+            }
+
+            contributorLeavesModel_ = std::make_shared<ModelHandler>();
+            if (!contributorLeavesModel_->loadFromMesh("contributor/generated_leaves", std::move(asset.generatedLeavesMesh))) {
+                contributorLeavesModel_.reset();
+            }
+        }
+        else {
+            contributorModel_ = std::make_shared<ModelHandler>();
+            if (!contributorModel_->loadFromMesh("contributor/generated", std::move(asset.generatedMesh))) {
+                contributorModel_.reset();
+            }
+        }
+    }
+
+    if (contributorModel_) {
+        contributorModel_->uploadToGPU();
+        qDebug() << "Contributor model loaded:" << contributorModel_->loadedPath();
+    }
+    if (contributorWoodModel_) {
+        contributorWoodModel_->uploadToGPU();
+        qDebug() << "Contributor wood model loaded:" << contributorWoodModel_->loadedPath();
+    }
+    if (contributorLeavesModel_) {
+        contributorLeavesModel_->uploadToGPU();
+        qDebug() << "Contributor leaves model loaded:" << contributorLeavesModel_->loadedPath();
+    }
+    if (!contributorModel_ && !contributorWoodModel_ && !contributorLeavesModel_) {
+        qDebug() << "Contributor model failed to load";
+    }
 }
 
 void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4& proj) {
@@ -521,6 +576,84 @@ void HexSphereRenderer::uploadWater(const WaterGeometryData& data) {
     withContext([&]() { uploadWaterInternal(data); });
 }
 
+void HexSphereRenderer::renderContributorModel(const RenderContext& ctx) {
+    const bool hasSplitModel =
+        (contributorWoodModel_ && contributorWoodModel_->isInitialized()) ||
+        (contributorLeavesModel_ && contributorLeavesModel_->isInitialized());
+    const bool hasSingleModel = contributorModel_ && contributorModel_->isInitialized();
+
+    if (!hasSplitModel && !hasSingleModel) {
+        return;
+    }
+
+    const GLboolean cullWasEnabled = gl_->glIsEnabled(GL_CULL_FACE);
+    gl_->glDisable(GL_CULL_FACE);
+
+    QMatrix4x4 model;
+    model.translate(contributorModelPosition_);
+    model.rotate(contributorModelRotationDegrees_.x(), 1.0f, 0.0f, 0.0f);
+    model.rotate(contributorModelRotationDegrees_.y(), 0.0f, 1.0f, 0.0f);
+    model.rotate(contributorModelRotationDegrees_.z(), 0.0f, 0.0f, 1.0f);
+    model.scale(contributorModelScale_);
+
+    gl_->glUseProgram(progModel_);
+    const GLint uIsCar = gl_->glGetUniformLocation(progModel_, "uIsCar");
+    if (uIsCar >= 0) {
+        gl_->glUniform1i(uIsCar, 0);
+    }
+    const GLint uUseFoliageColor = gl_->glGetUniformLocation(progModel_, "uUseFoliageColor");
+    if (uUseFoliageColor >= 0) {
+        gl_->glUniform1i(uUseFoliageColor, 0);
+    }
+
+    const QMatrix4x4 mvp = ctx.camera.projection * ctx.camera.view * model;
+    if (hasSplitModel) {
+        if (contributorWoodModel_) {
+            if (uUseFoliageColor >= 0) {
+                gl_->glUniform1i(uUseFoliageColor, 0);
+            }
+            const GLint uTrunkColor = gl_->glGetUniformLocation(progModel_, "uTrunkColor");
+            if (uTrunkColor >= 0) {
+                gl_->glUniform3f(uTrunkColor, contributorWoodColor_.x(), contributorWoodColor_.y(), contributorWoodColor_.z());
+            }
+            contributorWoodModel_->draw(progModel_, mvp, model, ctx.camera.view, contributorWoodColor_, /*forceTextureOff=*/true);
+        }
+        if (contributorLeavesModel_) {
+            if (uUseFoliageColor >= 0) {
+                gl_->glUniform1i(uUseFoliageColor, 1);
+            }
+            const GLint uFoliageColor = gl_->glGetUniformLocation(progModel_, "uFoliageColor");
+            if (uFoliageColor >= 0) {
+                gl_->glUniform3f(uFoliageColor, contributorLeavesColor_.x(), contributorLeavesColor_.y(), contributorLeavesColor_.z());
+            }
+            contributorLeavesModel_->draw(progModel_, mvp, model, ctx.camera.view, contributorLeavesColor_, /*forceTextureOff=*/true);
+        }
+    }
+    else {
+        if (uUseFoliageColor >= 0) {
+            gl_->glUniform1i(uUseFoliageColor, 0);
+        }
+        const GLint uTrunkColor = gl_->glGetUniformLocation(progModel_, "uTrunkColor");
+        if (uTrunkColor >= 0) {
+            gl_->glUniform3f(uTrunkColor, contributorModelColor_.x(), contributorModelColor_.y(), contributorModelColor_.z());
+        }
+        contributorModel_->draw(
+            progModel_,
+            mvp,
+            model,
+            ctx.camera.view,
+            contributorModelColor_,
+            /*forceTextureOff=*/false);
+    }
+
+    if (cullWasEnabled) {
+        gl_->glEnable(GL_CULL_FACE);
+    }
+    else {
+        gl_->glDisable(GL_CULL_FACE);
+    }
+}
+
 void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const UploadOptions& options) {
     qDebug() << "uploadScene called, setting lastScene_";
     lastScene_ = const_cast<HexSphereSceneController*>(&scene);
@@ -592,7 +725,12 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     //gl_->glBindVertexArray(0);
     //gl_->glUseProgram(0);
 
-    entityRenderer_->renderTrees(ctx);
+    if (graph.scene.isContributorMode()) {
+        renderContributorModel(ctx);
+    }
+    else {
+        entityRenderer_->renderTrees(ctx);
+    }
 
     if (stats_) stats_->stopGPUTimer();
 }

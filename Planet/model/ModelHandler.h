@@ -41,6 +41,7 @@ public:
     ~ModelHandler();
 
     bool loadFromFile(const QString& path);
+    bool loadFromMesh(const QString& debugName, simple3d::Mesh mesh);
     static std::shared_ptr<ModelHandler> loadShared(const QString& path);
     static void clearCache();
 
@@ -55,6 +56,13 @@ public:
         const QMatrix4x4& mvp,
         const QMatrix4x4& modelMatrix,
         const QMatrix4x4& viewMatrix);
+
+    void draw(GLuint shader,
+        const QMatrix4x4& mvp,
+        const QMatrix4x4& modelMatrix,
+        const QMatrix4x4& viewMatrix,
+        const QVector3D& fallbackColor,
+        bool forceTextureOff = false);
 
     bool hasPart(const QString& partName) const;
 

@@ -197,6 +197,24 @@ bool ModelHandler::loadFromFile(const QString& path) {
     return result;
 }
 
+bool ModelHandler::loadFromMesh(const QString& debugName, simple3d::Mesh mesh) {
+    if (mesh.positions.empty() || mesh.indices.empty()) {
+        qDebug() << "Cannot load generated model:" << debugName << "- empty positions or indices";
+        return false;
+    }
+
+    clear();
+    path_ = debugName;
+    mesh_ = std::move(mesh);
+    hasUVs_ = !mesh_.texcoords.empty();
+    qDebug() << "Loaded generated model:" << path_
+        << "vertices:" << mesh_.vertexCount()
+        << "triangles:" << mesh_.triangleCount()
+        << "normals:" << (mesh_.normals.empty() ? 0 : mesh_.normals.size() / 3)
+        << "uv:" << (mesh_.texcoords.empty() ? 0 : mesh_.texcoords.size() / 2);
+    return true;
+}
+
 void ModelHandler::uploadToGPU() {
     if (mesh_.positions.empty()) {
         return;
@@ -361,6 +379,16 @@ void ModelHandler::draw(GLuint shader,
     const QMatrix4x4& modelMatrix,
     const QMatrix4x4& viewMatrix)
 {
+    draw(shader, mvp, modelMatrix, viewMatrix, QVector3D(0.15f, 0.5f, 0.1f));
+}
+
+void ModelHandler::draw(GLuint shader,
+    const QMatrix4x4& mvp,
+    const QMatrix4x4& modelMatrix,
+    const QMatrix4x4& viewMatrix,
+    const QVector3D& fallbackColor,
+    bool forceTextureOff)
+{
     if (!vao_ || indexCount_ == 0 || !glInitialized_) return;
 
     glUseProgram(shader);
@@ -382,8 +410,8 @@ void ModelHandler::draw(GLuint shader,
         glUniform3f(uViewPos, eye.x(), eye.y(), eye.z());
     }
 
-    if (uColor >= 0) glUniform3f(uColor, 0.15f, 0.5f, 0.1f);
-    if (uUseTexture >= 0) glUniform1i(uUseTexture, hasUVs_ ? 1 : 0);
+    if (uColor >= 0) glUniform3f(uColor, fallbackColor.x(), fallbackColor.y(), fallbackColor.z());
+    if (uUseTexture >= 0) glUniform1i(uUseTexture, (!forceTextureOff && hasUVs_) ? 1 : 0);
 
     glBindVertexArray(vao_);
     glDrawElements(GL_TRIANGLES, indexCount_, GL_UNSIGNED_INT, nullptr);

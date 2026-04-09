@@ -109,6 +109,8 @@ private:
     void uploadSelectionOutlineInternal(const std::vector<float>& vertices);
     void uploadPathInternal(const std::vector<QVector3D>& points);
     void uploadWaterInternal(const WaterGeometryData& data);
+    void loadContributorModel();
+    void renderContributorModel(const RenderContext& ctx);
 
     // ����� �����
     void recreateTerrainVAO();
@@ -149,6 +151,16 @@ private:
 
     std::shared_ptr<ModelHandler> treeModel_;
     std::shared_ptr<ModelHandler> firTreeModel_;
+    std::shared_ptr<ModelHandler> contributorModel_;
+    std::shared_ptr<ModelHandler> contributorWoodModel_;
+    std::shared_ptr<ModelHandler> contributorLeavesModel_;
+
+    QVector3D contributorModelPosition_{ 0.0f, 0.0f, 0.0f };
+    QVector3D contributorModelRotationDegrees_{ 0.0f, 0.0f, 0.0f };
+    QVector3D contributorModelColor_{ 0.24f, 0.62f, 0.22f };
+    QVector3D contributorWoodColor_{ 0.46f, 0.27f, 0.12f };
+    QVector3D contributorLeavesColor_{ 0.18f, 0.58f, 0.20f };
+    float contributorModelScale_ = 0.5f;
 
     std::unique_ptr<TerrainRenderer> terrainRenderer_;
     std::unique_ptr<WaterRenderer> waterRenderer_;

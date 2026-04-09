@@ -8,6 +8,9 @@
     <Filter Include="core">
       <UniqueIdentifier>{1C0B8D1F-6F7D-4D65-B7E6-7F1D0D1CFA0A}</UniqueIdentifier>
     </Filter>
+    <Filter Include="contributor">
+      <UniqueIdentifier>{9CD049C3-2670-4A8B-9274-10A0BEBA3028}</UniqueIdentifier>
+    </Filter>
     <Filter Include="controllers">
       <UniqueIdentifier>{4C5AD050-5C91-44F9-9D7B-6B9D2D4D310E}</UniqueIdentifier>
     </Filter>
@@ -80,6 +83,9 @@
   <ItemGroup>
     <ClCompile Include="core\main.cpp">
       <Filter>core</Filter>
+    </ClCompile>
+    <ClCompile Include="contributor\ContributorAsset.cpp">
+      <Filter>contributor</Filter>
     </ClCompile>
     <ClCompile Include="dag\DagTerrainBackend.cpp">
       <Filter>dag</Filter>
@@ -223,6 +229,9 @@
   <ItemGroup>
     <ClInclude Include="core\AppViewConfig.h">
       <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="contributor\ContributorAsset.h">
+      <Filter>contributor</Filter>
     </ClInclude>
     <ClInclude Include="controllers\CameraController.h">
       <Filter>controllers</Filter>

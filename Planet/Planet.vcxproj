@@ -136,6 +136,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core\AppViewConfig.h" />
+    <ClInclude Include="contributor\ContributorAsset.h" />
     <ClInclude Include="controllers\CameraController.h" />
     <ClInclude Include="third_party\ProcessDAG\include\proc\ProcessDag.h" />
     <ClInclude Include="third_party\ProcessDAG\include\proc\Schema.h" />
@@ -211,6 +212,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\CameraController.cpp" />
+    <ClCompile Include="contributor\ContributorAsset.cpp" />
     <ClCompile Include="third_party\ProcessDAG\proc\Proc.ixx" />
     <ClCompile Include="third_party\ProcessDAG\proc\Proc.Core.ixx" />
     <ClCompile Include="third_party\ProcessDAG\proc\Proc.Schema.ixx" />
