@@ -135,6 +135,7 @@
     <QtMoc Include="ui\PlanetSettingsPanel.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="core\AppViewConfig.h" />
     <ClInclude Include="controllers\CameraController.h" />
     <ClInclude Include="third_party\ProcessDAG\include\proc\ProcessDag.h" />
     <ClInclude Include="third_party\ProcessDAG\include\proc\Schema.h" />

@@ -7,6 +7,7 @@
 #include <optional>
 #include <vector>
 
+#include "core/AppViewConfig.h"
 #include "controllers/HexSphereSceneController.h"
 #include "dag/TerrainBackendContract.h"
 #include "renderers/HexSphereRenderer.h"
@@ -29,7 +30,7 @@ public:
         std::optional<QString> hudMessage{};
     };
 
-    explicit InputController(CameraController& camera);
+    explicit InputController(CameraController& camera, SceneViewMode viewMode = SceneViewMode::Planet);
     ~InputController();
 
     void attachEngine(EngineFacade* engine) { engine_ = engine; }
@@ -103,13 +104,16 @@ private:
     void deselectEntity();
     void moveSelectedEntityToCell(int cellId, Response& response);
 
+    bool isContributorMode() const { return viewMode_ == SceneViewMode::Contributor; }
+    Response contributorModeResponse() const;
+
     CameraController& camera_;
+    SceneViewMode viewMode_ = SceneViewMode::Planet;
     EngineFacade* engine_ = nullptr;
     QOpenGLWidget* owner_ = nullptr;
     std::unique_ptr<HexSphereRenderer> renderer_;
 
-
-    HexSphereSceneController scene_{};
+    HexSphereSceneController scene_;
     ecs::ComponentStorage ecs_{};
     PerformanceStats stats_{};
 

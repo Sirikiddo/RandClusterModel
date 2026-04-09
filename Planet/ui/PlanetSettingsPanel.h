@@ -14,6 +14,7 @@ class PlanetSettingsPanel : public QWidget {
     Q_OBJECT
 public:
     explicit PlanetSettingsPanel(QWidget* parent = nullptr);
+    void setContributorMode(bool enabled);
 
 signals:
     void generatorChanged(int index);                // 0: NoOp, 1: Sine, 2: Perlin, 3: Climate

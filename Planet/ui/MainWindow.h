@@ -2,6 +2,7 @@
 #include <QMainWindow>
 #include <memory>
 
+struct AppViewConfig;
 class QSpinBox; class QAction; class QLabel;
 class HexSphereWidget;
 class CameraController;
@@ -10,7 +11,7 @@ class InputController;
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
-    explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(const AppViewConfig& viewConfig, QWidget* parent = nullptr);
     ~MainWindow();
 private:
     std::unique_ptr<CameraController> cameraController_;

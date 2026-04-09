@@ -221,6 +221,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="core\AppViewConfig.h">
+      <Filter>core</Filter>
+    </ClInclude>
     <ClInclude Include="controllers\CameraController.h">
       <Filter>controllers</Filter>
     </ClInclude>

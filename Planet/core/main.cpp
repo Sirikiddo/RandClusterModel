@@ -2,6 +2,7 @@
 #include <QSurfaceFormat>
 #include <windows.h>
 
+#include "core/AppViewConfig.h"
 #include "ui/MainWindow.h"
 
 extern "C" {
@@ -20,7 +21,8 @@ int main(int argc, char** argv) {
 
     QApplication app(argc, argv);
 
-    MainWindow w;
+    const AppViewConfig viewConfig = defaultAppViewConfig();
+    MainWindow w(viewConfig);
 
     w.resize(1280, 800);
     w.show();

@@ -68,6 +68,11 @@ class HexSphereModel;
 
 // Structure for tree placement with random position within cell
 struct TreePlacement {
+    enum class PlacementMode : uint8_t {
+        Surface = 0,
+        World = 1
+    };
+
     int cellId = -1;
     int triangleIdx = 0;
     float baryU = 0.33f;
@@ -89,6 +94,12 @@ struct TreePlacement {
     QVector3D foliageColor = QVector3D(0.2f, 0.55f, 0.15f);
     QVector3D trunkColor = QVector3D(0.5f, 0.35f, 0.2f);
     bool isYellowCellTree = false;
+
+    PlacementMode placementMode = PlacementMode::Surface;
+    QVector3D worldPosition = QVector3D(0.0f, 0.0f, 0.0f);
+    QVector3D worldUp = QVector3D(0.0f, 1.0f, 0.0f);
+    float worldYaw = 0.0f;
+    float worldScale = 1.0f;
 
     QVector3D getPosition(const HexSphereModel& model) const;
 };
@@ -176,6 +187,10 @@ private:
 
 // Определение TreePlacement::getPosition
 inline QVector3D TreePlacement::getPosition(const HexSphereModel& model) const {
+    if (placementMode == PlacementMode::World) {
+        return worldPosition;
+    }
+
     if (cellId < 0 || cellId >= static_cast<int>(model.cells().size())) {
         return QVector3D(0, 0, 0);
     }

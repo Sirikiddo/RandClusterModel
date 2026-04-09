@@ -1,4 +1,5 @@
 #include "ui/MainWindow.h"
+#include "core/AppViewConfig.h"
 #include "controllers/CameraController.h"
 #include "controllers/InputController.h"
 #include "ui/HexSphereWidget.h"
@@ -12,11 +13,11 @@
 #include <QStatusBar>
 #include <QToolBar>
 
-MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
+MainWindow::MainWindow(const AppViewConfig& viewConfig, QWidget* parent) : QMainWindow(parent) {
     cameraController_ = std::make_unique<CameraController>();
-    inputController_ = std::make_unique<InputController>(*cameraController_);
+    inputController_ = std::make_unique<InputController>(*cameraController_, viewConfig.sceneViewMode);
 
-    glw_ = new HexSphereWidget(*cameraController_, *inputController_, this);
+    glw_ = new HexSphereWidget(viewConfig, *cameraController_, *inputController_, this);
     setCentralWidget(glw_);
 
     auto* tb = addToolBar("Controls");
@@ -44,6 +45,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     auto* panel = new PlanetSettingsPanel(dock);
     dock->setWidget(panel);
     addDockWidget(Qt::RightDockWidgetArea, dock);
+
+    if (viewConfig.isContributorMode()) {
+        levelSpin_->setEnabled(false);
+        clearSelAct->setEnabled(false);
+        panel->setContributorMode(true);
+    }
 
     auto* viewMenu = menuBar()->addMenu("&View");
     auto* showDockAct = dock->toggleViewAction();

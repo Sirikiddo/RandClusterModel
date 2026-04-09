@@ -366,6 +366,10 @@ void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
 
     // Обновляем позицию камеры в сцене
     lastScene_->setCameraPosition(cameraPos);
+    if (!lastScene_->supportsTerrainVisibility()) {
+        terrainIndexCount_ = 0;
+        return;
+    }
 
     // УДАЛИТЬ эту строку:
     // lastScene_->updatePrediction(cameraPos);

@@ -96,6 +96,17 @@ PlanetSettingsPanel::PlanetSettingsPanel(QWidget* parent) : QWidget(parent) {
         });
 }
 
+void PlanetSettingsPanel::setContributorMode(bool enabled) {
+    genBox_->setEnabled(!enabled);
+    seedBox_->setEnabled(!enabled);
+    seaBox_->setEnabled(!enabled);
+    scaleBox_->setEnabled(!enabled);
+    smoothChk_->setEnabled(!enabled);
+    insetBox_->setEnabled(!enabled);
+    outlineBox_->setEnabled(!enabled);
+    regenBtn_->setEnabled(!enabled);
+}
+
 void PlanetSettingsPanel::emitParams() {
     TerrainParams p;
     p.seed = uint32_t(seedBox_->value());

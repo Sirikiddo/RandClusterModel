@@ -10,6 +10,7 @@
 #include <optional>
 #include <vector>
 
+#include "core/AppViewConfig.h"
 #include "dag/TerrainBackendTypes.h"
 #include "controllers/PathBuilder.h"
 #include "generation/MeshGenerators/TerrainMeshGenerator.h"
@@ -47,7 +48,7 @@ struct VisibilityPrediction {
 
 class HexSphereSceneController {
 public:
-    HexSphereSceneController();
+    explicit HexSphereSceneController(SceneViewMode viewMode = SceneViewMode::Planet);
 
     void setGeneratorByIndex(int idx);
     void setGenParams(const TerrainParams& params);
@@ -92,6 +93,9 @@ public:
     bool isCellOccupiedByTree(int cellId) const;
     const std::vector<TreePlacement>& getTreePlacements() const { return treePlacements_; }
     void generateTreePlacements();
+    SceneViewMode sceneViewMode() const { return viewMode_; }
+    bool isContributorMode() const { return viewMode_ == SceneViewMode::Contributor; }
+    bool supportsTerrainVisibility() const { return !isContributorMode() && !terrainCPU_.idx.empty(); }
 
     void setCameraPosition(const QVector3D& pos) { cameraPos_ = pos; }
     QVector3D getCameraPosition() const { return cameraPos_; }
@@ -184,8 +188,11 @@ private:
     float autoHeightStep() const;
     void rebuildTopology();
     void updateTerrainMesh();
+    void rebuildContributorScene();
 
     void updateTreeOccupiedCells();
+
+    SceneViewMode viewMode_ = SceneViewMode::Planet;
 
     IcosphereBuilder icoBuilder_;
     IcoMesh ico_;

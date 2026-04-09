@@ -5,6 +5,7 @@
 #include <QTimer>
 #include <memory>
 
+#include "core/AppViewConfig.h"
 #include "controllers/InputController.h"
 #include "model/OreSystem.h"
 
@@ -21,7 +22,10 @@ class HexSphereWidget : public QOpenGLWidget
 {
     Q_OBJECT
 public:
-    HexSphereWidget(CameraController& cameraController, InputController& inputController, QWidget* parent = nullptr);
+    HexSphereWidget(const AppViewConfig& viewConfig,
+        CameraController& cameraController,
+        InputController& inputController,
+        QWidget* parent = nullptr);
     ~HexSphereWidget() override;
 
 public slots:
@@ -56,6 +60,7 @@ private:
     void initOreSystem();
     void updateOreAnimation(float deltaTime);
 
+    AppViewConfig viewConfig_{};
     CameraController& cameraController_;
     InputController& inputController_;
 

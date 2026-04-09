@@ -97,8 +97,10 @@ namespace {
 
 } // namespace
 
-InputController::InputController(CameraController& camera)
-    : camera_(camera) {
+InputController::InputController(CameraController& camera, SceneViewMode viewMode)
+    : camera_(camera)
+    , viewMode_(viewMode)
+    , scene_(viewMode) {
 }
 
 InputController::~InputController() {
@@ -127,13 +129,15 @@ void InputController::initialize(QOpenGLWidget* owner) {
     renderer_ = std::make_unique<HexSphereRenderer>(owner_);
     renderer_->initialize(owner_, gl, &stats_);
 
-    auto& pyramid = ecs_.createEntity("Explorer");
-    pyramid.currentCell = 0;
-    ecs_.emplace<ecs::Mesh>(pyramid.id).meshId = "pyramid";
-    ecs::Transform& transform = ecs_.emplace<ecs::Transform>(pyramid.id);
-    const QVector3D surfacePosition = computeSurfacePoint(scene_, 0, scene_.heightStep(), kEntitySurfaceOffset);
-    transform.position = ecs::localToWorldPoint(transform, ecs::CoordinateFrame{}, surfacePosition);
-    ecs_.emplace<ecs::Collider>(pyramid.id).radius = 0.08f;
+    if (!isContributorMode()) {
+        auto& pyramid = ecs_.createEntity("Explorer");
+        pyramid.currentCell = 0;
+        ecs_.emplace<ecs::Mesh>(pyramid.id).meshId = "pyramid";
+        ecs::Transform& transform = ecs_.emplace<ecs::Transform>(pyramid.id);
+        const QVector3D surfacePosition = computeSurfacePoint(scene_, 0, scene_.heightStep(), kEntitySurfaceOffset);
+        transform.position = ecs::localToWorldPoint(transform, ecs::CoordinateFrame{}, surfacePosition);
+        ecs_.emplace<ecs::Collider>(pyramid.id).radius = 0.08f;
+    }
 
     Response initResponse;
     rebuildModel(initResponse);
@@ -161,6 +165,10 @@ InputController::Response InputController::mousePress(QMouseEvent* e) {
 
     if (e->button() == Qt::RightButton) {
         rotating_ = true;
+        return response;
+    }
+
+    if (isContributorMode()) {
         return response;
     }
 
@@ -213,6 +221,10 @@ InputController::Response InputController::wheel(QWheelEvent* e) {
 
 InputController::Response InputController::keyPress(QKeyEvent* e) {
     Response response;
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
+
     switch (e->key()) {
     case Qt::Key_C:
         clearPath(response);
@@ -330,6 +342,9 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
 
 InputController::Response InputController::setSubdivisionLevel(int L) {
     Response response;
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
     if (scene_.subdivisionLevel() != L) {
         stats_.setSubdivisionLevel(L);
         updateBufferUsageStrategy(L);
@@ -359,6 +374,9 @@ InputController::Response InputController::resetView() {
 
 InputController::Response InputController::clearSelection() {
     Response response;
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
     scene_.clearSelection();
     uploadSelection();
     response.requestUpdate = true;
@@ -367,6 +385,9 @@ InputController::Response InputController::clearSelection() {
 
 InputController::Response InputController::setTerrainParams(const TerrainParams& p) {
     Response response;
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
     if (engine_) {
         engine_->setTerrainParams(p);
     }
@@ -378,6 +399,9 @@ InputController::Response InputController::setTerrainParams(const TerrainParams&
 
 InputController::Response InputController::setGeneratorByIndex(int idx) {
     Response response;
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
     if (engine_) {
         engine_->setGeneratorByIndex(idx);
     }
@@ -389,6 +413,9 @@ InputController::Response InputController::setGeneratorByIndex(int idx) {
 
 InputController::Response InputController::regenerateTerrain() {
     Response response;
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
     if (engine_) {
         const auto result = engine_->regenerateTerrain();
         if (!result) {
@@ -406,6 +433,9 @@ InputController::Response InputController::regenerateTerrain() {
 
 InputController::Response InputController::setSmoothOneStep(bool on) {
     Response response;
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
     scene_.setSmoothOneStep(on);
     rebuildModel(response);
     return response;
@@ -413,6 +443,9 @@ InputController::Response InputController::setSmoothOneStep(bool on) {
 
 InputController::Response InputController::setStripInset(float v) {
     Response response;
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
     scene_.setStripInset(v);
     rebuildModel(response);
     return response;
@@ -420,6 +453,9 @@ InputController::Response InputController::setStripInset(float v) {
 
 InputController::Response InputController::setOutlineBias(float v) {
     Response response;
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
     scene_.setOutlineBias(v);
     rebuildModel(response);
     return response;
@@ -463,6 +499,9 @@ void InputController::stageSubdivisionLevel(int level) {
 }
 
 void InputController::rebuildTerrainFromInputs() {
+    if (isContributorMode()) {
+        return;
+    }
     scene_.rebuildTerrainFromInputs();
 }
 
@@ -471,6 +510,9 @@ TerrainSnapshot InputController::captureTerrainSnapshot() const {
 }
 
 void InputController::projectTerrainSnapshot(const TerrainSnapshot& snapshot) {
+    if (isContributorMode()) {
+        return;
+    }
     scene_.applyTerrainSnapshot(snapshot);
 }
 
@@ -689,7 +731,17 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     response.requestUpdate = true;
 }
 
+InputController::Response InputController::contributorModeResponse() const {
+    Response response;
+    response.requestUpdate = true;
+    response.hudMessage = QString("Contributor mode: camera only");
+    return response;
+}
+
 InputController::Response InputController::toggleOreVisualization() {
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
     oreVisualizationEnabled_ = !oreVisualizationEnabled_;
     oreAnimationTime_ = 0.0f;
 
@@ -724,6 +776,9 @@ HexSphereModel* InputController::getModel() {
 }
 
 InputController::Response InputController::setOreAnimationSpeed(float speed) {
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
     oreAnimationSpeed_ = std::clamp(speed, 0.0f, 2.0f);
 
     Response response;
@@ -733,6 +788,9 @@ InputController::Response InputController::setOreAnimationSpeed(float speed) {
 }
 
 InputController::Response InputController::regenerateOreDeposits() {
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
     Response response;
     response.requestUpdate = true;
     response.hudMessage = QString("Ore deposits regenerated");

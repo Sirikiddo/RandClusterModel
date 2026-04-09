@@ -11,8 +11,13 @@
 #include <QVector3D>
 #include <QElapsedTimer>
 
-HexSphereSceneController::HexSphereSceneController()
-    : generator_(createTerrainGeneratorByIndex(generatorIndex_)) {
+namespace {
+    constexpr float kContributorTreeScale = 0.5f;
+}
+
+HexSphereSceneController::HexSphereSceneController(SceneViewMode viewMode)
+    : viewMode_(viewMode)
+    , generator_(createTerrainGeneratorByIndex(generatorIndex_)) {
     genParams_ = TerrainParams{ /*seed=*/12345u, /*seaLevel=*/3, /*scale=*/3.0f };
     rebuildModel();
 }
@@ -66,12 +71,23 @@ void HexSphereSceneController::rebuildTopology() {
 }
 
 void HexSphereSceneController::rebuildModel() {
+    if (isContributorMode()) {
+        rebuildContributorScene();
+        topologyDirty_ = false;
+        return;
+    }
+
     rebuildTopology();
     topologyDirty_ = false;
     regenerateTerrain();
 }
 
 void HexSphereSceneController::regenerateTerrain() {
+    if (isContributorMode()) {
+        rebuildContributorScene();
+        return;
+    }
+
     if (generator_) {
         generator_->generate(model_, genParams_);
     }
@@ -95,10 +111,16 @@ void HexSphereSceneController::clearForShutdown() {
 }
 
 void HexSphereSceneController::clearSelection() {
+    if (isContributorMode()) {
+        return;
+    }
     selectedCells_.clear();
 }
 
 void HexSphereSceneController::toggleCellSelection(int cellId) {
+    if (isContributorMode()) {
+        return;
+    }
     if (selectedCells_.contains(cellId)) {
         selectedCells_.remove(cellId);
     }
@@ -128,17 +150,26 @@ std::optional<std::vector<QVector3D>> HexSphereSceneController::buildPathPolylin
 }
 
 std::vector<float> HexSphereSceneController::buildWireVertices() const {
+    if (isContributorMode()) {
+        return {};
+    }
     // WireMeshGenerator ожидае�? const HexSphereModel&
     return WireMeshGenerator::buildWireVertices(model_);
 }
 
 std::vector<float> HexSphereSceneController::buildSelectionOutlineVertices() const {
+    if (isContributorMode()) {
+        return {};
+    }
     // SelectionOutlineGenerator ожидае�?: const HexSphereModel&, const QSet<int>&, float, float, bool
     return SelectionOutlineGenerator::buildSelectionOutlineVertices(
         model_, selectedCells_, heightStep_, outlineBias_, smoothOneStep_);
 }
 
 WaterGeometryData HexSphereSceneController::buildWaterGeometry() const {
+    if (isContributorMode()) {
+        return {};
+    }
     return WaterMeshGenerator::buildWaterGeometry(model_);
 }
 
@@ -167,6 +198,10 @@ TerrainSnapshot HexSphereSceneController::captureTerrainSnapshot() const {
 }
 
 void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snapshot) {
+    if (isContributorMode()) {
+        return;
+    }
+
     generatorIndex_ = normalizeTerrainGeneratorIndex(snapshot.generatorIndex);
     generator_ = createTerrainGeneratorByIndex(generatorIndex_);
     genParams_ = snapshot.params;
@@ -203,6 +238,13 @@ float HexSphereSceneController::autoHeightStep() const {
 }
 
 void HexSphereSceneController::updateTerrainMesh() {
+    if (isContributorMode()) {
+        terrainCPU_ = TerrainMesh{};
+        cacheValid_ = false;
+        triangleCache_.clear();
+        return;
+    }
+
     heightStep_ = autoHeightStep();
     TerrainMeshOptions options;
     options.heightStep = heightStep_;
@@ -240,6 +282,22 @@ void HexSphereSceneController::updateTreeOccupiedCells() {
 
 void HexSphereSceneController::generateTreePlacements() {
     treePlacements_.clear();
+
+    if (isContributorMode()) {
+        TreePlacement placement;
+        placement.cellId = 0;
+        placement.treeType = TreeType::Oak;
+        placement.placementMode = TreePlacement::PlacementMode::World;
+        placement.worldPosition = QVector3D(0.0f, 1.0f, 0.0f);
+        placement.worldUp = QVector3D(0.0f, 1.0f, 0.0f);
+        placement.worldYaw = 0.0f;
+        placement.worldScale = kContributorTreeScale;
+        placement.scale = 1.0f;
+        treePlacements_.push_back(placement);
+        updateTreeOccupiedCells();
+        return;
+    }
+
     const auto& cells = model_.cells();
 
     const uint32_t deterministicSeed =
@@ -414,9 +472,31 @@ void HexSphereSceneController::generateTreePlacements() {
     qDebug() << "  - Green trees:" << greenCount;
     qDebug() << "  - Fir trees:" << firCount;
     qDebug() << "  - Autumn trees:" << autumnCount;
+    updateTreeOccupiedCells();
 }
 
 void HexSphereSceneController::regenerateTreePlacements() {
+    generateTreePlacements();
+}
+
+void HexSphereSceneController::rebuildContributorScene() {
+    selectedCells_.clear();
+    heightStep_ = autoHeightStep();
+
+    Cell contributorCell;
+    contributorCell.id = 0;
+    contributorCell.height = -35;
+    contributorCell.biome = Biome::Grass;
+    contributorCell.centroid = QVector3D(0.0f, 1.0f, 0.0f);
+    contributorCell.temperature = 0.5f;
+    contributorCell.humidity = 0.5f;
+    contributorCell.pressure = 0.5f;
+
+    model_ = HexSphereModel{};
+    model_.debug_setCellsAndDual({ contributorCell }, {});
+    terrainCPU_ = TerrainMesh{};
+    triangleCache_.clear();
+    cacheValid_ = false;
     generateTreePlacements();
 }
 

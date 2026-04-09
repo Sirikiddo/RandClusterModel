@@ -16,15 +16,21 @@
 
 #include "model/OreSystem.h"
 
-HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputController& inputController, QWidget* parent)
+HexSphereWidget::HexSphereWidget(const AppViewConfig& viewConfig,
+    CameraController& cameraController,
+    InputController& inputController,
+    QWidget* parent)
     : QOpenGLWidget(parent)
+    , viewConfig_(viewConfig)
     , cameraController_(cameraController)
     , inputController_(inputController)
-    , engine_(std::make_unique<EngineFacade>())
+    , engine_(viewConfig.isContributorMode() ? nullptr : std::make_unique<EngineFacade>())
     , oreSystem_(nullptr) {
 
-    inputController_.attachEngine(engine_.get());
-    engine_->attachTerrainBridge(&inputController_);
+    if (engine_) {
+        inputController_.attachEngine(engine_.get());
+        engine_->attachTerrainBridge(&inputController_);
+    }
 
     setFocusPolicy(Qt::StrongFocus);
 
@@ -32,7 +38,12 @@ HexSphereWidget::HexSphereWidget(CameraController& cameraController, InputContro
     hud->setAttribute(Qt::WA_TransparentForMouseEvents);
     hud->setStyleSheet("QLabel { background: rgba(0,0,0,140); color: white; padding: 6px; }");
     hud->move(10, 10);
-    hud->setText("LMB: select | C: clear path | P: build path | +/-: height | 1-8: biomes | S: smooth | W: move | O: ore viz");
+    if (viewConfig_.isContributorMode()) {
+        hud->setText("Contributor mode: RMB drag rotate | wheel zoom | Reset View");
+    }
+    else {
+        hud->setText("LMB: select | C: clear path | P: build path | +/-: height | 1-8: biomes | S: smooth | W: move | O: ore viz");
+    }
     hud->adjustSize();
 
     waterTimer_ = new QTimer(this);
@@ -48,7 +59,9 @@ HexSphereWidget::~HexSphereWidget() = default;
 
 void HexSphereWidget::initializeGL() {
     inputController_.initialize(this);
-    engine_->initializeTerrainState();
+    if (engine_) {
+        engine_->initializeTerrainState();
+    }
 
     animationTimer_ = new QTimer(this);
     connect(animationTimer_, &QTimer::timeout, this, [this]() {
@@ -65,7 +78,12 @@ void HexSphereWidget::initializeGL() {
         });
     animationTimer_->start(16);
 
-    emit hudTextChanged("Controls: [LMB] select | [C] clear path | [P] path between selected | [+/-] height | [1-8] biomes | [S] smooth toggle | [W] move entity | [O] toggle ore visualization");
+    if (viewConfig_.isContributorMode()) {
+        emit hudTextChanged("Contributor mode: camera only");
+    }
+    else {
+        emit hudTextChanged("Controls: [LMB] select | [C] clear path | [P] path between selected | [+/-] height | [1-8] biomes | [S] smooth toggle | [W] move entity | [O] toggle ore visualization");
+    }
 }
 
 void HexSphereWidget::resizeGL(int w, int h) {
@@ -88,15 +106,22 @@ void HexSphereWidget::paintGL() {
     // ������� ��� - ������ ���������� � �������
     // inputController_.getECS().update(dt);
 
-    engine_->tick(dt);
+    if (engine_) {
+        engine_->tick(dt);
+    }
     inputController_.render();
-    const auto& o = engine_->overlay();
-    overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5")
-        .arg(qulonglong(o.sceneVersion))
-        .arg(o.hasPlan ? "1" : "0")
-        .arg(o.asyncBusy ? "1" : "0")
-        .arg(QString::number(o.dtMs, 'f', 2))
-        .arg(QString::number(o.fps, 'f', 1));
+    if (engine_) {
+        const auto& o = engine_->overlay();
+        overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5")
+            .arg(qulonglong(o.sceneVersion))
+            .arg(o.hasPlan ? "1" : "0")
+            .arg(o.asyncBusy ? "1" : "0")
+            .arg(QString::number(o.dtMs, 'f', 2))
+            .arg(QString::number(o.fps, 'f', 1));
+    }
+    else {
+        overlayText_ = QString("contributor:1  dt:%1ms").arg(QString::number(dt * 1000.0f, 'f', 2));
+    }
 }
 
 void HexSphereWidget::paintEvent(QPaintEvent* e) {
