@@ -8,4 +8,7 @@ struct DebugOverlay {
 
     float dtMs = 0.0f;
     float fps = 0.0f;
+    uint64_t terrainBuildCount = 0;
+    uint64_t meshBuildCount = 0;
+    uint64_t visibilityBuildCount = 0;
 };

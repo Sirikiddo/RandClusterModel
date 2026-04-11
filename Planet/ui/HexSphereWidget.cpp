@@ -112,12 +112,15 @@ void HexSphereWidget::paintGL() {
     inputController_.render();
     if (engine_) {
         const auto& o = engine_->overlay();
-        overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5")
+        overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5  dag:%6/%7/%8")
             .arg(qulonglong(o.sceneVersion))
             .arg(o.hasPlan ? "1" : "0")
             .arg(o.asyncBusy ? "1" : "0")
             .arg(QString::number(o.dtMs, 'f', 2))
-            .arg(QString::number(o.fps, 'f', 1));
+            .arg(QString::number(o.fps, 'f', 1))
+            .arg(qulonglong(o.terrainBuildCount))
+            .arg(qulonglong(o.meshBuildCount))
+            .arg(qulonglong(o.visibilityBuildCount));
     }
     else {
         overlayText_ = QString("contributor:1  dt:%1ms").arg(QString::number(dt * 1000.0f, 'f', 2));

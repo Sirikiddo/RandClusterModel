@@ -25,12 +25,14 @@ class TerrainRenderer;
 class WaterRenderer;
 class EntityRenderer;
 class OverlayRenderer;
+class EngineFacade;
 
 class HexSphereRenderer {
 public:
 
     void setOreAnimationTime(float time);
     void setOreVisualizationEnabled(bool enabled);
+    void attachEngine(EngineFacade* engine) { engine_ = engine; }
 
     void updateVisibility(const QVector3D& cameraPos);
 
@@ -77,6 +79,10 @@ public:
     void uploadPath(const std::vector<QVector3D>& points);
     void uploadWater(const WaterGeometryData& data);
     void uploadScene(const HexSphereSceneController& scene, const UploadOptions& options);
+    void uploadSceneWithTerrainOverride(
+        const HexSphereSceneController& scene,
+        const TerrainMesh& terrainMesh,
+        const UploadOptions& options);
 
     void renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting);
 
@@ -114,8 +120,10 @@ private:
 
     // ����� �����
     void recreateTerrainVAO();
+    void uploadFullTerrainIndexBuffer();
 
     HexSphereSceneController* lastScene_ = nullptr;
+    EngineFacade* engine_ = nullptr;
 
     QOpenGLWidget* owner_ = nullptr;
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
@@ -148,6 +156,7 @@ private:
     GLsizei pathVertexCount_ = 0;
     GLsizei pyramidVertexCount_ = 0;
     GLsizei waterIndexCount_ = 0;
+    bool terrainVisibilityDirty_ = true;
 
     std::shared_ptr<ModelHandler> treeModel_;
     std::shared_ptr<ModelHandler> firTreeModel_;

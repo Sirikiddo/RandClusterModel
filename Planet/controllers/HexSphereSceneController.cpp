@@ -257,6 +257,8 @@ void HexSphereSceneController::updateTerrainMesh() {
     options.doEdgeCliffs = true;
 
     terrainCPU_ = TerrainMeshGenerator::buildTerrainMesh(model_, options);
+    cacheValid_ = false;
+    triangleCache_.clear();
 }
 
 float HexSphereSceneController::cellSize() const {
@@ -512,15 +514,22 @@ static std::vector<QVector3D> convertToQVector3D(const std::vector<float>& posit
 std::vector<uint32_t> HexSphereSceneController::getVisibleIndices(const QVector3D& cameraPos) const {
     validateCache();
 
-    QVector3D planetCenter(0, 0, 0);
-    QVector3D toCam = (cameraPos - planetCenter).normalized();
+    static constexpr float kVisibilityDotMargin = -0.05f;
+
+    const QVector3D planetCenter(0, 0, 0);
+    const QVector3D toCamVector = cameraPos - planetCenter;
+    if (toCamVector.lengthSquared() <= 1.0e-8f) {
+        return terrainCPU_.idx;
+    }
+
+    const QVector3D toCam = toCamVector.normalized();
 
     std::vector<uint32_t> visibleIndices;
     visibleIndices.reserve(terrainCPU_.idx.size() / 2);
 
     for (const auto& tri : triangleCache_) {
-        QVector3D normal = tri.center.normalized();
-        if (QVector3D::dotProduct(normal, toCam) > 0.0f) {
+        const QVector3D normal = tri.center.normalized();
+        if (QVector3D::dotProduct(normal, toCam) > kVisibilityDotMargin) {
             visibleIndices.push_back(tri.i0);
             visibleIndices.push_back(tri.i1);
             visibleIndices.push_back(tri.i2);

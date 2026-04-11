@@ -111,6 +111,13 @@ InputController::~InputController() {
     owner_ = nullptr;
 }
 
+void InputController::attachEngine(EngineFacade* engine) {
+    engine_ = engine;
+    if (renderer_) {
+        renderer_->attachEngine(engine_);
+    }
+}
+
 void InputController::initialize(QOpenGLWidget* owner) {
     owner_ = owner;
     owner_->makeCurrent();
@@ -127,6 +134,7 @@ void InputController::initialize(QOpenGLWidget* owner) {
     printGlInfo(gl);
 
     renderer_ = std::make_unique<HexSphereRenderer>(owner_);
+    renderer_->attachEngine(engine_);
     renderer_->initialize(owner_, gl, &stats_);
 
     if (!isContributorMode()) {
@@ -481,9 +489,18 @@ void InputController::uploadSelection() {
 }
 
 void InputController::uploadBuffers() {
-    if (renderer_) {
-        renderer_->uploadScene(scene_, uploadOptions_);
+    if (!renderer_) {
+        return;
     }
+
+    if (engine_) {
+        if (const auto* terrainMesh = engine_->currentTerrainMesh()) {
+            renderer_->uploadSceneWithTerrainOverride(scene_, *terrainMesh, uploadOptions_);
+            return;
+        }
+    }
+
+    renderer_->uploadScene(scene_, uploadOptions_);
 }
 
 void InputController::stageTerrainParams(const TerrainParams& params) {

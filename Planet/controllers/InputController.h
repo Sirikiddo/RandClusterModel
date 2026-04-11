@@ -33,7 +33,7 @@ public:
     explicit InputController(CameraController& camera, SceneViewMode viewMode = SceneViewMode::Planet);
     ~InputController();
 
-    void attachEngine(EngineFacade* engine) { engine_ = engine; }
+    void attachEngine(EngineFacade* engine);
     void initialize(QOpenGLWidget* owner);
     void resize(int w, int h, float devicePixelRatio);
     Response render();

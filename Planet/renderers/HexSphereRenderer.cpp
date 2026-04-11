@@ -13,6 +13,7 @@
 #include "ui/OverlayRenderer.h"
 #include "renderers/TerrainRenderer.h"
 #include "renderers/WaterRenderer.h"
+#include "dag/EngineFacade.h"
 
 HexSphereRenderer::HexSphereRenderer(QOpenGLWidget* owner)
     : owner_(owner) {
@@ -363,6 +364,7 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
         GL_DYNAMIC_DRAW);  // Всегда DYNAMIC, так как будем менять
 
     terrainIndexCount_ = GLsizei(mesh.idx.size());
+    terrainVisibilityDirty_ = true;
     totalIndexCount_ = mesh.idx.size();  // Сохраняем для статистики
 
     // Создаем VAO один раз
@@ -422,7 +424,7 @@ void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
     // Обновляем позицию камеры в сцене
     lastScene_->setCameraPosition(cameraPos);
     if (!lastScene_->supportsTerrainVisibility()) {
-        terrainIndexCount_ = 0;
+        terrainIndexCount_ = GLsizei(totalIndexCount_);
         return;
     }
 
@@ -430,12 +432,27 @@ void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
     // lastScene_->updatePrediction(cameraPos);
 
     // Используем адаптивную логику для определения необходимости обновления
-    if (lastScene_->shouldUpdateVisibility() && lastScene_->hasCameraMoved(0.1f)) {
+    const bool updateForCamera = lastScene_->shouldUpdateVisibility() && lastScene_->hasCameraMoved(0.1f);
+    if (terrainVisibilityDirty_ || updateForCamera) {
         QElapsedTimer filterTimer;
         filterTimer.start();
 
         // ИСПРАВИТЬ: использовать обычную версию, не с предсказанием
-        std::vector<uint32_t> visibleIndices = lastScene_->getVisibleIndices(cameraPos);
+        std::vector<uint32_t> visibleIndices;
+        if (engine_ && engine_->prepareVisibleTerrainIndices(cameraPos)) {
+            if (const auto* dagVisibleIndices = engine_->currentVisibleTerrainIndices()) {
+                visibleIndices = *dagVisibleIndices;
+            }
+        }
+        if (visibleIndices.empty()) {
+            visibleIndices = lastScene_->getVisibleIndices(cameraPos);
+        }
+        if (visibleIndices.empty()) {
+            uploadFullTerrainIndexBuffer();
+            lastScene_->updateLastCameraPosition();
+            terrainVisibilityDirty_ = false;
+            return;
+        }
 
         qint64 elapsed = filterTimer.elapsed();
 
@@ -462,7 +479,21 @@ void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
 
         terrainIndexCount_ = GLsizei(visibleIndices.size());
         lastScene_->updateLastCameraPosition();
+        terrainVisibilityDirty_ = false;
     }
+}
+
+void HexSphereRenderer::uploadFullTerrainIndexBuffer() {
+    if (!lastScene_) return;
+
+    const TerrainMesh& mesh = lastScene_->terrain();
+    gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
+    gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+        mesh.idx.size() * sizeof(uint32_t),
+        mesh.idx.empty() ? nullptr : mesh.idx.data(),
+        GL_DYNAMIC_DRAW);
+
+    terrainIndexCount_ = GLsizei(mesh.idx.size());
 }
 
 void HexSphereRenderer::recreateTerrainVAO() {
@@ -672,6 +703,29 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
         });
     qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
         << "(terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
+}
+
+void HexSphereRenderer::uploadSceneWithTerrainOverride(
+    const HexSphereSceneController& scene,
+    const TerrainMesh& terrainMesh,
+    const UploadOptions& options) {
+    qDebug() << "uploadSceneWithTerrainOverride called, setting lastScene_";
+    lastScene_ = const_cast<HexSphereSceneController*>(&scene);
+
+    withContext([&]() {
+        uploadWireInternal(scene.buildWireVertices(), options.wireUsage);
+        uploadTerrainInternal(terrainMesh, options.terrainUsage);
+        uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
+        if (auto path = scene.buildPathPolyline()) {
+            uploadPathInternal(*path);
+        }
+        else {
+            uploadPathInternal({});
+        }
+        uploadWaterInternal(scene.buildWaterGeometry());
+        });
+    qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
+        << "(DAG terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
 }
 
 void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting) {

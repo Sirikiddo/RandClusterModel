@@ -1,8 +1,12 @@
 #pragma once
 
 #include <memory>
+#include <vector>
+
+#include <QVector3D>
 
 #include "TerrainBackendContract.h"
+#include "renderers/TerrainTessellator.h"
 
 class DagTerrainBackend {
 public:
@@ -23,8 +27,13 @@ public:
     void setGeneratorByIndex(int idx);
     void setSubdivisionLevel(int level);
     TerrainRegenerationResult regenerateTerrain();
+    void setVisibilityMesh(const TerrainMesh& mesh);
+    bool prepareVisibleTerrainIndices(const QVector3D& cameraPos);
 
     const TerrainSnapshot* currentTerrainSnapshot() const;
+    const TerrainMesh* currentTerrainMesh() const;
+    const std::vector<uint32_t>* currentVisibleTerrainIndices() const;
+    TerrainDagStats debugStats() const;
 
 private:
     struct Impl;

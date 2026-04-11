@@ -49,13 +49,37 @@ TerrainRegenerationResult EngineFacade::regenerateTerrain() {
     return result;
 }
 
+void EngineFacade::setVisibilityMesh(const TerrainMesh& mesh) {
+    impl_->backend.setVisibilityMesh(mesh);
+}
+
+bool EngineFacade::prepareVisibleTerrainIndices(const QVector3D& cameraPos) {
+    return impl_->backend.prepareVisibleTerrainIndices(cameraPos);
+}
+
 const TerrainSnapshot* EngineFacade::currentTerrainSnapshot() const {
     return impl_->backend.currentTerrainSnapshot();
+}
+
+const TerrainMesh* EngineFacade::currentTerrainMesh() const {
+    return impl_->backend.currentTerrainMesh();
+}
+
+const std::vector<uint32_t>* EngineFacade::currentVisibleTerrainIndices() const {
+    return impl_->backend.currentVisibleTerrainIndices();
+}
+
+TerrainDagStats EngineFacade::terrainDagStats() const {
+    return impl_->backend.debugStats();
 }
 
 void EngineFacade::tick(float dtSeconds) {
     overlay_.dtMs = dtSeconds * 1000.0f;
     overlay_.hasPlan = kUsesDagTerrainBackend;
+    const TerrainDagStats stats = impl_->backend.debugStats();
+    overlay_.terrainBuildCount = stats.terrainBuildCount;
+    overlay_.meshBuildCount = stats.meshBuildCount;
+    overlay_.visibilityBuildCount = stats.visibilityBuildCount;
 
     fpsAccum_ += dtSeconds;
     ++fpsFrames_;

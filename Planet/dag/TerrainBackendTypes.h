@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -47,4 +49,11 @@ struct TerrainRegenerationResult {
         result.message = std::move(text);
         return result;
     }
+};
+
+struct TerrainDagStats {
+    uint64_t terrainBuildCount = 0;
+    uint64_t meshBuildCount = 0;
+    uint64_t visibilityBuildCount = 0;
+    size_t visibleIndexCount = 0;
 };
