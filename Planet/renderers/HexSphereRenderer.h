@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <QMatrix4x4>
 #include <QOpenGLFunctions_3_3_Core>
@@ -17,9 +17,7 @@
 #include "resources/HexSphereWidget_shaders.h"
 #include "model/ModelHandler.h"
 #include "model/CarModelHandler.h"
-
-#include <QMutex>
-#include <QtConcurrent/QtConcurrent>
+#include "renderers/TerrainVisibility.h"
 
 class TerrainRenderer;
 class WaterRenderer;
@@ -79,31 +77,11 @@ public:
     void uploadPath(const std::vector<QVector3D>& points);
     void uploadWater(const WaterGeometryData& data);
     void uploadScene(const HexSphereSceneController& scene, const UploadOptions& options);
-    void uploadSceneWithTerrainOverride(
-        const HexSphereSceneController& scene,
-        const TerrainMesh& terrainMesh,
-        const UploadOptions& options);
 
     void renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting);
 
     bool ready() const { return glReady_; }
     GLuint envCubemap() const { return envCubemap_; }
-
-    // ��� ������� �����������
-    struct VisibilityBuffer {
-        std::vector<uint32_t> indices;
-        bool ready = false;
-        int frameAge = 0;
-    };
-
-    VisibilityBuffer buffers_[2];
-    int currentBuffer_ = 0;
-    int nextBuffer_ = 1;
-
-    void swapBuffers() {
-        std::swap(currentBuffer_, nextBuffer_);
-        buffers_[nextBuffer_].ready = false;
-    }
 
 private:
     GLuint makeProgram(const char* vs, const char* fs);
@@ -118,11 +96,10 @@ private:
     void loadContributorModel();
     void renderContributorModel(const RenderContext& ctx);
 
-    // ����� �����
+    // ????? ?????
     void recreateTerrainVAO();
     void uploadFullTerrainIndexBuffer();
 
-    HexSphereSceneController* lastScene_ = nullptr;
     EngineFacade* engine_ = nullptr;
 
     QOpenGLWidget* owner_ = nullptr;
@@ -183,9 +160,10 @@ private:
 
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
-    bool firstRenderDone_ = false;
 
-    size_t totalIndexCount_ = 0;
+    TerrainMesh fullTerrainMesh_;
+    std::vector<uint32_t> fullTerrainIndices_;
+    TerrainVisibilityController terrainVisibility_;
 
     std::shared_ptr<CarModelHandler> carModel_;
 };

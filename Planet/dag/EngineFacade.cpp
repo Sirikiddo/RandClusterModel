@@ -41,6 +41,10 @@ void EngineFacade::setSubdivisionLevel(int level) {
     impl_->backend.setSubdivisionLevel(level);
 }
 
+void EngineFacade::setTerrainRenderConfig(const TerrainRenderConfig& config) {
+    impl_->backend.setTerrainRenderConfig(config);
+}
+
 TerrainRegenerationResult EngineFacade::regenerateTerrain() {
     const auto result = impl_->backend.regenerateTerrain();
     if (result) {
@@ -49,8 +53,8 @@ TerrainRegenerationResult EngineFacade::regenerateTerrain() {
     return result;
 }
 
-void EngineFacade::setVisibilityMesh(const TerrainMesh& mesh) {
-    impl_->backend.setVisibilityMesh(mesh);
+bool EngineFacade::prepareTerrainMesh() {
+    return impl_->backend.prepareTerrainMesh();
 }
 
 bool EngineFacade::prepareVisibleTerrainIndices(const QVector3D& cameraPos) {

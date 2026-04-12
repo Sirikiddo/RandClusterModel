@@ -26,8 +26,9 @@ public:
     void setTerrainParams(const TerrainParams& params);
     void setGeneratorByIndex(int idx);
     void setSubdivisionLevel(int level);
+    void setTerrainRenderConfig(const TerrainRenderConfig& config);
     TerrainRegenerationResult regenerateTerrain();
-    void setVisibilityMesh(const TerrainMesh& mesh);
+    bool prepareTerrainMesh();
     bool prepareVisibleTerrainIndices(const QVector3D& cameraPos);
 
     const TerrainSnapshot* currentTerrainSnapshot() const;

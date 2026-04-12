@@ -38,6 +38,10 @@ void LegacyTerrainBackend::setSubdivisionLevel(int level) {
     syncFromAdapter();
 }
 
+void LegacyTerrainBackend::setTerrainRenderConfig(const TerrainRenderConfig& config) {
+    renderConfig_ = config;
+}
+
 TerrainRegenerationResult LegacyTerrainBackend::regenerateTerrain() {
     if (!bridge_) {
         return TerrainRegenerationResult::failure("Terrain bridge is not attached");
@@ -48,11 +52,27 @@ TerrainRegenerationResult LegacyTerrainBackend::regenerateTerrain() {
     return TerrainRegenerationResult::success();
 }
 
+bool LegacyTerrainBackend::prepareTerrainMesh() {
+    return false;
+}
+
+bool LegacyTerrainBackend::prepareVisibleTerrainIndices(const QVector3D&) {
+    return false;
+}
+
 const TerrainSnapshot* LegacyTerrainBackend::currentTerrainSnapshot() const {
     if (!currentSnapshot_) {
         return nullptr;
     }
     return &*currentSnapshot_;
+}
+
+const TerrainMesh* LegacyTerrainBackend::currentTerrainMesh() const {
+    return nullptr;
+}
+
+const std::vector<uint32_t>* LegacyTerrainBackend::currentVisibleTerrainIndices() const {
+    return nullptr;
 }
 
 void LegacyTerrainBackend::syncFromSnapshot(const TerrainSnapshot& snapshot) {

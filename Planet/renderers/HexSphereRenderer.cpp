@@ -3,7 +3,7 @@
 #include <QOpenGLWidget>
 #include <QtDebug>
 
-#include <QOpenGLVertexArrayObject> 
+#include <QOpenGLVertexArrayObject>
 
 #include "contributor/ContributorAsset.h"
 #include "core/AppViewConfig.h"
@@ -363,9 +363,11 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
         mesh.idx.data(),
         GL_DYNAMIC_DRAW);  // Всегда DYNAMIC, так как будем менять
 
+    fullTerrainMesh_ = mesh;
+    fullTerrainIndices_ = mesh.idx;
+    terrainVisibility_.reset();
     terrainIndexCount_ = GLsizei(mesh.idx.size());
     terrainVisibilityDirty_ = true;
-    totalIndexCount_ = mesh.idx.size();  // Сохраняем для статистики
 
     // Создаем VAO один раз
     if (!vaoTerrain_.isCreated()) {
@@ -375,69 +377,17 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
     qDebug() << "uploadTerrainInternal - total indexCount:" << terrainIndexCount_;
 }
 
-// ========== НОВЫЙ МЕТОД ДЛЯ ОБНОВЛЕНИЯ ВИДИМОСТИ ==========
-//void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
-//    if (!glReady_ || !lastScene_) return;
-//
-//    // Обновляем позицию камеры в сцене
-//    lastScene_->setCameraPosition(cameraPos);
-//
-//    // Наглядно убедиться, что треугольников реально меньше
-//    static QElapsedTimer timer;
-//    if (!timer.isValid()) {
-//        timer.start();
-//    }
-//    if (timer.elapsed() < 100) return;  // Не чаще чем раз в 100 мс
-//    timer.restart();
-//
-//    // Проверяем, двигалась ли камера
-//    if (lastScene_->hasCameraMoved()) {
-//        // Получаем только видимые индексы
-//        std::vector<uint32_t> visibleIndices = lastScene_->getVisibleIndices(cameraPos);
-//
-//        if (visibleIndices.empty()) {
-//            qDebug() << "No visible triangles!";
-//            return;
-//        }
-//
-//        qDebug() << "Updating visibility - visible indices:" << visibleIndices.size();
-//
-//        // Обновляем ТОЛЬКО индексный буфер
-//        gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
-//        gl_->glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
-//            visibleIndices.size() * sizeof(uint32_t),
-//            visibleIndices.data());
-//
-//        // Обновляем счетчик для отрисовки
-//        terrainIndexCount_ = GLsizei(visibleIndices.size());
-//
-//        // Отмечаем, что камера обработана
-//        lastScene_->updateLastCameraPosition();
-//
-//        qDebug() << "Visibility updated, drawing" << terrainIndexCount_ << "indices";
-//    }
-//}
 
 void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
-    if (!glReady_ || !lastScene_) return;
+    if (!glReady_ || fullTerrainIndices_.empty()) return;
 
-    // Обновляем позицию камеры в сцене
-    lastScene_->setCameraPosition(cameraPos);
-    if (!lastScene_->supportsTerrainVisibility()) {
-        terrainIndexCount_ = GLsizei(totalIndexCount_);
-        return;
-    }
-
-    // УДАЛИТЬ эту строку:
-    // lastScene_->updatePrediction(cameraPos);
 
     // Используем адаптивную логику для определения необходимости обновления
-    const bool updateForCamera = lastScene_->shouldUpdateVisibility() && lastScene_->hasCameraMoved(0.1f);
+    const bool updateForCamera = terrainVisibility_.shouldUpdate(cameraPos);
     if (terrainVisibilityDirty_ || updateForCamera) {
         QElapsedTimer filterTimer;
         filterTimer.start();
 
-        // ИСПРАВИТЬ: использовать обычную версию, не с предсказанием
         std::vector<uint32_t> visibleIndices;
         if (engine_ && engine_->prepareVisibleTerrainIndices(cameraPos)) {
             if (const auto* dagVisibleIndices = engine_->currentVisibleTerrainIndices()) {
@@ -445,11 +395,11 @@ void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
             }
         }
         if (visibleIndices.empty()) {
-            visibleIndices = lastScene_->getVisibleIndices(cameraPos);
+            visibleIndices = buildVisibleTerrainIndices(fullTerrainMesh_, cameraPos);
         }
         if (visibleIndices.empty()) {
             uploadFullTerrainIndexBuffer();
-            lastScene_->updateLastCameraPosition();
+            terrainVisibility_.markVisibilityApplied(cameraPos);
             terrainVisibilityDirty_ = false;
             return;
         }
@@ -463,10 +413,10 @@ void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
         totalTime += elapsed;
 
         if (updateCount % 10 == 0) {
-            qDebug() << "=== ADAPTIVE UPDATE STATS ===";  // Вернуть старое название
+            qDebug() << "=== ADAPTIVE UPDATE STATS ===";
             qDebug() << "Avg filter time:" << (totalTime / updateCount) << "ms";
             qDebug() << "Triangles:" << (visibleIndices.size() / 3)
-                << "/" << (lastScene_->terrain().idx.size() / 3);
+                << "/" << (fullTerrainIndices_.size() / 3);
             qDebug() << "==============================";
         }
 
@@ -478,22 +428,19 @@ void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
             GL_DYNAMIC_DRAW);
 
         terrainIndexCount_ = GLsizei(visibleIndices.size());
-        lastScene_->updateLastCameraPosition();
+        terrainVisibility_.markVisibilityApplied(cameraPos);
         terrainVisibilityDirty_ = false;
     }
 }
 
 void HexSphereRenderer::uploadFullTerrainIndexBuffer() {
-    if (!lastScene_) return;
-
-    const TerrainMesh& mesh = lastScene_->terrain();
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
     gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-        mesh.idx.size() * sizeof(uint32_t),
-        mesh.idx.empty() ? nullptr : mesh.idx.data(),
+        fullTerrainIndices_.size() * sizeof(uint32_t),
+        fullTerrainIndices_.empty() ? nullptr : fullTerrainIndices_.data(),
         GL_DYNAMIC_DRAW);
 
-    terrainIndexCount_ = GLsizei(mesh.idx.size());
+    terrainIndexCount_ = GLsizei(fullTerrainIndices_.size());
 }
 
 void HexSphereRenderer::recreateTerrainVAO() {
@@ -686,12 +633,15 @@ void HexSphereRenderer::renderContributorModel(const RenderContext& ctx) {
 }
 
 void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const UploadOptions& options) {
-    qDebug() << "uploadScene called, setting lastScene_";
-    lastScene_ = const_cast<HexSphereSceneController*>(&scene);
+    qDebug() << "uploadScene called";
+    const TerrainMesh* terrainMesh = nullptr;
+    if (engine_) {
+        terrainMesh = engine_->currentTerrainMesh();
+    }
 
     withContext([&]() {
         uploadWireInternal(scene.buildWireVertices(), options.wireUsage);
-        uploadTerrainInternal(scene.terrain(), options.terrainUsage);
+        uploadTerrainInternal(terrainMesh ? *terrainMesh : scene.terrain(), options.terrainUsage);
         uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
         if (auto path = scene.buildPathPolyline()) {
             uploadPathInternal(*path);
@@ -703,29 +653,6 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
         });
     qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
         << "(terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
-}
-
-void HexSphereRenderer::uploadSceneWithTerrainOverride(
-    const HexSphereSceneController& scene,
-    const TerrainMesh& terrainMesh,
-    const UploadOptions& options) {
-    qDebug() << "uploadSceneWithTerrainOverride called, setting lastScene_";
-    lastScene_ = const_cast<HexSphereSceneController*>(&scene);
-
-    withContext([&]() {
-        uploadWireInternal(scene.buildWireVertices(), options.wireUsage);
-        uploadTerrainInternal(terrainMesh, options.terrainUsage);
-        uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
-        if (auto path = scene.buildPathPolyline()) {
-            uploadPathInternal(*path);
-        }
-        else {
-            uploadPathInternal({});
-        }
-        uploadWaterInternal(scene.buildWaterGeometry());
-        });
-    qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
-        << "(DAG terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
 }
 
 void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting) {

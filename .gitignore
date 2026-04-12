@@ -178,3 +178,6 @@ Planet/third_party/ProcessDAG/x64/
 
 packages/
 
+
+# Local Visual Studio solution
+Planet.sln

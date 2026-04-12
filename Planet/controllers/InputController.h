@@ -90,6 +90,7 @@ private:
     void rebuildModel(Response& response);
     void uploadSelection();
     void uploadBuffers();
+    void syncTerrainRenderConfigToEngine();
     void buildAndShowSelectedPath(Response& response);
     void buildAndShowPathBetween(int startCell, int targetCell, Response& response);
     void clearPath(Response& response);

@@ -113,6 +113,7 @@ InputController::~InputController() {
 
 void InputController::attachEngine(EngineFacade* engine) {
     engine_ = engine;
+    syncTerrainRenderConfigToEngine();
     if (renderer_) {
         renderer_->attachEngine(engine_);
     }
@@ -136,6 +137,7 @@ void InputController::initialize(QOpenGLWidget* owner) {
     renderer_ = std::make_unique<HexSphereRenderer>(owner_);
     renderer_->attachEngine(engine_);
     renderer_->initialize(owner_, gl, &stats_);
+    syncTerrainRenderConfigToEngine();
 
     if (!isContributorMode()) {
         auto& pyramid = ecs_.createEntity("Explorer");
@@ -344,8 +346,8 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         return response;
     }
 
-    rebuildModel(response);
-    return response;
+        rebuildModel(response);
+        return response;
 }
 
 InputController::Response InputController::setSubdivisionLevel(int L) {
@@ -357,6 +359,7 @@ InputController::Response InputController::setSubdivisionLevel(int L) {
         stats_.setSubdivisionLevel(L);
         updateBufferUsageStrategy(L);
         if (engine_) {
+            syncTerrainRenderConfigToEngine();
             engine_->setSubdivisionLevel(L);
             const auto result = engine_->regenerateTerrain();
             if (!result) {
@@ -425,6 +428,7 @@ InputController::Response InputController::regenerateTerrain() {
         return contributorModeResponse();
     }
     if (engine_) {
+        syncTerrainRenderConfigToEngine();
         const auto result = engine_->regenerateTerrain();
         if (!result) {
             response.hudMessage = QString::fromStdString(result.message);
@@ -445,7 +449,16 @@ InputController::Response InputController::setSmoothOneStep(bool on) {
         return contributorModeResponse();
     }
     scene_.setSmoothOneStep(on);
-    rebuildModel(response);
+    scene_.rebuildModel();
+    syncTerrainRenderConfigToEngine();
+    if (engine_ && !engine_->prepareTerrainMesh()) {
+        response.hudMessage = QString("DAG terrain mesh update failed");
+        uploadBuffers();
+        response.requestUpdate = true;
+        return response;
+    }
+    uploadBuffers();
+    response.requestUpdate = true;
     return response;
 }
 
@@ -455,7 +468,16 @@ InputController::Response InputController::setStripInset(float v) {
         return contributorModeResponse();
     }
     scene_.setStripInset(v);
-    rebuildModel(response);
+    scene_.rebuildModel();
+    syncTerrainRenderConfigToEngine();
+    if (engine_ && !engine_->prepareTerrainMesh()) {
+        response.hudMessage = QString("DAG terrain mesh update failed");
+        uploadBuffers();
+        response.requestUpdate = true;
+        return response;
+    }
+    uploadBuffers();
+    response.requestUpdate = true;
     return response;
 }
 
@@ -493,14 +515,14 @@ void InputController::uploadBuffers() {
         return;
     }
 
-    if (engine_) {
-        if (const auto* terrainMesh = engine_->currentTerrainMesh()) {
-            renderer_->uploadSceneWithTerrainOverride(scene_, *terrainMesh, uploadOptions_);
-            return;
-        }
-    }
-
     renderer_->uploadScene(scene_, uploadOptions_);
+}
+
+void InputController::syncTerrainRenderConfigToEngine() {
+    if (!engine_) {
+        return;
+    }
+    engine_->setTerrainRenderConfig(scene_.terrainRenderConfig());
 }
 
 void InputController::stageTerrainParams(const TerrainParams& params) {

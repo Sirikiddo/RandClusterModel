@@ -5,11 +5,9 @@
 #include <random>
 #include <cmath>
 
-// �?обавляем н�?жн�?е include
 #include "generation/MeshGenerators/WireMeshGenerator.h"
 #include "generation/MeshGenerators/SelectionOutlineGenerator.h"
 #include <QVector3D>
-#include <QElapsedTimer>
 
 namespace {
     constexpr float kContributorTreeScale = 0.5f;
@@ -41,7 +39,7 @@ void HexSphereSceneController::stageSubdivisionLevel(int level) {
         return;
     }
     L_ = level;
-    heightStep_ = autoHeightStep();
+    heightStep_ = TerrainMeshPolicy::heightStepForSubdivision(L_);
     topologyDirty_ = true;
 }
 
@@ -99,11 +97,6 @@ void HexSphereSceneController::clearForShutdown() {
     selectedCells_.clear();
     treePlacements_.clear();
     treeOccupiedCells_.clear();
-    triangleCache_.clear();
-    cacheValid_ = false;
-    velocity_ = QVector3D();
-    cameraPos_ = QVector3D();
-    lastCameraPos_ = QVector3D();
     terrainCPU_ = TerrainMesh{};
     model_ = HexSphereModel{};
     ico_ = IcoMesh{};
@@ -231,34 +224,16 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
     generateTreePlacements();
 }
 
-float HexSphereSceneController::autoHeightStep() const {
-    const float baseStep = 0.05f;
-    const float reductionFactor = 0.4f;
-    return baseStep / (1.0f + L_ * reductionFactor);
-}
-
 void HexSphereSceneController::updateTerrainMesh() {
     if (isContributorMode()) {
         terrainCPU_ = TerrainMesh{};
-        cacheValid_ = false;
-        triangleCache_.clear();
         return;
     }
 
-    heightStep_ = autoHeightStep();
-    TerrainMeshOptions options;
-    options.heightStep = heightStep_;
-    options.inset = stripInset_;
-    options.smoothOneStep = smoothOneStep_;
-    options.outerTrim = 0.15f;
-    options.doCaps = true;
-    options.doBlades = true;
-    options.doCornerTris = true;
-    options.doEdgeCliffs = true;
-
+    const TerrainRenderConfig renderConfig = terrainRenderConfig();
+    const TerrainMeshOptions options = TerrainMeshPolicy::buildOptions(L_, renderConfig);
+    heightStep_ = options.heightStep;
     terrainCPU_ = TerrainMeshGenerator::buildTerrainMesh(model_, options);
-    cacheValid_ = false;
-    triangleCache_.clear();
 }
 
 float HexSphereSceneController::cellSize() const {
@@ -483,7 +458,7 @@ void HexSphereSceneController::regenerateTreePlacements() {
 
 void HexSphereSceneController::rebuildContributorScene() {
     selectedCells_.clear();
-    heightStep_ = autoHeightStep();
+    heightStep_ = TerrainMeshPolicy::heightStepForSubdivision(L_);
 
     Cell contributorCell;
     contributorCell.id = 0;
@@ -497,93 +472,6 @@ void HexSphereSceneController::rebuildContributorScene() {
     model_ = HexSphereModel{};
     model_.debug_setCellsAndDual({ contributorCell }, {});
     terrainCPU_ = TerrainMesh{};
-    triangleCache_.clear();
-    cacheValid_ = false;
     generateTreePlacements();
-}
-
-static std::vector<QVector3D> convertToQVector3D(const std::vector<float>& positions) {
-    std::vector<QVector3D> result;
-    result.reserve(positions.size() / 3);
-    for (size_t i = 0; i < positions.size(); i += 3) {
-        result.emplace_back(positions[i], positions[i + 1], positions[i + 2]);
-    }
-    return result;
-}
-
-std::vector<uint32_t> HexSphereSceneController::getVisibleIndices(const QVector3D& cameraPos) const {
-    validateCache();
-
-    static constexpr float kVisibilityDotMargin = -0.05f;
-
-    const QVector3D planetCenter(0, 0, 0);
-    const QVector3D toCamVector = cameraPos - planetCenter;
-    if (toCamVector.lengthSquared() <= 1.0e-8f) {
-        return terrainCPU_.idx;
-    }
-
-    const QVector3D toCam = toCamVector.normalized();
-
-    std::vector<uint32_t> visibleIndices;
-    visibleIndices.reserve(terrainCPU_.idx.size() / 2);
-
-    for (const auto& tri : triangleCache_) {
-        const QVector3D normal = tri.center.normalized();
-        if (QVector3D::dotProduct(normal, toCam) > kVisibilityDotMargin) {
-            visibleIndices.push_back(tri.i0);
-            visibleIndices.push_back(tri.i1);
-            visibleIndices.push_back(tri.i2);
-        }
-    }
-
-    return visibleIndices;
-}
-
-TerrainMesh HexSphereSceneController::getVisibleTerrainMesh() const {
-    TerrainMesh visibleMesh = terrainCPU_;
-    visibleMesh.idx = getVisibleIndices(cameraPos_);
-    return visibleMesh;
-}
-
-void HexSphereSceneController::updateVisibility(const QVector3D& cameraPos) {
-    setCameraPosition(cameraPos);
-}
-
-std::pair<size_t, size_t> HexSphereSceneController::getVisibilityStats() const {
-    size_t totalTriangles = terrainCPU_.idx.size() / 3;
-    size_t visibleTriangles = getVisibleIndices(cameraPos_).size() / 3;
-    return { visibleTriangles, totalTriangles };
-}
-
-void HexSphereSceneController::rebuildCache() const {
-    if (terrainCPU_.idx.empty() || terrainCPU_.pos.empty()) {
-        triangleCache_.clear();
-        cacheValid_ = false;
-        return;
-    }
-
-    std::vector<QVector3D> positions = convertToQVector3D(terrainCPU_.pos);
-    triangleCache_.clear();
-    triangleCache_.reserve(terrainCPU_.idx.size() / 3);
-
-    QElapsedTimer timer;
-    timer.start();
-
-    for (size_t i = 0; i + 2 < terrainCPU_.idx.size(); i += 3) {
-        uint32_t i0 = terrainCPU_.idx[i];
-        uint32_t i1 = terrainCPU_.idx[i + 1];
-        uint32_t i2 = terrainCPU_.idx[i + 2];
-        QVector3D center = (positions[i0] + positions[i1] + positions[i2]) * (1.0f / 3.0f);
-        triangleCache_.push_back({ center, i0, i1, i2, 0.0f });
-    }
-
-    qDebug() << "Cache rebuilt:" << triangleCache_.size() << "triangles in" << timer.elapsed() << "ms";
-    cacheValid_ = true;
-}
-
-void HexSphereSceneController::validateCache() const {
-    if (!cacheValid_ || triangleCache_.size() != terrainCPU_.idx.size() / 3) {
-        rebuildCache();
-    }
 }
 
