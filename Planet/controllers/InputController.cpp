@@ -23,6 +23,8 @@ namespace {
     constexpr int kPathSegmentsPerEdge = 8;
     constexpr float kEntitySurfaceOffset = 0.0f;
     constexpr float kBaseTraversalSpeed = 0.35f;
+    constexpr const char* kFactoryMeshId = "factory";
+    constexpr const char* kMineMeshId = "mine";
 
     bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
         const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
@@ -95,6 +97,11 @@ namespace {
         return PathBuilder::effectiveMaxClimbDelta(pathSmoothDelta(scene));
     }
 
+    bool isMovableEntity(const ecs::ComponentStorage& ecs, int entityId) {
+        const auto* mesh = ecs.get<ecs::Mesh>(entityId);
+        return !mesh || (mesh->meshId != kFactoryMeshId && mesh->meshId != kMineMeshId);
+    }
+
 } // namespace
 
 InputController::InputController(CameraController& camera, SceneViewMode viewMode)
@@ -142,11 +149,27 @@ void InputController::initialize(QOpenGLWidget* owner) {
     if (!isContributorMode()) {
         auto& pyramid = ecs_.createEntity("Explorer");
         pyramid.currentCell = 0;
-        ecs_.emplace<ecs::Mesh>(pyramid.id).meshId = "pyramid";
+        ecs_.emplace<ecs::Mesh>(pyramid.id).meshId = "car";
         ecs::Transform& transform = ecs_.emplace<ecs::Transform>(pyramid.id);
         const QVector3D surfacePosition = computeSurfacePoint(scene_, 0, scene_.heightStep(), kEntitySurfaceOffset);
         transform.position = ecs::localToWorldPoint(transform, ecs::CoordinateFrame{}, surfacePosition);
         ecs_.emplace<ecs::Collider>(pyramid.id).radius = 0.08f;
+
+        auto& factory = ecs_.createEntity("Factory");
+        factory.currentCell = std::min(24, std::max(1, scene_.model().cellCount() / 6));
+        ecs_.emplace<ecs::Mesh>(factory.id).meshId = kFactoryMeshId;
+        ecs::Transform& factoryTransform = ecs_.emplace<ecs::Transform>(factory.id);
+        const QVector3D factorySurfacePosition = computeSurfacePoint(scene_, factory.currentCell, scene_.heightStep(), kEntitySurfaceOffset);
+        factoryTransform.position = ecs::localToWorldPoint(factoryTransform, ecs::CoordinateFrame{}, factorySurfacePosition);
+        ecs_.emplace<ecs::Collider>(factory.id).radius = 0.16f;
+
+        auto& mine = ecs_.createEntity("Mine");
+        mine.currentCell = std::min(48, std::max(2, scene_.model().cellCount() / 4));
+        ecs_.emplace<ecs::Mesh>(mine.id).meshId = kMineMeshId;
+        ecs::Transform& mineTransform = ecs_.emplace<ecs::Transform>(mine.id);
+        const QVector3D mineSurfacePosition = computeSurfacePoint(scene_, mine.currentCell, scene_.heightStep(), kEntitySurfaceOffset);
+        mineTransform.position = ecs::localToWorldPoint(mineTransform, ecs::CoordinateFrame{}, mineSurfacePosition);
+        ecs_.emplace<ecs::Collider>(mine.id).radius = 0.16f;
     }
 
     Response initResponse;
@@ -255,6 +278,12 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         if (!selected) return response;
 
         ecs::Entity& entity = selected->get();
+        if (!isMovableEntity(ecs_, entity.id)) {
+            response.hudMessage = QString("Static building cannot be moved");
+            response.requestUpdate = true;
+            return response;
+        }
+
         if (ecs_.get<ecs::Animation>(entity.id)) {
             response.hudMessage = QString("Explorer is already moving");
             response.requestUpdate = true;
@@ -346,8 +375,8 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         return response;
     }
 
-        rebuildModel(response);
-        return response;
+    rebuildModel(response);
+    return response;
 }
 
 InputController::Response InputController::setSubdivisionLevel(int L) {
@@ -511,11 +540,9 @@ void InputController::uploadSelection() {
 }
 
 void InputController::uploadBuffers() {
-    if (!renderer_) {
-        return;
+    if (renderer_) {
+        renderer_->uploadScene(scene_, uploadOptions_);
     }
-
-    renderer_->uploadScene(scene_, uploadOptions_);
 }
 
 void InputController::syncTerrainRenderConfigToEngine() {
@@ -728,6 +755,11 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     if (selectedEntityId_ == -1) return;
     auto* entity = ecs_.getEntity(selectedEntityId_);
     if (!entity) return;
+    if (!isMovableEntity(ecs_, entity->id)) {
+        response.hudMessage = QString("Static building cannot be moved");
+        response.requestUpdate = true;
+        return;
+    }
 
     if (ecs_.get<ecs::Animation>(entity->id)) {
         response.hudMessage = QString("Explorer is already moving");

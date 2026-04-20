@@ -1,5 +1,6 @@
-#include "renderers/HexSphereRenderer.h"
+﻿#include "renderers/HexSphereRenderer.h"
 
+#include <QElapsedTimer>
 #include <QOpenGLWidget>
 #include <QtDebug>
 
@@ -24,47 +25,49 @@ HexSphereRenderer::~HexSphereRenderer() {
         return;
     }
 
-    // Проверяем, существует ли ещё контекст OpenGL
     if (!QOpenGLContext::currentContext()) {
-        // Контекст уже уничтожен - ничего не делаем
         glReady_ = false;
         return;
     }
 
     owner_->makeCurrent();
 
-    // 1. Сначала удаляем рендереры (они используют OpenGL)
     terrainRenderer_.reset();
     waterRenderer_.reset();
     entityRenderer_.reset();
     overlayRenderer_.reset();
 
-    // 2. Очищаем модель деревьев
     if (treeModel_.use_count() == 1 && treeModel_) {
         treeModel_->clearGPUResources();
     }
+    if (carModel_.use_count() == 1 && carModel_) {
+        carModel_->clearGPUResources();
+    }
+    if (factoryModel_.use_count() == 1 && factoryModel_) {
+        factoryModel_->clearGPUResources();
+    }
+    if (mineModel_.use_count() == 1 && mineModel_) {
+        mineModel_->clearGPUResources();
+    }
 
-    // 3. Удаляем шейдерные программы
     if (progWire_)    gl_->glDeleteProgram(progWire_);
     if (progTerrain_) gl_->glDeleteProgram(progTerrain_);
     if (progSel_)     gl_->glDeleteProgram(progSel_);
     if (progWater_)   gl_->glDeleteProgram(progWater_);
     if (progModel_)   gl_->glDeleteProgram(progModel_);
+    if (progFactory_) gl_->glDeleteProgram(progFactory_);
+    if (progSteam_)   gl_->glDeleteProgram(progSteam_);
 
-    // 4. Удаляем VAO (кроме vaoTerrain_ - он удалится автоматически)
     if (vaoWire_ != 0)     gl_->glDeleteVertexArrays(1, &vaoWire_);
     if (vaoSel_ != 0)      gl_->glDeleteVertexArrays(1, &vaoSel_);
     if (vaoWater_ != 0)    gl_->glDeleteVertexArrays(1, &vaoWater_);
     if (vaoPyramid_ != 0)  gl_->glDeleteVertexArrays(1, &vaoPyramid_);
 
-    // 5. Явно уничтожаем QOpenGLVertexArrayObject
     if (vaoTerrain_.isCreated()) {
-        // Убеждаемся, что VAO не привязан
         gl_->glBindVertexArray(0);
         vaoTerrain_.destroy();
     }
 
-    // 6. Удаляем буферы
     if (vboPositions_)   gl_->glDeleteBuffers(1, &vboPositions_);
     if (vboTerrainPos_)  gl_->glDeleteBuffers(1, &vboTerrainPos_);
     if (vboTerrainCol_)  gl_->glDeleteBuffers(1, &vboTerrainCol_);
@@ -141,6 +144,8 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     progSel_ = makeProgram(VS_WIRE, FS_SEL);
     progWater_ = makeProgram(VS_WATER, FS_WATER);
     progModel_ = makeProgram(VS_MODEL, FS_MODEL);
+    progFactory_ = makeProgram(VS_FACTORY, FS_FACTORY);
+    progSteam_ = makeProgram(VS_STEAM, FS_STEAM);
 
     gl_->glUseProgram(progWire_);
     uMVP_Wire_ = gl_->glGetUniformLocation(progWire_, "uMVP");
@@ -169,6 +174,20 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     uViewPos_Model_ = gl_->glGetUniformLocation(progModel_, "uViewPos");
     uColor_Model_ = gl_->glGetUniformLocation(progModel_, "uColor");
     uUseTexture_ = gl_->glGetUniformLocation(progModel_, "uUseTexture");
+
+    gl_->glUseProgram(progFactory_);
+    uMVP_Factory_ = gl_->glGetUniformLocation(progFactory_, "uMVP");
+    uModel_Factory_ = gl_->glGetUniformLocation(progFactory_, "uModel");
+    uLightDir_Factory_ = gl_->glGetUniformLocation(progFactory_, "uLightDir");
+    uViewPos_Factory_ = gl_->glGetUniformLocation(progFactory_, "uViewPos");
+    uColor_Factory_ = gl_->glGetUniformLocation(progFactory_, "uColor");
+    uUseTexture_Factory_ = gl_->glGetUniformLocation(progFactory_, "uUseTexture");
+
+    gl_->glUseProgram(progSteam_);
+    uMVP_Steam_ = gl_->glGetUniformLocation(progSteam_, "uMVP");
+    uModel_Steam_ = gl_->glGetUniformLocation(progSteam_, "uModel");
+    uTime_Steam_ = gl_->glGetUniformLocation(progSteam_, "uTime");
+    uViewPos_Steam_ = gl_->glGetUniformLocation(progSteam_, "uViewPos");
 
     gl_->glUseProgram(0);
 
@@ -235,8 +254,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         loadContributorModel();
     }
 
-    // В HexSphereRenderer::initialize(), после всех остальных инициализаций:
-    owner_->makeCurrent();  // Убеждаемся, что контекст текущий
+    owner_->makeCurrent();
 
     const QString carPath = "resources/car/scene.obj";
     carModel_ = std::make_shared<CarModelHandler>();
@@ -244,13 +262,32 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         qDebug() << "Failed to load car model from:" << carPath;
     }
     else {
-        carModel_->uploadToGPU();  // Теперь текстуры загрузятся с активным контекстом
+        carModel_->uploadToGPU();
         qDebug() << "Car model loaded successfully";
     }
 
-    owner_->doneCurrent();  // Можно снять контекст, если нужно
+    const QString factoryPath = "resources/factory/scene.obj";
+    factoryModel_ = std::make_shared<FactoryModelHandler>();
+    if (!factoryModel_->loadFromFile(factoryPath)) {
+        qDebug() << "Failed to load factory model from:" << factoryPath;
+    }
+    else {
+        factoryModel_->uploadToGPU();
+        qDebug() << "Factory model loaded successfully";
+    }
 
-    // СОЗДАЁМ РЕНДЕРЕРЫ ПОСЛЕ ВСЕХ ИНИЦИАЛИЗАЦИЙ
+    const QString minePath = "resources/mine/stylized_gold_mine.obj";
+    mineModel_ = std::make_shared<MineModelHandler>();
+    if (!mineModel_->loadFromFile(minePath)) {
+        qDebug() << "Failed to load mine model from:" << minePath;
+    }
+    else {
+        mineModel_->uploadToGPU();
+        qDebug() << "Mine model loaded successfully";
+    }
+
+    owner_->doneCurrent();
+
     terrainRenderer_ = std::make_unique<TerrainRenderer>(
         gl_,
         progTerrain_,
@@ -258,15 +295,17 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         uModel_,
         uLightDir_,
         uNormalMatrix_,
-        vaoTerrain_.objectId()  // ← objectId() возвращает GLuint
+        vaoTerrain_.objectId()
     );
 
     waterRenderer_ = std::make_unique<WaterRenderer>(gl_, progWater_, uMVP_Water_, uTime_Water_, uLightDir_Water_, uViewPos_Water_, uEnvMap_, envCubemap_, vaoWater_, waterIndexCount_);
     entityRenderer_ = std::make_unique<EntityRenderer>(
-        gl_, progWire_, progSel_, progModel_,
+        gl_, progWire_, progSel_, progModel_, progFactory_, progSteam_,
         uMVP_Wire_, uMVP_Sel_, uMVP_Model_, uModel_Model_,
         uLightDir_Model_, uViewPos_Model_, uColor_Model_, uUseTexture_,
-        vaoPyramid_, pyramidVertexCount_, treeModel_, firTreeModel_, carModel_);
+        uMVP_Factory_, uModel_Factory_, uLightDir_Factory_, uViewPos_Factory_, uColor_Factory_, uUseTexture_Factory_,
+        uMVP_Steam_, uModel_Steam_, uTime_Steam_, uViewPos_Steam_,
+        vaoPyramid_, pyramidVertexCount_, treeModel_, firTreeModel_, carModel_, factoryModel_, mineModel_);
     overlayRenderer_ = std::make_unique<OverlayRenderer>(gl_, progWire_, progSel_, uMVP_Wire_, uMVP_Sel_, vaoWire_, vaoSel_, vaoPath_, lineVertexCount_, selLineVertexCount_, pathVertexCount_);
 
     glReady_ = true;
@@ -348,7 +387,6 @@ void HexSphereRenderer::uploadWireInternal(const std::vector<float>& vertices, G
 void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum usage) {
     qDebug() << "uploadTerrainInternal - original indices:" << mesh.idx.size();
 
-    // Загружаем вершины (это не меняется)
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
     gl_->glBufferData(GL_ARRAY_BUFFER, mesh.pos.size() * sizeof(float), mesh.pos.data(), usage);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainCol_);
@@ -356,12 +394,11 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainNorm_);
     gl_->glBufferData(GL_ARRAY_BUFFER, mesh.norm.size() * sizeof(float), mesh.norm.data(), usage);
 
-    // НЕ ФИЛЬТРУЕМ здесь - сохраняем все индексы
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
     gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER,
         mesh.idx.size() * sizeof(uint32_t),
         mesh.idx.data(),
-        GL_DYNAMIC_DRAW);  // Всегда DYNAMIC, так как будем менять
+        GL_DYNAMIC_DRAW);
 
     fullTerrainMesh_ = mesh;
     fullTerrainIndices_ = mesh.idx;
@@ -369,7 +406,6 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
     terrainIndexCount_ = GLsizei(mesh.idx.size());
     terrainVisibilityDirty_ = true;
 
-    // Создаем VAO один раз
     if (!vaoTerrain_.isCreated()) {
         recreateTerrainVAO();
     }
@@ -377,12 +413,9 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
     qDebug() << "uploadTerrainInternal - total indexCount:" << terrainIndexCount_;
 }
 
-
 void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
     if (!glReady_ || fullTerrainIndices_.empty()) return;
 
-
-    // Используем адаптивную логику для определения необходимости обновления
     const bool updateForCamera = terrainVisibility_.shouldUpdate(cameraPos);
     if (terrainVisibilityDirty_ || updateForCamera) {
         QElapsedTimer filterTimer;
@@ -406,7 +439,6 @@ void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
 
         qint64 elapsed = filterTimer.elapsed();
 
-        // Статистика
         static int updateCount = 0;
         static qint64 totalTime = 0;
         updateCount++;
@@ -420,7 +452,6 @@ void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
             qDebug() << "==============================";
         }
 
-        // Обновляем индексный буфер
         gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
         gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER,
             visibleIndices.size() * sizeof(uint32_t),
@@ -449,7 +480,6 @@ void HexSphereRenderer::recreateTerrainVAO() {
         return;
     }
 
-    // Если VAO уже создан, не создаем заново
     if (vaoTerrain_.isCreated()) {
         qDebug() << "VAO already created, skipping recreation";
         return;
@@ -457,7 +487,6 @@ void HexSphereRenderer::recreateTerrainVAO() {
 
     qDebug() << "Creating terrain VAO - START";
 
-    // Создаем новый VAO
     if (!vaoTerrain_.create()) {
         qDebug() << "Failed to create VAO!";
         return;
@@ -465,7 +494,6 @@ void HexSphereRenderer::recreateTerrainVAO() {
 
     vaoTerrain_.bind();
 
-    // Настраиваем атрибуты
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
     gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(0);
@@ -478,12 +506,10 @@ void HexSphereRenderer::recreateTerrainVAO() {
     gl_->glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(2);
 
-    // Привязываем индексный буфер
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
 
     vaoTerrain_.release();
 
-    // Обновляем VAO в рендерере
     if (terrainRenderer_) {
         terrainRenderer_->updateVAO(vaoTerrain_.objectId());
     }
@@ -594,7 +620,7 @@ void HexSphereRenderer::renderContributorModel(const RenderContext& ctx) {
             if (uTrunkColor >= 0) {
                 gl_->glUniform3f(uTrunkColor, contributorWoodColor_.x(), contributorWoodColor_.y(), contributorWoodColor_.z());
             }
-            contributorWoodModel_->draw(progModel_, mvp, model, ctx.camera.view, contributorWoodColor_, /*forceTextureOff=*/true);
+            contributorWoodModel_->draw(progModel_, mvp, model, ctx.camera.view, contributorWoodColor_, true);
         }
         if (contributorLeavesModel_) {
             if (uUseFoliageColor >= 0) {
@@ -604,7 +630,7 @@ void HexSphereRenderer::renderContributorModel(const RenderContext& ctx) {
             if (uFoliageColor >= 0) {
                 gl_->glUniform3f(uFoliageColor, contributorLeavesColor_.x(), contributorLeavesColor_.y(), contributorLeavesColor_.z());
             }
-            contributorLeavesModel_->draw(progModel_, mvp, model, ctx.camera.view, contributorLeavesColor_, /*forceTextureOff=*/true);
+            contributorLeavesModel_->draw(progModel_, mvp, model, ctx.camera.view, contributorLeavesColor_, true);
         }
     }
     else {
@@ -621,7 +647,7 @@ void HexSphereRenderer::renderContributorModel(const RenderContext& ctx) {
             model,
             ctx.camera.view,
             contributorModelColor_,
-            /*forceTextureOff=*/false);
+            false);
     }
 
     if (cullWasEnabled) {
@@ -650,7 +676,7 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
             uploadPathInternal({});
         }
         uploadWaterInternal(scene.buildWaterGeometry());
-        });
+    });
     qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
         << "(terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
 }
@@ -660,13 +686,11 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
 
     QVector3D cameraPos = (camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
 
-    // Проверяем, что рендереры существуют
     if (!terrainRenderer_ || !waterRenderer_ || !entityRenderer_ || !overlayRenderer_) {
         qDebug() << "ERROR: One or more renderers are null!";
         return;
     }
 
-    // Обновляем видимость
     updateVisibility(cameraPos);
 
     const float dpr = owner_->devicePixelRatioF();
@@ -674,7 +698,6 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     gl_->glClearColor(0.05f, 0.06f, 0.08f, 1.0f);
     gl_->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // === BASELINE GL STATE ===
     gl_->glDisable(GL_BLEND);
     gl_->glDepthMask(GL_TRUE);
     gl_->glEnable(GL_DEPTH_TEST);
@@ -690,21 +713,12 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
 
     if (stats_) stats_->startGPUTimer();
 
-
     RenderContext ctx{ graph, camera, lighting, camera.projection * camera.view, cameraPos };
 
     terrainRenderer_->render(ctx, terrainIndexCount_);
     waterRenderer_->render(ctx);
     entityRenderer_->renderEntities(ctx);
     overlayRenderer_->render(ctx);
-
-    // overlay ����� ������ �����/��������� � ����� ������ state
-    //gl_->glDisable(GL_BLEND);
-    //gl_->glDepthMask(GL_TRUE);
-    //gl_->glEnable(GL_DEPTH_TEST);
-    //gl_->glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    //gl_->glBindVertexArray(0);
-    //gl_->glUseProgram(0);
 
     if (graph.scene.isContributorMode()) {
         renderContributorModel(ctx);
@@ -788,3 +802,5 @@ void HexSphereRenderer::setOreAnimationTime(float time) {
 void HexSphereRenderer::setOreVisualizationEnabled(bool enabled) {
     oreVisualizationEnabled_ = enabled;
 }
+
+

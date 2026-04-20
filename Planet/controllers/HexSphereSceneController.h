@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <QSet>
 #include <QtDebug>
@@ -98,4 +98,3 @@ private:
     std::vector<TreePlacement> treePlacements_;
     QSet<int> treeOccupiedCells_;
 };
-
