@@ -90,6 +90,9 @@
     <ClCompile Include="dag\DagTerrainBackend.cpp">
       <Filter>dag</Filter>
     </ClCompile>
+    <ClCompile Include="dag\TerrainDagPipeline.cpp">
+      <Filter>dag</Filter>
+    </ClCompile>
     <ClCompile Include="dag\ProcessDagSmoke.cpp">
       <Filter>dag</Filter>
     </ClCompile>
@@ -165,7 +168,13 @@
     <ClCompile Include="model\CarModelHandler.cpp">
       <Filter>model</Filter>
     </ClCompile>
+    <ClCompile Include="model\FactoryModelHandler.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
     <ClCompile Include="model\HexSphereModel.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\MineModelHandler.cpp">
       <Filter>model</Filter>
     </ClCompile>
     <ClCompile Include="model\ModelHandler.cpp">
@@ -181,6 +190,9 @@
       <Filter>renderers</Filter>
     </ClCompile>
     <ClCompile Include="renderers\TerrainTessellator.cpp">
+      <Filter>renderers</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\TerrainVisibility.cpp">
       <Filter>renderers</Filter>
     </ClCompile>
     <ClCompile Include="renderers\WaterRenderer.cpp">
@@ -225,9 +237,6 @@
     <ClCompile Include="dag\LegacyTerrainBackend.cpp">
       <Filter>dag</Filter>
     </ClCompile>
-	<ClCompile Include="contributor\ContributorParticles.cpp">
-	  <Filter>contributor</Filter>
-	</ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core\AppViewConfig.h">
@@ -251,6 +260,12 @@
     <ClInclude Include="dag\DagTerrainBackend.h">
       <Filter>dag</Filter>
     </ClInclude>
+    <ClInclude Include="dag\TerrainDagPayloadStore.h">
+      <Filter>dag</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\TerrainDagPipeline.h">
+      <Filter>dag</Filter>
+    </ClInclude>
     <ClInclude Include="generation\ClimateBiomeGenerator.h">
       <Filter>generation</Filter>
     </ClInclude>
@@ -261,6 +276,9 @@
       <Filter>generation</Filter>
     </ClInclude>
     <ClInclude Include="generation\MeshGenerators\SelectionOutlineGenerator.h">
+      <Filter>generation\MeshGenerators</Filter>
+    </ClInclude>
+    <ClInclude Include="generation\MeshGenerators\TerrainMeshPolicy.h">
       <Filter>generation\MeshGenerators</Filter>
     </ClInclude>
     <ClInclude Include="generation\MeshGenerators\TerrainMeshGenerator.h">
@@ -275,6 +293,9 @@
     <ClInclude Include="model\CarModelHandler.h">
       <Filter>model</Filter>
     </ClInclude>
+    <ClInclude Include="model\FactoryModelHandler.h">
+      <Filter>model</Filter>
+    </ClInclude>
     <ClInclude Include="model\DebugModel.h">
       <Filter>model</Filter>
     </ClInclude>
@@ -282,6 +303,9 @@
       <Filter>model</Filter>
     </ClInclude>
     <ClInclude Include="model\ModelHandler.h">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\MineModelHandler.h">
       <Filter>model</Filter>
     </ClInclude>
     <ClInclude Include="model\SceneEntity.h">
@@ -303,6 +327,9 @@
       <Filter>renderers</Filter>
     </ClInclude>
     <ClInclude Include="renderers\TerrainTessellator.h">
+      <Filter>renderers</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\TerrainVisibility.h">
       <Filter>renderers</Filter>
     </ClInclude>
     <ClInclude Include="renderers\WaterRenderer.h">
@@ -452,9 +479,6 @@
     <ClInclude Include="dag\TerrainBackendTypes.h">
       <Filter>dag</Filter>
     </ClInclude>
-	<ClInclude Include="contributor\ContributorParticles.h">
-	  <Filter>contributor</Filter>
-	</ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="resources\HexSphereWidget_shaders.h">

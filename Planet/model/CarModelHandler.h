@@ -27,6 +27,7 @@ public:
     bool isEmpty() const { return meshes_.empty(); }
     QString loadedPath() const { return path_; }
     float wheelRadius() const { return averageWheelRadius_; }
+    const QMatrix4x4& localAlignment() const { return localAlignment_; }
 
 private:
     struct SubMesh {
@@ -43,6 +44,7 @@ private:
         bool hasVertexColors = false;
         bool isWheel = false;
         QVector3D localCenter{ 0.0f, 0.0f, 0.0f };
+        QVector3D localSpinAxis{ 1.0f, 0.0f, 0.0f };
         float localWheelRadius = 0.0f;
         GLuint textureId = 0;
         GLuint vao = 0;
@@ -58,11 +60,14 @@ private:
     GLuint loadTexture(const QString& path);
     void uploadSubMeshToGPU(SubMesh& sub);
     void clearSubMesh(SubMesh& sub);
+    void resetDerivedPlacementData();
+    void finalizePlacementFromWheelLayout();
 
     QString path_;
     QString materialLibraryPath_;
     std::vector<SubMesh> meshes_;
     std::unordered_map<QString, GLuint> textureCache_;
     float averageWheelRadius_ = 0.0f;
+    QMatrix4x4 localAlignment_;
     bool glReady_ = false;
 };

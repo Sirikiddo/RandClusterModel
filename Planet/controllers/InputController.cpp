@@ -23,6 +23,22 @@ namespace {
     constexpr int kPathSegmentsPerEdge = 8;
     constexpr float kEntitySurfaceOffset = 0.0f;
     constexpr float kBaseTraversalSpeed = 0.35f;
+    constexpr const char* kFactoryMeshId = "factory";
+    constexpr const char* kMineMeshId = "mine";
+
+    QString placementModelName(InputController::PlacementModel model) {
+        switch (model) {
+        case InputController::PlacementModel::Factory:
+            return QString("Factory");
+        case InputController::PlacementModel::Mine:
+            return QString("Mine");
+        case InputController::PlacementModel::Delete:
+            return QString("Delete");
+        case InputController::PlacementModel::None:
+        default:
+            return QString("Building");
+        }
+    }
 
     bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
         const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
@@ -95,6 +111,16 @@ namespace {
         return PathBuilder::effectiveMaxClimbDelta(pathSmoothDelta(scene));
     }
 
+    bool isMovableEntity(const ecs::ComponentStorage& ecs, int entityId) {
+        const auto* mesh = ecs.get<ecs::Mesh>(entityId);
+        return !mesh || (mesh->meshId != kFactoryMeshId && mesh->meshId != kMineMeshId);
+    }
+
+    bool isExplorerEntity(const ecs::ComponentStorage& ecs, int entityId) {
+        const auto* mesh = ecs.get<ecs::Mesh>(entityId);
+        return mesh && mesh->meshId == "car";
+    }
+
 } // namespace
 
 InputController::InputController(CameraController& camera, SceneViewMode viewMode)
@@ -142,7 +168,7 @@ void InputController::initialize(QOpenGLWidget* owner) {
     if (!isContributorMode()) {
         auto& pyramid = ecs_.createEntity("Explorer");
         pyramid.currentCell = 0;
-        ecs_.emplace<ecs::Mesh>(pyramid.id).meshId = "pyramid";
+        ecs_.emplace<ecs::Mesh>(pyramid.id).meshId = "car";
         ecs::Transform& transform = ecs_.emplace<ecs::Transform>(pyramid.id);
         const QVector3D surfacePosition = computeSurfacePoint(scene_, 0, scene_.heightStep(), kEntitySurfaceOffset);
         transform.position = ecs::localToWorldPoint(transform, ecs::CoordinateFrame{}, surfacePosition);
@@ -151,6 +177,7 @@ void InputController::initialize(QOpenGLWidget* owner) {
 
     Response initResponse;
     rebuildModel(initResponse);
+    refreshBuildPreview();
 }
 
 void InputController::resize(int w, int h, float devicePixelRatio) {
@@ -186,6 +213,18 @@ InputController::Response InputController::mousePress(QMouseEvent* e) {
         const auto p = e->position();
         auto hit = pickSceneAt(p.x(), p.y());
         if (!hit) return response;
+
+        if (isPlacementModeActive()) {
+            if (placementModel_ == PlacementModel::Delete) {
+                return deleteEntityAtHit(*hit);
+            }
+            if (hit->isEntity) {
+                response.hudMessage = QString("Selected cell is occupied");
+                response.requestUpdate = true;
+                return response;
+            }
+            return placeBuildingOnCell(hit->cellId);
+        }
 
         if (hit->isEntity) {
             selectEntity(hit->entityId, response);
@@ -255,6 +294,12 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         if (!selected) return response;
 
         ecs::Entity& entity = selected->get();
+        if (!isMovableEntity(ecs_, entity.id)) {
+            response.hudMessage = QString("Static building cannot be moved");
+            response.requestUpdate = true;
+            return response;
+        }
+
         if (ecs_.get<ecs::Animation>(entity.id)) {
             response.hudMessage = QString("Explorer is already moving");
             response.requestUpdate = true;
@@ -346,8 +391,8 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         return response;
     }
 
-        rebuildModel(response);
-        return response;
+    rebuildModel(response);
+    return response;
 }
 
 InputController::Response InputController::setSubdivisionLevel(int L) {
@@ -506,16 +551,17 @@ void InputController::rebuildModel(Response& response) {
 
 void InputController::uploadSelection() {
     if (renderer_) {
-        renderer_->uploadSelectionOutline(scene_.buildSelectionOutlineVertices());
+        const auto vertices = isBuildingPlacementMode()
+            ? scene_.buildOutlineVerticesForCells(buildPreviewCells_)
+            : scene_.buildSelectionOutlineVertices();
+        renderer_->uploadSelectionOutline(vertices);
     }
 }
 
 void InputController::uploadBuffers() {
-    if (!renderer_) {
-        return;
+    if (renderer_) {
+        renderer_->uploadScene(scene_, uploadOptions_);
     }
-
-    renderer_->uploadScene(scene_, uploadOptions_);
 }
 
 void InputController::syncTerrainRenderConfigToEngine() {
@@ -728,6 +774,11 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     if (selectedEntityId_ == -1) return;
     auto* entity = ecs_.getEntity(selectedEntityId_);
     if (!entity) return;
+    if (!isMovableEntity(ecs_, entity->id)) {
+        response.hudMessage = QString("Static building cannot be moved");
+        response.requestUpdate = true;
+        return;
+    }
 
     if (ecs_.get<ecs::Animation>(entity->id)) {
         response.hudMessage = QString("Explorer is already moving");
@@ -738,6 +789,11 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     const int oldCell = entity->currentCell;
     if (oldCell < 0 || oldCell >= scene_.model().cellCount()) return;
     if (cellId < 0 || cellId >= scene_.model().cellCount()) return;
+    if (isCellOccupied(cellId, entity->id)) {
+        response.hudMessage = QString("Target cell is occupied");
+        response.requestUpdate = true;
+        return;
+    }
 
     scene_.clearSelection();
     scene_.toggleCellSelection(oldCell);
@@ -768,6 +824,98 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
 
     deselectEntity();
     response.requestUpdate = true;
+}
+
+bool InputController::isCellOccupied(int cellId, std::optional<int> ignoredEntityId) const {
+    for (const auto& entityRef : ecs_.entities()) {
+        const ecs::Entity& entity = entityRef.get();
+        if (ignoredEntityId && entity.id == *ignoredEntityId) {
+            continue;
+        }
+        if (entity.currentCell == cellId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+InputController::Response InputController::placeBuildingOnCell(int cellId) {
+    Response response;
+    if (placementModel_ == PlacementModel::None || placementModel_ == PlacementModel::Delete) {
+        return response;
+    }
+    if (cellId < 0 || cellId >= scene_.model().cellCount()) {
+        response.hudMessage = QString("Invalid target cell");
+        response.requestUpdate = true;
+        return response;
+    }
+    if (isCellOccupied(cellId)) {
+        response.hudMessage = QString("Selected cell is occupied");
+        response.requestUpdate = true;
+        return response;
+    }
+    if (!canBuildOnCell(cellId)) {
+        response.hudMessage = QString("You can build only on cells next to the explorer");
+        response.requestUpdate = true;
+        return response;
+    }
+
+    auto& building = ecs_.createEntity(placementModelName(placementModel_));
+    building.currentCell = cellId;
+
+    const char* meshId = placementModel_ == PlacementModel::Factory ? kFactoryMeshId : kMineMeshId;
+    ecs_.emplace<ecs::Mesh>(building.id).meshId = meshId;
+
+    ecs::Transform& transform = ecs_.emplace<ecs::Transform>(building.id);
+    transform.position = computeSurfacePoint(scene_, cellId, scene_.heightStep(), kEntitySurfaceOffset);
+    ecs_.emplace<ecs::Collider>(building.id).radius = 0.16f;
+
+    response.hudMessage = QString("%1 placed on cell %2")
+        .arg(placementModelName(placementModel_))
+        .arg(cellId);
+    response.requestUpdate = true;
+    refreshBuildPreview();
+    return response;
+}
+
+bool InputController::isDeletableEntity(int entityId) const {
+    const auto* mesh = ecs_.get<ecs::Mesh>(entityId);
+    if (!mesh) {
+        return false;
+    }
+    return mesh->meshId == kFactoryMeshId || mesh->meshId == kMineMeshId;
+}
+
+InputController::Response InputController::deleteEntityAtHit(const PickHit& hit) {
+    Response response;
+    int entityId = -1;
+
+    if (hit.isEntity) {
+        entityId = hit.entityId;
+    }
+    else if (hit.cellId >= 0) {
+        for (const auto& entityRef : ecs_.entities()) {
+            const ecs::Entity& entity = entityRef.get();
+            if (entity.currentCell == hit.cellId && isDeletableEntity(entity.id)) {
+                entityId = entity.id;
+                break;
+            }
+        }
+    }
+
+    if (entityId == -1 || !isDeletableEntity(entityId)) {
+        response.hudMessage = QString("Click a factory or mine to delete it");
+        response.requestUpdate = true;
+        return response;
+    }
+
+    if (selectedEntityId_ == entityId) {
+        deselectEntity();
+    }
+    ecs_.destroyEntity(entityId);
+    response.hudMessage = QString("Building removed");
+    response.requestUpdate = true;
+    return response;
 }
 
 InputController::Response InputController::contributorModeResponse() const {
@@ -836,6 +984,28 @@ InputController::Response InputController::regenerateOreDeposits() {
     return response;
 }
 
+InputController::Response InputController::setPlacementModel(PlacementModel model) {
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
+
+    Response response;
+    placementModel_ = model;
+    refreshBuildPreview();
+    response.requestUpdate = true;
+    if (placementModel_ == PlacementModel::None) {
+        response.hudMessage = QString("Building placement disabled");
+    }
+    else if (placementModel_ == PlacementModel::Delete) {
+        response.hudMessage = QString("Delete mode enabled. Click a factory or mine to remove it.");
+    }
+    else {
+        response.hudMessage = QString("%1 placement enabled. Click a cell on the planet.")
+            .arg(placementModelName(placementModel_));
+    }
+    return response;
+}
+
 
 bool InputController::applyAnimation(int entityId, int targetCell, float speed, float bounceHeight) {
     auto* entity = ecs_.getEntity(entityId);
@@ -862,8 +1032,13 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
     if (targetCell < 0 || targetCell >= scene_.model().cellCount()) {
         return false;
     }
+    if (targetCell != startCell && isCellOccupied(targetCell, entityId)) {
+        qDebug() << "Entity" << entityId << "cannot move to occupied cell" << targetCell;
+        return false;
+    }
     if (targetCell == startCell) {
         transform->position = computeSurfacePoint(scene_, targetCell, scene_.heightStep(), kEntitySurfaceOffset);
+        refreshBuildPreview();
         return true;
     }
 
@@ -980,10 +1155,61 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
         }
         };
 
+    refreshBuildPreview();
     return true;
 }
 
 void InputController::updateAnimations(float dt) {
     ecs_.update(dt);
+    refreshBuildPreview();
+}
+
+std::optional<int> InputController::explorerCurrentCell() const {
+    for (const auto& entityRef : ecs_.entities()) {
+        const ecs::Entity& entity = entityRef.get();
+        if (isExplorerEntity(ecs_, entity.id)) {
+            return entity.currentCell;
+        }
+    }
+    return std::nullopt;
+}
+
+bool InputController::isBuildingPlacementMode() const {
+    return placementModel_ == PlacementModel::Factory || placementModel_ == PlacementModel::Mine;
+}
+
+bool InputController::canBuildOnCell(int cellId) const {
+    return buildPreviewCells_.contains(cellId);
+}
+
+void InputController::refreshBuildPreview() {
+    const auto explorerCell = explorerCurrentCell();
+    const int anchorCell = (explorerCell && *explorerCell >= 0) ? *explorerCell : -1;
+    const bool shouldShowPreview = isBuildingPlacementMode();
+
+    QSet<int> nextPreviewCells;
+    if (shouldShowPreview && anchorCell >= 0 && anchorCell < scene_.model().cellCount()) {
+        const auto& cells = scene_.model().cells();
+        const auto& origin = cells[static_cast<size_t>(anchorCell)];
+        for (int neighbor : origin.neighbors) {
+            if (neighbor < 0) {
+                continue;
+            }
+            if (!isCellOccupied(neighbor)) {
+                nextPreviewCells.insert(neighbor);
+            }
+        }
+    }
+
+    if (lastBuildPreviewActive_ == shouldShowPreview &&
+        lastBuildPreviewAnchorCell_ == anchorCell &&
+        buildPreviewCells_ == nextPreviewCells) {
+        return;
+    }
+
+    lastBuildPreviewActive_ = shouldShowPreview;
+    lastBuildPreviewAnchorCell_ = anchorCell;
+    buildPreviewCells_ = std::move(nextPreviewCells);
+    uploadSelection();
 }
 

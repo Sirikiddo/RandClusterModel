@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <QSet>
 #include <QtDebug>
@@ -42,6 +42,7 @@ public:
 
     std::vector<float> buildWireVertices() const;
     std::vector<float> buildSelectionOutlineVertices() const;
+    std::vector<float> buildOutlineVerticesForCells(const QSet<int>& cells) const;
     WaterGeometryData buildWaterGeometry() const;
     TerrainSnapshot captureTerrainSnapshot() const;
     void applyTerrainSnapshot(const TerrainSnapshot& snapshot);
@@ -98,4 +99,3 @@ private:
     std::vector<TreePlacement> treePlacements_;
     QSet<int> treeOccupiedCells_;
 };
-

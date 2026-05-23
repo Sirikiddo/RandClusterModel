@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <map>
 #include <memory>
@@ -65,7 +65,6 @@ public:
         bool forceTextureOff = false);
 
     bool hasPart(const QString& partName) const;
-    bool hasDrawablePart(const QString& partName) const;
 
     void clear();
     void clearGPUResources();

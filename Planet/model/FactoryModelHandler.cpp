@@ -1,0 +1,786 @@
+﻿#include "model/FactoryModelHandler.h"
+
+#include <QDebug>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QImage>
+#include <QOpenGLContext>
+#include <QRegularExpression>
+#include <QVector4D>
+
+#include <charconv>
+#include <algorithm>
+#include <limits>
+#include <map>
+#include <sstream>
+#include <string_view>
+
+FactoryModelHandler::~FactoryModelHandler() {
+    clearGPUResources();
+}
+
+static QString canonicalFactoryPath(const QString& path) {
+    QFileInfo fi(path);
+    if (fi.exists()) {
+        return fi.absoluteFilePath();
+    }
+    return path;
+}
+
+namespace {
+    struct VertexKey {
+        int v = -1;
+        int vt = -1;
+        int vn = -1;
+
+        bool operator==(const VertexKey& other) const {
+            return v == other.v && vt == other.vt && vn == other.vn;
+        }
+    };
+
+    struct VertexKeyHash {
+        size_t operator()(const VertexKey& key) const noexcept {
+            const size_t h1 = std::hash<int>{}(key.v);
+            const size_t h2 = std::hash<int>{}(key.vt);
+            const size_t h3 = std::hash<int>{}(key.vn);
+            return h1 ^ (h2 << 1) ^ (h3 << 2);
+        }
+    };
+
+    std::vector<std::string_view> splitWhitespace(std::string_view sv, size_t startIndex) {
+        std::vector<std::string_view> tokens;
+        size_t i = startIndex;
+        while (i < sv.size()) {
+            while (i < sv.size() && (sv[i] == ' ' || sv[i] == '\t')) {
+                ++i;
+            }
+            if (i >= sv.size()) {
+                break;
+            }
+            size_t j = i;
+            while (j < sv.size() && sv[j] != ' ' && sv[j] != '\t') {
+                ++j;
+            }
+            tokens.push_back(sv.substr(i, j - i));
+            i = j;
+        }
+        return tokens;
+    }
+
+    int resolveObjIndex(int rawIndex, int count) {
+        if (rawIndex > 0) {
+            return rawIndex - 1;
+        }
+        if (rawIndex < 0) {
+            return count + rawIndex;
+        }
+        return -1;
+    }
+
+    QString resolvePathNearFile(const QFileInfo& baseFile, const QString& relativeOrAbsolutePath) {
+        QFileInfo pathInfo(relativeOrAbsolutePath);
+        if (pathInfo.isAbsolute()) {
+            return canonicalFactoryPath(pathInfo.filePath());
+        }
+        return canonicalFactoryPath(baseFile.dir().filePath(relativeOrAbsolutePath));
+    }
+
+    bool isPlatformSubMesh(const QVector3D& minPos, const QVector3D& maxPos) {
+        const float sizeX = maxPos.x() - minPos.x();
+        const float sizeY = maxPos.y() - minPos.y();
+        const float sizeZ = maxPos.z() - minPos.z();
+        const float footprintArea = sizeX * sizeZ;
+
+        return sizeY < 1e-4f && footprintArea > 20.0f;
+    }
+}
+
+void FactoryModelHandler::resetDerivedPlacementData() {
+    localPlacement_.setToIdentity();
+}
+
+void FactoryModelHandler::finalizePlacement() {
+    resetDerivedPlacementData();
+
+    if (meshes_.empty()) {
+        return;
+    }
+
+    QVector3D minPos(
+        std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max());
+    QVector3D maxPos(
+        -std::numeric_limits<float>::max(),
+        -std::numeric_limits<float>::max(),
+        -std::numeric_limits<float>::max());
+
+    for (const auto& sub : meshes_) {
+        for (size_t i = 0; i + 2 < sub.positions.size(); i += 3) {
+            const QVector3D p(sub.positions[i], sub.positions[i + 1], sub.positions[i + 2]);
+            minPos.setX(std::min(minPos.x(), p.x()));
+            minPos.setY(std::min(minPos.y(), p.y()));
+            minPos.setZ(std::min(minPos.z(), p.z()));
+            maxPos.setX(std::max(maxPos.x(), p.x()));
+            maxPos.setY(std::max(maxPos.y(), p.y()));
+            maxPos.setZ(std::max(maxPos.z(), p.z()));
+        }
+    }
+
+    const QVector3D horizontalCenter(
+        (minPos.x() + maxPos.x()) * 0.5f,
+        0.0f,
+        (minPos.z() + maxPos.z()) * 0.5f);
+
+    const float localGroundY = minPos.y();
+    localPlacement_.translate(-horizontalCenter.x(), -localGroundY, -horizontalCenter.z());
+}
+
+bool FactoryModelHandler::loadFromFile(const QString& path) {
+    const QString normalized = canonicalFactoryPath(path);
+
+    if (path_ == normalized && !meshes_.empty()) {
+        return true;
+    }
+
+    if (!path_.isEmpty() && path_ != normalized) {
+        clear();
+    }
+
+    qDebug() << "Loading factory model:" << normalized;
+    resetDerivedPlacementData();
+
+    QFileInfo fi(normalized);
+    QString ext = fi.suffix().toLower();
+    if (ext != "obj") {
+        qDebug() << "FactoryModelHandler only supports OBJ format";
+        return false;
+    }
+
+    QFile file(normalized);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qDebug() << "Cannot open file:" << normalized;
+        return false;
+    }
+
+    QByteArray raw = file.readAll();
+    file.close();
+
+    std::istringstream stream(std::string(raw.constData(), raw.size()));
+
+    std::vector<float> tmpPos, tmpNorm, tmpUV, tmpColor;
+    std::vector<uint8_t> tmpHasColor;
+    std::string line;
+
+    struct FaceCorner {
+        int v = 0;
+        int vt = -1;
+        int vn = -1;
+    };
+
+    struct FaceBatch {
+        QString objectName;
+        QString materialName;
+        std::vector<FaceCorner> faces;
+    };
+
+    std::unordered_map<QString, FaceBatch> faceBatches;
+    QString currentMaterial;
+    QString currentObject;
+    materialLibraryPath_.clear();
+
+    auto parseFaceCorner = [](const std::string_view& tok) -> FaceCorner {
+        FaceCorner fc;
+        int slash1 = -1;
+        int slash2 = -1;
+        for (size_t i = 0; i < tok.size(); ++i) {
+            if (tok[i] == '/') {
+                if (slash1 < 0) {
+                    slash1 = static_cast<int>(i);
+                }
+                else {
+                    slash2 = static_cast<int>(i);
+                    break;
+                }
+            }
+        }
+
+        auto parseInt = [](std::string_view s, int& x) -> bool {
+            const char* first = s.data();
+            const char* last = first + s.size();
+            auto res = std::from_chars(first, last, x);
+            return res.ec == std::errc{};
+        };
+
+        if (slash1 < 0) {
+            parseInt(tok, fc.v);
+        }
+        else if (slash2 < 0) {
+            parseInt(tok.substr(0, slash1), fc.v);
+            std::string_view b = tok.substr(slash1 + 1);
+            if (!b.empty()) {
+                parseInt(b, fc.vt);
+            }
+        }
+        else {
+            parseInt(tok.substr(0, slash1), fc.v);
+            std::string_view vt = tok.substr(slash1 + 1, slash2 - slash1 - 1);
+            if (!vt.empty()) {
+                parseInt(vt, fc.vt);
+            }
+            std::string_view vn = tok.substr(slash2 + 1);
+            if (!vn.empty()) {
+                parseInt(vn, fc.vn);
+            }
+        }
+        return fc;
+    };
+
+    while (std::getline(stream, line)) {
+        std::string_view sv(line);
+        size_t start = 0;
+        while (start < sv.size() && (sv[start] == ' ' || sv[start] == '\t' || sv[start] == '\r')) {
+            ++start;
+        }
+        size_t end = sv.size();
+        while (end > start && (sv[end - 1] == ' ' || sv[end - 1] == '\t' || sv[end - 1] == '\r' || sv[end - 1] == '\n')) {
+            --end;
+        }
+        sv = sv.substr(start, end - start);
+
+        if (sv.empty() || sv[0] == '#') {
+            continue;
+        }
+
+        if (sv.rfind("mtllib ", 0) == 0) {
+            const QString mtllibRef = QString::fromStdString(std::string(sv.substr(7))).trimmed();
+            if (!mtllibRef.isEmpty()) {
+                materialLibraryPath_ = resolvePathNearFile(fi, mtllibRef);
+            }
+        }
+        else if (sv.size() >= 2 && sv[0] == 'v' && sv[1] == ' ') {
+            const auto toks = splitWhitespace(sv, 2);
+            if (toks.size() >= 3) {
+                float x = 0.0f;
+                float y = 0.0f;
+                float z = 0.0f;
+                std::from_chars(toks[0].data(), toks[0].data() + toks[0].size(), x);
+                std::from_chars(toks[1].data(), toks[1].data() + toks[1].size(), y);
+                std::from_chars(toks[2].data(), toks[2].data() + toks[2].size(), z);
+                tmpPos.insert(tmpPos.end(), { x, y, z });
+
+                if (toks.size() >= 6) {
+                    float r = 1.0f;
+                    float g = 1.0f;
+                    float b = 1.0f;
+                    std::from_chars(toks[3].data(), toks[3].data() + toks[3].size(), r);
+                    std::from_chars(toks[4].data(), toks[4].data() + toks[4].size(), g);
+                    std::from_chars(toks[5].data(), toks[5].data() + toks[5].size(), b);
+                    tmpColor.insert(tmpColor.end(), { r, g, b });
+                    tmpHasColor.push_back(1);
+                }
+                else {
+                    tmpColor.insert(tmpColor.end(), { 1.0f, 1.0f, 1.0f });
+                    tmpHasColor.push_back(0);
+                }
+            }
+        }
+        else if (sv.size() >= 3 && sv[0] == 'v' && sv[1] == 't' && sv[2] == ' ') {
+            const auto toks = splitWhitespace(sv, 3);
+            if (toks.size() >= 2) {
+                float u = 0.0f;
+                float v = 0.0f;
+                std::from_chars(toks[0].data(), toks[0].data() + toks[0].size(), u);
+                std::from_chars(toks[1].data(), toks[1].data() + toks[1].size(), v);
+                tmpUV.insert(tmpUV.end(), { u, v });
+            }
+        }
+        else if (sv.size() >= 3 && sv[0] == 'v' && sv[1] == 'n' && sv[2] == ' ') {
+            const auto toks = splitWhitespace(sv, 3);
+            if (toks.size() >= 3) {
+                float x = 0.0f;
+                float y = 0.0f;
+                float z = 0.0f;
+                std::from_chars(toks[0].data(), toks[0].data() + toks[0].size(), x);
+                std::from_chars(toks[1].data(), toks[1].data() + toks[1].size(), y);
+                std::from_chars(toks[2].data(), toks[2].data() + toks[2].size(), z);
+                tmpNorm.insert(tmpNorm.end(), { x, y, z });
+            }
+        }
+        else if (sv.rfind("o ", 0) == 0 || sv.rfind("g ", 0) == 0) {
+            currentObject = QString::fromStdString(std::string(sv.substr(2))).trimmed();
+        }
+        else if (sv.rfind("usemtl ", 0) == 0) {
+            currentMaterial = QString::fromStdString(std::string(sv.substr(7))).trimmed();
+        }
+        else if (sv.size() >= 2 && sv[0] == 'f' && sv[1] == ' ') {
+            const auto toks = splitWhitespace(sv, 2);
+            if (toks.size() >= 3) {
+                std::vector<FaceCorner> corners;
+                corners.reserve(toks.size());
+                for (auto tok : toks) {
+                    corners.push_back(parseFaceCorner(tok));
+                }
+
+                const QString batchKey = currentObject + "|" + currentMaterial;
+                FaceBatch& batch = faceBatches[batchKey];
+                batch.objectName = currentObject;
+                batch.materialName = currentMaterial;
+
+                for (size_t k = 1; k + 1 < corners.size(); ++k) {
+                    batch.faces.push_back(corners[0]);
+                    batch.faces.push_back(corners[k]);
+                    batch.faces.push_back(corners[k + 1]);
+                }
+            }
+        }
+    }
+
+    for (auto& [batchKey, batch] : faceBatches) {
+        Q_UNUSED(batchKey);
+        if (batch.faces.empty()) {
+            continue;
+        }
+
+        SubMesh sub;
+        sub.objectName = batch.objectName;
+        sub.materialName = batch.materialName;
+
+        std::unordered_map<VertexKey, uint32_t, VertexKeyHash> vertexMap;
+
+        auto addVertex = [&](const FaceCorner& fc) -> uint32_t {
+            const int v = resolveObjIndex(fc.v, static_cast<int>(tmpPos.size() / 3));
+            const int vt = (fc.vt == -1) ? -1 : resolveObjIndex(fc.vt, static_cast<int>(tmpUV.size() / 2));
+            const int vn = (fc.vn == -1) ? -1 : resolveObjIndex(fc.vn, static_cast<int>(tmpNorm.size() / 3));
+
+            if (v < 0 || static_cast<size_t>(v) * 3 + 2 >= tmpPos.size()) {
+                return std::numeric_limits<uint32_t>::max();
+            }
+
+            const VertexKey key{ v, vt, vn };
+            auto it = vertexMap.find(key);
+            if (it != vertexMap.end()) {
+                return it->second;
+            }
+
+            const uint32_t idx = static_cast<uint32_t>(sub.positions.size() / 3);
+            sub.positions.push_back(tmpPos[v * 3]);
+            sub.positions.push_back(tmpPos[v * 3 + 1]);
+            sub.positions.push_back(tmpPos[v * 3 + 2]);
+
+            if (vn >= 0 && static_cast<size_t>(vn) * 3 + 2 < tmpNorm.size()) {
+                sub.normals.push_back(tmpNorm[vn * 3]);
+                sub.normals.push_back(tmpNorm[vn * 3 + 1]);
+                sub.normals.push_back(tmpNorm[vn * 3 + 2]);
+            }
+            else {
+                sub.normals.push_back(0.0f);
+                sub.normals.push_back(1.0f);
+                sub.normals.push_back(0.0f);
+            }
+
+            if (vt >= 0 && static_cast<size_t>(vt) * 2 + 1 < tmpUV.size()) {
+                sub.texcoords.push_back(tmpUV[vt * 2]);
+                sub.texcoords.push_back(tmpUV[vt * 2 + 1]);
+                sub.hasTexcoords = true;
+            }
+            else {
+                sub.texcoords.push_back(0.0f);
+                sub.texcoords.push_back(0.0f);
+            }
+
+            if (static_cast<size_t>(v) * 3 + 2 < tmpColor.size()) {
+                sub.colors.push_back(tmpColor[v * 3]);
+                sub.colors.push_back(tmpColor[v * 3 + 1]);
+                sub.colors.push_back(tmpColor[v * 3 + 2]);
+                if (static_cast<size_t>(v) < tmpHasColor.size() && tmpHasColor[v] != 0) {
+                    sub.hasVertexColors = true;
+                }
+            }
+            else {
+                sub.colors.push_back(1.0f);
+                sub.colors.push_back(1.0f);
+                sub.colors.push_back(1.0f);
+            }
+
+            vertexMap[key] = idx;
+            return idx;
+        };
+
+        for (size_t f = 0; f < batch.faces.size(); f += 3) {
+            const uint32_t i0 = addVertex(batch.faces[f]);
+            const uint32_t i1 = addVertex(batch.faces[f + 1]);
+            const uint32_t i2 = addVertex(batch.faces[f + 2]);
+            if (i0 == std::numeric_limits<uint32_t>::max() ||
+                i1 == std::numeric_limits<uint32_t>::max() ||
+                i2 == std::numeric_limits<uint32_t>::max()) {
+                continue;
+            }
+
+            sub.indices.push_back(i0);
+            sub.indices.push_back(i1);
+            sub.indices.push_back(i2);
+        }
+
+        if (sub.positions.empty() || sub.indices.empty()) {
+            continue;
+        }
+
+        QVector3D minPos(
+            std::numeric_limits<float>::max(),
+            std::numeric_limits<float>::max(),
+            std::numeric_limits<float>::max());
+        QVector3D maxPos(
+            -std::numeric_limits<float>::max(),
+            -std::numeric_limits<float>::max(),
+            -std::numeric_limits<float>::max());
+
+        for (size_t i = 0; i + 2 < sub.positions.size(); i += 3) {
+            const QVector3D p(sub.positions[i], sub.positions[i + 1], sub.positions[i + 2]);
+            minPos.setX(std::min(minPos.x(), p.x()));
+            minPos.setY(std::min(minPos.y(), p.y()));
+            minPos.setZ(std::min(minPos.z(), p.z()));
+            maxPos.setX(std::max(maxPos.x(), p.x()));
+            maxPos.setY(std::max(maxPos.y(), p.y()));
+            maxPos.setZ(std::max(maxPos.z(), p.z()));
+        }
+
+        if (isPlatformSubMesh(minPos, maxPos)) {
+            continue;
+        }
+
+        meshes_.push_back(std::move(sub));
+    }
+
+    if (meshes_.empty()) {
+        qDebug() << "No mesh data loaded for factory model";
+        return false;
+    }
+
+    finalizePlacement();
+    path_ = normalized;
+    loadMaterials(normalized);
+    return true;
+}
+
+void FactoryModelHandler::loadMaterials(const QString& objPath) {
+    QFileInfo objInfo(objPath);
+    const QString mtlPath = materialLibraryPath_.isEmpty()
+        ? canonicalFactoryPath(objInfo.path() + "/" + objInfo.baseName() + ".mtl")
+        : materialLibraryPath_;
+
+    QFile mtlFile(mtlPath);
+    if (!mtlFile.open(QIODevice::ReadOnly)) {
+        qDebug() << "Cannot open MTL file:" << mtlPath;
+        return;
+    }
+
+    QString currentMat;
+    std::map<QString, QString> textureMap;
+    std::map<QString, QVector3D> kdMap;
+
+    QRegularExpression wsRe(QStringLiteral("\\s+"));
+    while (!mtlFile.atEnd()) {
+        const QString line = QString::fromUtf8(mtlFile.readLine()).trimmed();
+        if (line.isEmpty() || line.startsWith('#')) {
+            continue;
+        }
+
+        const QStringList parts = line.split(wsRe, Qt::SkipEmptyParts);
+        if (parts.isEmpty()) {
+            continue;
+        }
+
+        if (parts[0] == "newmtl") {
+            currentMat = line.mid(7).trimmed();
+        }
+        else if (parts[0] == "Kd" && parts.size() >= 4) {
+            kdMap[currentMat] = QVector3D(parts[1].toFloat(), parts[2].toFloat(), parts[3].toFloat());
+        }
+        else if (parts[0] == "map_Kd" && parts.size() >= 2) {
+            QString texPath = line.mid(QStringLiteral("map_Kd").size()).trimmed();
+            texPath = resolvePathNearFile(QFileInfo(mtlPath), texPath);
+            textureMap[currentMat] = texPath;
+        }
+    }
+    mtlFile.close();
+
+    for (auto& sub : meshes_) {
+        auto texIt = textureMap.find(sub.materialName);
+        if (texIt != textureMap.end()) {
+            sub.texturePath = texIt->second;
+        }
+
+        auto colorIt = kdMap.find(sub.materialName);
+        if (colorIt != kdMap.end()) {
+            sub.kdColor = colorIt->second;
+        }
+    }
+}
+
+GLuint FactoryModelHandler::loadTexture(const QString& path) {
+    if (!QOpenGLContext::currentContext()) {
+        qDebug() << "Cannot load texture" << path << "- no OpenGL context";
+        return 0;
+    }
+
+    const QString normalized = canonicalFactoryPath(path);
+    auto cached = textureCache_.find(normalized);
+    if (cached != textureCache_.end()) {
+        return cached->second;
+    }
+
+    QImage img;
+    if (!img.load(normalized)) {
+        qDebug() << "Failed to load texture:" << normalized;
+        return 0;
+    }
+
+    img = img.convertToFormat(QImage::Format_RGBA8888);
+
+    GLuint texId = 0;
+    glGenTextures(1, &texId);
+    glBindTexture(GL_TEXTURE_2D, texId);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.width(), img.height(),
+        0, GL_RGBA, GL_UNSIGNED_BYTE, img.constBits());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    textureCache_[normalized] = texId;
+    return texId;
+}
+
+void FactoryModelHandler::uploadToGPU() {
+    if (!QOpenGLContext::currentContext()) {
+        return;
+    }
+    if (!glReady_) {
+        initializeOpenGLFunctions();
+        glReady_ = true;
+    }
+
+    for (auto& sub : meshes_) {
+        uploadSubMeshToGPU(sub);
+    }
+}
+
+void FactoryModelHandler::uploadSubMeshToGPU(SubMesh& sub) {
+    if (sub.positions.empty()) {
+        return;
+    }
+
+    if (sub.vao != 0) {
+        if (!sub.texturePath.isEmpty() && sub.textureId == 0) {
+            sub.textureId = loadTexture(sub.texturePath);
+        }
+        return;
+    }
+
+    if (!QOpenGLContext::currentContext()) {
+        qDebug() << "No OpenGL context for uploading factory submesh";
+        return;
+    }
+
+    glGenVertexArrays(1, &sub.vao);
+    glGenBuffers(1, &sub.vboPos);
+    if (!sub.normals.empty()) {
+        glGenBuffers(1, &sub.vboNorm);
+    }
+    if (!sub.texcoords.empty()) {
+        glGenBuffers(1, &sub.vboUV);
+    }
+    if (!sub.colors.empty()) {
+        glGenBuffers(1, &sub.vboColor);
+    }
+    glGenBuffers(1, &sub.ibo);
+
+    glBindVertexArray(sub.vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, sub.vboPos);
+    glBufferData(GL_ARRAY_BUFFER, sub.positions.size() * sizeof(float), sub.positions.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glEnableVertexAttribArray(0);
+
+    if (!sub.normals.empty()) {
+        glBindBuffer(GL_ARRAY_BUFFER, sub.vboNorm);
+        glBufferData(GL_ARRAY_BUFFER, sub.normals.size() * sizeof(float), sub.normals.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glEnableVertexAttribArray(1);
+    }
+
+    if (!sub.texcoords.empty()) {
+        glBindBuffer(GL_ARRAY_BUFFER, sub.vboUV);
+        glBufferData(GL_ARRAY_BUFFER, sub.texcoords.size() * sizeof(float), sub.texcoords.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glEnableVertexAttribArray(2);
+    }
+
+    if (!sub.colors.empty()) {
+        glBindBuffer(GL_ARRAY_BUFFER, sub.vboColor);
+        glBufferData(GL_ARRAY_BUFFER, sub.colors.size() * sizeof(float), sub.colors.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glEnableVertexAttribArray(3);
+    }
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sub.ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sub.indices.size() * sizeof(uint32_t), sub.indices.data(), GL_STATIC_DRAW);
+
+    sub.indexCount = static_cast<GLsizei>(sub.indices.size());
+    glBindVertexArray(0);
+
+    if (!sub.texturePath.isEmpty() && sub.textureId == 0) {
+        sub.textureId = loadTexture(sub.texturePath);
+    }
+}
+
+void FactoryModelHandler::draw(GLuint shader,
+    const QMatrix4x4& mvp,
+    const QMatrix4x4& modelMatrix,
+    const QMatrix4x4& viewMatrix) {
+    if (!glReady_ || meshes_.empty()) {
+        return;
+    }
+
+    glUseProgram(shader);
+
+    const GLint uMVP = glGetUniformLocation(shader, "uMVP");
+    const GLint uModel = glGetUniformLocation(shader, "uModel");
+    const GLint uViewPos = glGetUniformLocation(shader, "uViewPos");
+    const GLint uLightDir = glGetUniformLocation(shader, "uLightDir");
+    const GLint uUseTexture = glGetUniformLocation(shader, "uUseTexture");
+    const GLint uTexture = glGetUniformLocation(shader, "uTexture");
+    const GLint uUseVertexColor = glGetUniformLocation(shader, "uUseVertexColor");
+    const GLint uColor = glGetUniformLocation(shader, "uColor");
+
+    const QVector3D eye = (viewMatrix.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
+    if (uViewPos >= 0) {
+        glUniform3f(uViewPos, eye.x(), eye.y(), eye.z());
+    }
+    if (uLightDir >= 0) {
+        glUniform3f(uLightDir, 0.35f, 1.0f, 0.2f);
+    }
+    glActiveTexture(GL_TEXTURE0);
+
+    const QMatrix4x4 viewProjection = mvp * modelMatrix.inverted();
+
+    for (auto& sub : meshes_) {
+        if (sub.indexCount == 0) {
+            continue;
+        }
+
+        const QMatrix4x4 subMvp = viewProjection * modelMatrix;
+        if (uMVP >= 0) {
+            glUniformMatrix4fv(uMVP, 1, GL_FALSE, subMvp.constData());
+        }
+        if (uModel >= 0) {
+            glUniformMatrix4fv(uModel, 1, GL_FALSE, modelMatrix.constData());
+        }
+
+        if (sub.textureId == 0 && !sub.texturePath.isEmpty()) {
+            sub.textureId = loadTexture(sub.texturePath);
+        }
+
+        if (uColor >= 0) {
+            glUniform3f(uColor, sub.kdColor.x(), sub.kdColor.y(), sub.kdColor.z());
+        }
+
+        if (uUseVertexColor >= 0) {
+            const bool useVertexColor =
+                sub.hasVertexColors &&
+                sub.textureId == 0 &&
+                sub.kdColor.x() >= 0.99f &&
+                sub.kdColor.y() >= 0.99f &&
+                sub.kdColor.z() >= 0.99f;
+            glUniform1i(uUseVertexColor, useVertexColor ? 1 : 0);
+        }
+
+        if (uUseTexture >= 0) {
+            const int useTex = (sub.textureId != 0 && sub.hasTexcoords) ? 1 : 0;
+            glUniform1i(uUseTexture, useTex);
+
+            if (useTex && uTexture >= 0) {
+                glBindTexture(GL_TEXTURE_2D, sub.textureId);
+                glUniform1i(uTexture, 0);
+            }
+            else {
+                glBindTexture(GL_TEXTURE_2D, 0);
+            }
+        }
+
+        glBindVertexArray(sub.vao);
+        glDrawElements(GL_TRIANGLES, sub.indexCount, GL_UNSIGNED_INT, nullptr);
+    }
+
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void FactoryModelHandler::clear() {
+    clearGPUResources();
+    meshes_.clear();
+    path_.clear();
+    materialLibraryPath_.clear();
+    resetDerivedPlacementData();
+}
+
+void FactoryModelHandler::clearGPUResources() {
+    const bool hasContext = QOpenGLContext::currentContext() != nullptr;
+
+    for (auto& sub : meshes_) {
+        if (hasContext && sub.vao) {
+            glDeleteVertexArrays(1, &sub.vao);
+            glDeleteBuffers(1, &sub.vboPos);
+            if (sub.vboNorm) {
+                glDeleteBuffers(1, &sub.vboNorm);
+            }
+            if (sub.vboUV) {
+                glDeleteBuffers(1, &sub.vboUV);
+            }
+            if (sub.vboColor) {
+                glDeleteBuffers(1, &sub.vboColor);
+            }
+            if (sub.ibo) {
+                glDeleteBuffers(1, &sub.ibo);
+            }
+        }
+        sub = SubMesh{};
+    }
+
+    if (hasContext) {
+        for (auto& [path, tex] : textureCache_) {
+            Q_UNUSED(path);
+            if (tex) {
+                glDeleteTextures(1, &tex);
+            }
+        }
+    }
+    textureCache_.clear();
+
+    glReady_ = false;
+}
+
+void FactoryModelHandler::clearSubMesh(SubMesh& sub) {
+    if (sub.vao && QOpenGLContext::currentContext()) {
+        glDeleteVertexArrays(1, &sub.vao);
+        glDeleteBuffers(1, &sub.vboPos);
+        if (sub.vboNorm) {
+            glDeleteBuffers(1, &sub.vboNorm);
+        }
+        if (sub.vboUV) {
+            glDeleteBuffers(1, &sub.vboUV);
+        }
+        if (sub.vboColor) {
+            glDeleteBuffers(1, &sub.vboColor);
+        }
+        if (sub.ibo) {
+            glDeleteBuffers(1, &sub.ibo);
+        }
+    }
+    sub = SubMesh{};
+}
+
+

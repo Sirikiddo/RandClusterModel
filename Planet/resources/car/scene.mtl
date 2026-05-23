@@ -1,215 +1,114 @@
 # MTL file - created by a modified js OBJExporter
 
-newmtl Porsche_911Targa4SRewardRecycled_2021_Wheel1A_3D_3DWheel1B_Material
+newmtl 020814STRK_bodycolor
 Tr 0.0000
 Tf 1.0000 1.0000 1.0000
 illum 1
-Pm 0.3459058160939157
-Pr 0.4556204361765674
+Pm 0.6304214735628568
+Pr 0.2673934311455677
 Pds 1
 Pl 1
-Pccns 11
+Pccns 1-1
 Prfl 0.5
 Pior 1.5
 Pshc 0 0 0
 Pshr 1
-Psi 0.16914337262742132
+Psi 0.46011307408150753
 Psc 1 1 1
+Ka 1 1 1
+Kd 0.639706 0 0
+Ke 0 0 0
+
+newmtl 020814STRK_diffuse
+Tr 0.0000
+Tf 1.0000 1.0000 1.0000
+illum 1
+Pr 0.6
+Pds 1
+Pl 1
 Ka 1 1 1
 Kd 1 1 1
 Ke 0 0 0
-map_Kd Porsche_911Targa4SRewardRecycled_2021_Wheel1A_3D_3DWheel1B_Material.png
-norm normalMap1.png
+map_Kd 020814STRK_diffuse.png
 
-newmtl BL_RIM
+newmtl 020814STRK_reflective
 Tr 0.0000
 Tf 1.0000 1.0000 1.0000
 illum 1
-Pm 0.5043824895466348
-Pr 0.5348587729029269
+Pr 0.6
 Pds 1
 Pl 1
-Ka 1 1 1
-Kd 0.0925066476767465 0.0925066476767465 0.0925066476767465
-Ke 0 0 0
-
-newmtl car_vpnt_911992Carrera4S
-Tr 0.0000
-Tf 1.0000 1.0000 1.0000
-illum 1
-Pr 0.059428752544769654
-Pds 1
-Pl 1
-Pccns 1-1
-Prfl 0.5
-Pior 1.5
-Pshc 0 0 0
-Pshr 1
-Psi 0.17523862929867975
-Psc 1 1 1
-Ka 1 1 1
-Kd 1 0.6686410034444277 0.007149217809741786
-Ke 0 0 0
-
-newmtl car_vgla_911992Carrera4S
-Tr 0.0000
-Tf 1.0000 1.0000 1.0000
-illum 1
-Pds 1
-Pl 1
-Pccns 1-1
-Prfl 0.5
-Pior 1.5
-Pshc 0 0 0
-Pshr 1
-Psi 1
-Psc 1 1 1
-Ptr 1
 Ka 1 1 1
 Kd 1 1 1
 Ke 0 0 0
-map_Kd car_vgla_911992Carrera4S.png
-map_Ptrm transmissionMap4.png
+map_Kd 020814STRK_diffuse.png
 
-newmtl car_vstd_911992Carrera4S
+newmtl 020814STRK_brakelights
 Tr 0.0000
 Tf 1.0000 1.0000 1.0000
 illum 1
-Pm 0.6323828796430617
-Pr 0.6445733929855786
+Pr 0.6
 Pds 1
 Pl 1
-Pccns 1-1
-Prfl 0.5
-Pior 1.5
-Pshc 0 0 0
-Pshr 1
-Psi 0.18742914264119662
-Psc 1 1 1
-Ka 1 1 1
-Kd 0.8457168631371066 0.8457168631371066 0.8457168631371066
-Ke 0 0 0
-map_Kd car_vstd_911992Carrera4S.png
-
-newmtl car_vlgt_911992Carrera4S
-Tr 0.0000
-Tf 1.0000 1.0000 1.0000
-illum 1
-Pm 0.4678109495190842
-Pr 0.6628591629993539
-Pds 1
-Pl 1
-Pccns 1-1
-Prfl 0.5
-Pior 1.5
-Pshc 0 0 0
-Pshr 1
-Psi 0.047238239202252806
-Psc 1 1 1
 Ka 1 1 1
 Kd 1 1 1
-Ke 0.28952469188477525 0.28952469188477525 0.28952469188477525
-map_Kd car_vlgt_911992Carrera4S.png
-map_Ke emissiveMap6.png
+Ke 0 0 0
+map_Kd 020814STRK_diffuse.png
 
-newmtl standardSurface1
+newmtl 020814STRK_trims
 Tr 0.0000
 Tf 1.0000 1.0000 1.0000
 illum 1
-Pm 0.236191196011264
-Pr 0.5470492862454438
+Pr 0.6
 Pds 1
 Pl 1
-Pccns 1-1
-Prfl 0.5
-Pior 1.5
-Pshc 0 0 0
-Pshr 1
-Psi 0.059428752544769654
-Psc 1 1 1
 Ka 1 1 1
-Kd 0 0 0
+Kd 0.0820895 0.0820895 0.0820895
 Ke 0 0 0
 
-newmtl car_vstd_911992Carrera4SEngine
-Tr 0.0000
+newmtl 020814STRK_glass
+Tr 0.416026297024223
 Tf 1.0000 1.0000 1.0000
 illum 1
-Pm 0.19352439931245502
-Pr 0.44952517950530896
-Pds 1
-Pl 1
-Pccns 1-1
-Prfl 0.5
-Pior 1.5
-Pshc 0 0 0
-Pshr 1
-Psi 0.18133388596993819
-Psc 1 1 1
-Ka 1 1 1
-Kd 0.608001852958028 0.608001852958028 0.608001852958028
-Ke 0 0 0
-map_Kd car_vstd_911992Carrera4SEngine.png
-
-newmtl car_vstda_911992Carrera4SGrid01
-Tr 0.0000
-Tf 1.0000 1.0000 1.0000
-illum 1
-Pr 0.8942628736559436
+Pr 0.6
 Pds 1
 Pl 1
 Ka 1 1 1
 Kd 0 0 0
 Ke 0 0 0
 
-newmtl CALIP_COLOR
+newmtl Main_Car_Pickup_interior
 Tr 0.0000
 Tf 1.0000 1.0000 1.0000
 illum 1
-Pm 0.41295363947775837
-Pr 0.44952517950530896
+Pr 0.08779538487552574
 Pds 1
 Pl 1
-Ka 1 1 1
-Kd 0.41054144165010786 0.3473793535370774 0
-Ke 0 0 0
-
-newmtl car_vstd_911992Carrera4SInterior
-Tr 0.0000
-Tf 1.0000 1.0000 1.0000
-illum 1
-Pm 0.5470492862454438
-Pr 0.44952517950530896
-Pds 1
-Pl 1
-Pccns 1-1
-Prfl 0.5
-Pior 1.5
-Pshc 0 0 0
-Pshr 1
-Psi 0.38247735612146627
-Psc 1 1 1
 Ka 1 1 1
 Kd 1 1 1
 Ke 0 0 0
-map_Kd car_vstd_911992Carrera4SInterior.png
+map_Kd Main_Car_Pickup_interior.png
 
-newmtl car_vwhl_911992Carrera4SRims
+newmtl 020814STRK_interior
 Tr 0.0000
 Tf 1.0000 1.0000 1.0000
 illum 1
-Pm 0.3032390193951067
-Pr 0.4556204361765674
+Pr 0.1837876294313774
 Pds 1
 Pl 1
-Pccns 1-1
-Prfl 0.5
-Pior 1.5
-Pshc 0 0 0
-Pshr 1
-Psi 0.3520010727651741
-Psc 1 1 1
 Ka 1 1 1
 Kd 1 1 1
 Ke 0 0 0
-map_Kd car_vwhl_911992Carrera4SRims.png
+map_Kd Main_Car_Pickup_interior.png
+
+newmtl 020814STRK_HD_wheeltyre
+Tr 0.0000
+Tf 1.0000 1.0000 1.0000
+illum 1
+Pr 0.8403967864339856
+Pds 1
+Pl 1
+Ka 1 1 1
+Kd 1 1 1
+Ke 0 0 0
+map_Kd 020814STRK_HD_wheeltyre.png

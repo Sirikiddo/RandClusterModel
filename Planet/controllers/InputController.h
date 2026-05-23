@@ -5,6 +5,7 @@
 #include <QVector3D>
 #include <memory>
 #include <optional>
+#include <QSet>
 #include <vector>
 
 #include "core/AppViewConfig.h"
@@ -25,6 +26,13 @@ class HexSphereModel;
 
 class InputController : public ITerrainSceneBridge {
 public:
+    enum class PlacementModel {
+        None,
+        Factory,
+        Mine,
+        Delete
+    };
+
     struct Response {
         bool requestUpdate = false;
         std::optional<QString> hudMessage{};
@@ -65,6 +73,10 @@ public:
 
     Response setOreAnimationSpeed(float speed);
     Response regenerateOreDeposits();
+    Response setPlacementModel(PlacementModel model);
+
+    PlacementModel placementModel() const { return placementModel_; }
+    bool isPlacementModeActive() const { return placementModel_ != PlacementModel::None; }
 
     bool applyAnimation(int entityId, int targetCell, float speed = 1.0f, float bounceHeight = 0.05f);
     void updateAnimations(float dt);
@@ -104,6 +116,14 @@ private:
     void selectEntity(int entityId, Response& response);
     void deselectEntity();
     void moveSelectedEntityToCell(int cellId, Response& response);
+    bool isCellOccupied(int cellId, std::optional<int> ignoredEntityId = std::nullopt) const;
+    Response placeBuildingOnCell(int cellId);
+    bool isDeletableEntity(int entityId) const;
+    Response deleteEntityAtHit(const PickHit& hit);
+    std::optional<int> explorerCurrentCell() const;
+    void refreshBuildPreview();
+    bool canBuildOnCell(int cellId) const;
+    bool isBuildingPlacementMode() const;
 
     bool isContributorMode() const { return viewMode_ == SceneViewMode::Contributor; }
     Response contributorModeResponse() const;
@@ -126,6 +146,10 @@ private:
 
     float waterTime_ = 0.0f;
     QVector3D lightDir_ = QVector3D(1, 1, 1).normalized();
+    PlacementModel placementModel_ = PlacementModel::None;
+    QSet<int> buildPreviewCells_{};
+    bool lastBuildPreviewActive_ = false;
+    int lastBuildPreviewAnchorCell_ = -2;
 
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;

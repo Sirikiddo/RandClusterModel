@@ -1,6 +1,6 @@
 #include "model/CarModelHandler.h"
-#include <QDebug>
 #include <QDir>
+#include <QDebug>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
@@ -11,6 +11,7 @@
 #include <charconv>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <sstream>
 #include <string_view>
 
@@ -27,6 +28,14 @@ static QString canonicalPath(const QString& path) {
 }
 
 namespace {
+    enum class WheelSlot {
+        Unknown,
+        FrontLeft,
+        FrontRight,
+        RearLeft,
+        RearRight
+    };
+
     bool hasWheelTag(const QString& name) {
         const QString lowered = name.toLower();
         return lowered.contains("wheel") || lowered.contains("whl") || lowered.contains("rim");
@@ -97,6 +106,105 @@ namespace {
         return canonicalPath(baseFile.dir().filePath(relativeOrAbsolutePath));
     }
 
+    WheelSlot detectWheelSlot(const QString& objectName) {
+        const QString lowered = objectName.toLower();
+        if (lowered.contains("fl")) return WheelSlot::FrontLeft;
+        if (lowered.contains("fr")) return WheelSlot::FrontRight;
+        if (lowered.contains("rl") || lowered.contains("bl")) return WheelSlot::RearLeft;
+        if (lowered.contains("rr") || lowered.contains("br")) return WheelSlot::RearRight;
+        return WheelSlot::Unknown;
+    }
+}
+
+void CarModelHandler::resetDerivedPlacementData() {
+    averageWheelRadius_ = 0.0f;
+    localAlignment_.setToIdentity();
+}
+
+void CarModelHandler::finalizePlacementFromWheelLayout() {
+    resetDerivedPlacementData();
+
+    SubMesh* frontLeft = nullptr;
+    SubMesh* frontRight = nullptr;
+    SubMesh* rearLeft = nullptr;
+    SubMesh* rearRight = nullptr;
+
+    for (auto& sub : meshes_) {
+        if (!sub.isWheel) {
+            continue;
+        }
+
+        switch (detectWheelSlot(sub.objectName)) {
+        case WheelSlot::FrontLeft:
+            frontLeft = &sub;
+            break;
+        case WheelSlot::FrontRight:
+            frontRight = &sub;
+            break;
+        case WheelSlot::RearLeft:
+            rearLeft = &sub;
+            break;
+        case WheelSlot::RearRight:
+            rearRight = &sub;
+            break;
+        case WheelSlot::Unknown:
+            break;
+        }
+    }
+
+    QVector3D wheelSpinAxis(1.0f, 0.0f, 0.0f);
+    const QVector3D localUp(0.0f, 1.0f, 0.0f);
+
+    if (frontLeft && frontRight && rearLeft && rearRight) {
+        QVector3D frontCenter = (frontLeft->localCenter + frontRight->localCenter) * 0.5f;
+        QVector3D rearCenter = (rearLeft->localCenter + rearRight->localCenter) * 0.5f;
+        QVector3D localForward = frontCenter - rearCenter;
+        localForward.setY(0.0f);
+
+        if (localForward.lengthSquared() > 1e-6f) {
+            localForward.normalize();
+            wheelSpinAxis = QVector3D::crossProduct(localUp, localForward);
+            wheelSpinAxis.setY(0.0f);
+
+            if (wheelSpinAxis.lengthSquared() > 1e-6f) {
+                wheelSpinAxis.normalize();
+
+                QMatrix4x4 meshBasis;
+                meshBasis.setColumn(0, QVector4D(wheelSpinAxis, 0.0f));
+                meshBasis.setColumn(1, QVector4D(localUp, 0.0f));
+                meshBasis.setColumn(2, QVector4D(localForward, 0.0f));
+                meshBasis.setColumn(3, QVector4D(0.0f, 0.0f, 0.0f, 1.0f));
+                localAlignment_ = meshBasis.inverted();
+            }
+        }
+    }
+
+    float wheelRadiusSum = 0.0f;
+    int wheelCount = 0;
+    for (auto& sub : meshes_) {
+        if (!sub.isWheel) {
+            continue;
+        }
+
+        sub.localSpinAxis = wheelSpinAxis;
+        float radius = 0.0f;
+        for (size_t i = 0; i + 2 < sub.positions.size(); i += 3) {
+            const QVector3D p(sub.positions[i], sub.positions[i + 1], sub.positions[i + 2]);
+            const QVector3D offset = p - sub.localCenter;
+            const QVector3D radialOffset = offset - QVector3D::dotProduct(offset, sub.localSpinAxis) * sub.localSpinAxis;
+            radius = std::max(radius, radialOffset.length());
+        }
+
+        sub.localWheelRadius = radius;
+        if (radius > 1e-5f) {
+            wheelRadiusSum += radius;
+            ++wheelCount;
+        }
+    }
+
+    if (wheelCount > 0) {
+        averageWheelRadius_ = wheelRadiusSum / static_cast<float>(wheelCount);
+    }
 }
 
 bool CarModelHandler::loadFromFile(const QString& path) {
@@ -111,6 +219,7 @@ bool CarModelHandler::loadFromFile(const QString& path) {
     }
 
     qDebug() << "Loading car model:" << normalized;
+    resetDerivedPlacementData();
 
     QFileInfo fi(normalized);
     QString ext = fi.suffix().toLower();
@@ -303,10 +412,6 @@ bool CarModelHandler::loadFromFile(const QString& path) {
             }
         }
     }
-    averageWheelRadius_ = 0.0f;
-    float wheelRadiusSum = 0.0f;
-    int wheelCount = 0;
-
     // Build meshes per object+material batch
     for (auto& [batchKey, batch] : faceBatches) {
         Q_UNUSED(batchKey);
@@ -412,23 +517,9 @@ bool CarModelHandler::loadFromFile(const QString& path) {
                 }
 
                 sub.localCenter = (minPos + maxPos) * 0.5f;
-                float radius = 0.0f;
-                for (size_t i = 0; i + 2 < sub.positions.size(); i += 3) {
-                    const float dy = sub.positions[i + 1] - sub.localCenter.y();
-                    const float dz = sub.positions[i + 2] - sub.localCenter.z();
-                    radius = std::max(radius, std::sqrt(dy * dy + dz * dz));
-                }
-                sub.localWheelRadius = radius;
-                if (radius > 1e-5f) {
-                    wheelRadiusSum += radius;
-                    ++wheelCount;
-                }
             }
             meshes_.push_back(std::move(sub));
         }
-    }
-    if (wheelCount > 0) {
-        averageWheelRadius_ = wheelRadiusSum / static_cast<float>(wheelCount);
     }
 
     if (meshes_.empty()) {
@@ -436,6 +527,7 @@ bool CarModelHandler::loadFromFile(const QString& path) {
         return false;
     }
 
+    finalizePlacementFromWheelLayout();
     path_ = normalized;
     loadMaterials(normalized);
     return true;
@@ -656,7 +748,7 @@ void CarModelHandler::draw(GLuint shader,
         QMatrix4x4 subModel = modelMatrix;
         if (sub.isWheel && std::fabs(wheelSpinDegrees) > 1e-4f) {
             subModel.translate(sub.localCenter);
-            subModel.rotate(wheelSpinDegrees, 1.0f, 0.0f, 0.0f);
+            subModel.rotate(wheelSpinDegrees, sub.localSpinAxis);
             subModel.translate(-sub.localCenter);
         }
         const QMatrix4x4 subMvp = viewProjection * subModel;
@@ -719,6 +811,7 @@ void CarModelHandler::clear() {
     meshes_.clear();
     path_.clear();
     materialLibraryPath_.clear();
+    resetDerivedPlacementData();
 }
 
 // Исправить clearGPUResources — добавить проверку контекста:

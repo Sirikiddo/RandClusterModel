@@ -10,7 +10,6 @@
 #include <functional>
 #include <memory>
 #include <vector>
-#include <cstdint>
 
 #include "ui/PerformanceStats.h"
 #include "ECS/ComponentStorage.h"
@@ -18,9 +17,9 @@
 #include "resources/HexSphereWidget_shaders.h"
 #include "model/ModelHandler.h"
 #include "model/CarModelHandler.h"
+#include "model/FactoryModelHandler.h"
+#include "model/MineModelHandler.h"
 #include "renderers/TerrainVisibility.h"
-#include "renderers/ParticleRenderer.h"
-#include "contributor/ContributorParticles.h"
 
 class TerrainRenderer;
 class WaterRenderer;
@@ -98,9 +97,7 @@ private:
     void uploadWaterInternal(const WaterGeometryData& data);
     void loadContributorModel();
     void renderContributorModel(const RenderContext& ctx);
-    void renderPlanetTreeParticles(const RenderContext& ctx);
 
-    // ????? ?????
     void recreateTerrainVAO();
     void uploadFullTerrainIndexBuffer();
 
@@ -116,12 +113,14 @@ private:
     GLint uEnvMap_ = -1;
 
     GLuint progWire_ = 0, progTerrain_ = 0, progSel_ = 0;
-    GLuint progWater_ = 0, progModel_ = 0;
+    GLuint progWater_ = 0, progModel_ = 0, progFactory_ = 0, progSteam_ = 0;
     GLint uMVP_Wire_ = -1, uMVP_Terrain_ = -1, uMVP_Sel_ = -1;
     GLint uModel_ = -1, uLightDir_ = -1;
     GLint uNormalMatrix_ = -1;
     GLint uMVP_Water_ = -1, uTime_Water_ = -1, uLightDir_Water_ = -1, uViewPos_Water_ = -1;
     GLint uMVP_Model_ = -1, uModel_Model_ = -1, uLightDir_Model_ = -1, uViewPos_Model_ = -1, uColor_Model_ = -1, uUseTexture_ = -1;
+    GLint uMVP_Factory_ = -1, uModel_Factory_ = -1, uLightDir_Factory_ = -1, uViewPos_Factory_ = -1, uColor_Factory_ = -1, uUseTexture_Factory_ = -1;
+    GLint uMVP_Steam_ = -1, uModel_Steam_ = -1, uTime_Steam_ = -1, uViewPos_Steam_ = -1;
 
     GLuint vaoWire_ = 0, vboPositions_ = 0;
     QOpenGLVertexArrayObject vaoTerrain_;
@@ -164,16 +163,11 @@ private:
 
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
-
     TerrainMesh fullTerrainMesh_;
     std::vector<uint32_t> fullTerrainIndices_;
     TerrainVisibilityController terrainVisibility_;
 
     std::shared_ptr<CarModelHandler> carModel_;
-    std::unique_ptr<ParticleRenderer> particleRenderer_;
-    std::vector<ContributorParticle> planetTreeParticleTemplate_;
-    uint64_t planetTreeParticlesPlacementHash_ = 0;
-
-    ContributorWindField windField_;
-    float windTime_ = 0.0f;
+    std::shared_ptr<FactoryModelHandler> factoryModel_;
+    std::shared_ptr<MineModelHandler> mineModel_;
 };

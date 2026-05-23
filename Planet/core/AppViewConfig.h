@@ -16,7 +16,7 @@ struct AppViewConfig {
 };
 
 // Flip this flag to switch the app into the single-tree contributor view.
-inline constexpr bool kContributorMode = true;
+inline constexpr bool kContributorMode = false;
 
 constexpr AppViewConfig defaultAppViewConfig() {
     return AppViewConfig{
