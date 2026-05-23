@@ -63,12 +63,15 @@ public:
 
     void rebuildModel();
     void regenerateTerrain();
+    void rebuildDerivedGeometry();
     void clearForShutdown();
 
     void clearSelection();
     void toggleCellSelection(int cellId);
+    void setSelectionOutlineVertices(std::vector<float> vertices);
+    void setTreePlacements(std::vector<TreePlacement> placements);
 
-    std::optional<std::vector<QVector3D>> buildPathPolyline() const;
+    std::vector<QVector3D> buildPathPolyline(const std::vector<int>& path) const;
 
     std::vector<float> buildWireVertices() const;
     std::vector<float> buildSelectionOutlineVertices() const;
@@ -215,6 +218,8 @@ private:
 
     std::vector<TreePlacement> treePlacements_;
     QSet<int> treeOccupiedCells_;
+    std::vector<float> selectionOutlineVertices_;
+    bool selectionOutlineDirty_ = true;
 
     QVector3D cameraPos_{ 0, 0, 5 };      // Текущая позиция камеры (начальное значение)
     QVector3D lastCameraPos_{ 0, 0, 5 };  // Позиция на прошлом кадре для детекта движения
@@ -235,4 +240,5 @@ private:
 
     VisibilityConfig visibilityConfig_;
 };
+
 

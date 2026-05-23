@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <random>
 #include <cmath>
+#include <utility>
 
 // �?обавляем н�?жн�?е include
 #include "generation/MeshGenerators/WireMeshGenerator.h"
@@ -55,6 +56,7 @@ void HexSphereSceneController::rebuildTerrainFromInputs() {
 
 void HexSphereSceneController::setSmoothOneStep(bool on) {
     smoothOneStep_ = on;
+    selectionOutlineDirty_ = true;
 }
 
 void HexSphereSceneController::setStripInset(float value) {
@@ -63,6 +65,7 @@ void HexSphereSceneController::setStripInset(float value) {
 
 void HexSphereSceneController::setOutlineBias(float value) {
     outlineBias_ = std::max(0.0f, value);
+    selectionOutlineDirty_ = true;
 }
 
 void HexSphereSceneController::rebuildTopology() {
@@ -95,8 +98,20 @@ void HexSphereSceneController::regenerateTerrain() {
     generateTreePlacements();
 }
 
+void HexSphereSceneController::rebuildDerivedGeometry() {
+    if (isContributorMode()) {
+        rebuildContributorScene();
+        return;
+    }
+
+    updateTerrainMesh();
+    generateTreePlacements();
+}
+
 void HexSphereSceneController::clearForShutdown() {
     selectedCells_.clear();
+    selectionOutlineVertices_.clear();
+    selectionOutlineDirty_ = true;
     treePlacements_.clear();
     treeOccupiedCells_.clear();
     triangleCache_.clear();
@@ -115,6 +130,7 @@ void HexSphereSceneController::clearSelection() {
         return;
     }
     selectedCells_.clear();
+    selectionOutlineDirty_ = true;
 }
 
 void HexSphereSceneController::toggleCellSelection(int cellId) {
@@ -127,26 +143,25 @@ void HexSphereSceneController::toggleCellSelection(int cellId) {
     else {
         selectedCells_.insert(cellId);
     }
+    selectionOutlineDirty_ = true;
+}
+
+void HexSphereSceneController::setSelectionOutlineVertices(std::vector<float> vertices) {
+    selectionOutlineVertices_ = std::move(vertices);
+    selectionOutlineDirty_ = false;
+}
+
+void HexSphereSceneController::setTreePlacements(std::vector<TreePlacement> placements) {
+    treePlacements_ = std::move(placements);
+    updateTreeOccupiedCells();
 }
 
 
 
 
-std::optional<std::vector<QVector3D>> HexSphereSceneController::buildPathPolyline() const {
-    if (selectedCells_.size() != 2) {
-        return std::nullopt;
-    }
-
-    auto it = selectedCells_.begin();
-    const int a = *it;
-    ++it;
-    const int b = *it;
-
+std::vector<QVector3D> HexSphereSceneController::buildPathPolyline(const std::vector<int>& path) const {
     PathBuilder pb(model_, smoothOneStep_ ? 1 : 0);
-    pb.build();
-    auto ids = pb.astar(a, b);
-    auto poly = pb.polylineOnSphere(ids, /*segmentsPerEdge=*/8, pathBias_, heightStep_);
-    return poly;
+    return pb.polylineOnSphere(path, /*segmentsPerEdge=*/8, pathBias_, heightStep_);
 }
 
 std::vector<float> HexSphereSceneController::buildWireVertices() const {
@@ -160,6 +175,9 @@ std::vector<float> HexSphereSceneController::buildWireVertices() const {
 std::vector<float> HexSphereSceneController::buildSelectionOutlineVertices() const {
     if (isContributorMode()) {
         return {};
+    }
+    if (!selectionOutlineDirty_) {
+        return selectionOutlineVertices_;
     }
     // SelectionOutlineGenerator ожидае�?: const HexSphereModel&, const QSet<int>&, float, float, bool
     return SelectionOutlineGenerator::buildSelectionOutlineVertices(
@@ -227,6 +245,8 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
     }
 
     selectedCells_.clear();
+    selectionOutlineVertices_.clear();
+    selectionOutlineDirty_ = true;
     updateTerrainMesh();
     generateTreePlacements();
 }
@@ -257,6 +277,9 @@ void HexSphereSceneController::updateTerrainMesh() {
     options.doEdgeCliffs = true;
 
     terrainCPU_ = TerrainMeshGenerator::buildTerrainMesh(model_, options);
+    cacheValid_ = false;
+    triangleCache_.clear();
+    selectionOutlineDirty_ = true;
 }
 
 float HexSphereSceneController::cellSize() const {
@@ -577,4 +600,5 @@ void HexSphereSceneController::validateCache() const {
         rebuildCache();
     }
 }
+
 

@@ -1,4 +1,4 @@
-#include "controllers/InputController.h"
+﻿#include "controllers/InputController.h"
 
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 #include "controllers/CameraController.h"
 #include "controllers/PathBuilder.h"
@@ -93,6 +94,19 @@ namespace {
 
     int pathClimbLimit(const HexSphereSceneController& scene) {
         return PathBuilder::effectiveMaxClimbDelta(pathSmoothDelta(scene));
+    }
+
+    std::optional<std::pair<int, int>> selectedPathEndpoints(const HexSphereSceneController& scene) {
+        const QSet<int>& selected = scene.selectedCells();
+        if (selected.size() != 2) {
+            return std::nullopt;
+        }
+
+        auto it = selected.begin();
+        const int startCell = *it;
+        ++it;
+        const int goalCell = *it;
+        return std::make_pair(startCell, goalCell);
     }
 
 } // namespace
@@ -220,48 +234,141 @@ InputController::Response InputController::wheel(QWheelEvent* e) {
 }
 
 InputController::Response InputController::keyPress(QKeyEvent* e) {
+    switch (e->key()) {
+    case Qt::Key_C:
+        return executeCommand(SceneCommand::ClearPath);
+    case Qt::Key_O:
+        return executeCommand(SceneCommand::ToggleOreVisualization);
+    case Qt::Key_S:
+        return executeCommand(SceneCommand::ToggleSmooth);
+    case Qt::Key_P:
+        return executeCommand(SceneCommand::BuildPath);
+    case Qt::Key_W:
+        return executeCommand(SceneCommand::MoveSelectedEntity);
+    case Qt::Key_Escape:
+        return executeCommand(SceneCommand::DeselectEntity);
+    case Qt::Key_Delete:
+        return executeCommand(SceneCommand::DeleteSelectedEntity);
+    case Qt::Key_Plus:
+    case Qt::Key_Equal:
+        return executeCommand(SceneCommand::IncreaseHeight);
+    case Qt::Key_Minus:
+    case Qt::Key_Underscore:
+        return executeCommand(SceneCommand::DecreaseHeight);
+    case Qt::Key_1:
+        return executeCommand(SceneCommand::SetBiomeSea);
+    case Qt::Key_2:
+        return executeCommand(SceneCommand::SetBiomeGrass);
+    case Qt::Key_3:
+        return executeCommand(SceneCommand::SetBiomeRock);
+    case Qt::Key_4:
+        return executeCommand(SceneCommand::SetBiomeSnow);
+    case Qt::Key_5:
+        return executeCommand(SceneCommand::SetBiomeTundra);
+    case Qt::Key_6:
+        return executeCommand(SceneCommand::SetBiomeDesert);
+    case Qt::Key_7:
+        return executeCommand(SceneCommand::SetBiomeSavanna);
+    case Qt::Key_8:
+        return executeCommand(SceneCommand::SetBiomeJungle);
+    default:
+        return {};
+    }
+}
+
+InputController::Response InputController::executeCommand(SceneCommand command) {
     Response response;
     if (isContributorMode()) {
         return contributorModeResponse();
     }
 
-    switch (e->key()) {
-    case Qt::Key_C:
+    auto selectedEntity = [&]() -> ecs::Entity* {
+        auto selected = ecs_.selectedEntity();
+        return selected ? &selected->get() : nullptr;
+    };
+
+    auto requireSelectedCells = [&]() -> bool {
+        if (!scene_.selectedCells().empty()) {
+            return true;
+        }
+        response.hudMessage = QString("Select one or more cells first");
+        response.requestUpdate = true;
+        return false;
+    };
+
+    auto applyToSelectedCells = [&](auto fn) {
+        for (int cid : scene_.selectedCells()) {
+            fn(cid);
+        }
+    };
+
+    auto setSelectedBiome = [&](Biome biome, const QString& name) {
+        if (!requireSelectedCells()) {
+            return;
+        }
+        applyToSelectedCells([&](int cid) { scene_.modelMutable().setBiome(cid, biome); });
+        rebuildDerivedGeometry(response);
+        response.hudMessage = QString("Biome: %1").arg(name);
+    };
+
+    switch (command) {
+    case SceneCommand::ClearPath:
         clearPath(response);
+        response.hudMessage = QString("Path cleared");
         return response;
-    case Qt::Key_O:
+    case SceneCommand::ToggleOreVisualization:
         return toggleOreVisualization();
-    case Qt::Key_S:
+    case SceneCommand::ToggleSmooth:
         scene_.setSmoothOneStep(!scene_.smoothOneStep());
-        rebuildModel(response);
+        if (engine_) {
+            engine_->setPathSmoothMaxDelta(pathSmoothDelta(scene_));
+        }
+        rebuildDerivedGeometry(response);
         response.hudMessage = QString("Smooth mode: ") + (scene_.smoothOneStep() ? "ON" : "OFF");
         return response;
-    case Qt::Key_P:
+    case SceneCommand::BuildPath:
+        if (scene_.selectedCells().size() != 2) {
+            if (renderer_) {
+                renderer_->uploadPath({});
+            }
+            response.hudMessage = QString("Select exactly two cells to build a path");
+            response.requestUpdate = true;
+            return response;
+        }
         buildAndShowSelectedPath(response);
         return response;
-    case Qt::Key_W:
+    case SceneCommand::MoveSelectedEntity:
     {
-        auto selected = ecs_.selectedEntity();
-        if (!selected) return response;
-
-        ecs::Entity& entity = selected->get();
-        if (ecs_.get<ecs::Animation>(entity.id)) {
+        ecs::Entity* entity = selectedEntity();
+        if (!entity) {
+            response.hudMessage = QString("Select Explorer first");
+            response.requestUpdate = true;
+            return response;
+        }
+        if (ecs_.get<ecs::Animation>(entity->id)) {
             response.hudMessage = QString("Explorer is already moving");
             response.requestUpdate = true;
             return response;
         }
 
         const auto& cells = scene_.model().cells();
-        if (entity.currentCell < 0 || entity.currentCell >= static_cast<int>(cells.size())) return response;
-        const auto& currentCell = cells[static_cast<size_t>(entity.currentCell)];
-        if (currentCell.neighbors.empty()) return response;
+        if (entity->currentCell < 0 || entity->currentCell >= static_cast<int>(cells.size())) {
+            response.hudMessage = QString("Explorer is not on a valid cell");
+            response.requestUpdate = true;
+            return response;
+        }
+        const auto& currentCell = cells[static_cast<size_t>(entity->currentCell)];
+        if (currentCell.neighbors.empty()) {
+            response.hudMessage = QString("No neighboring cells");
+            response.requestUpdate = true;
+            return response;
+        }
 
         bool moved = false;
         for (int next : currentCell.neighbors) {
             if (next < 0) continue;
-            buildAndShowPathBetween(entity.currentCell, next, response);
-            // Р”Р»СЏ Explorer-РґРІРёР¶РµРЅРёСЏ С…РѕС‚РёРј РїСЂСЏРјСѓСЋ "РїРѕ РїРѕРІРµСЂС…РЅРѕСЃС‚Рё", Р±РµР· РїРѕРґРїСЂС‹РіРёРІР°РЅРёСЏ
-            moved = applyAnimation(entity.id, next, kBaseTraversalSpeed, 0.0f);
+            buildAndShowPathBetween(entity->currentCell, next, response);
+            moved = applyAnimation(entity->id, next, kBaseTraversalSpeed, 0.0f);
             if (moved) {
                 break;
             }
@@ -276,67 +383,60 @@ InputController::Response InputController::keyPress(QKeyEvent* e) {
         response.requestUpdate = true;
         return response;
     }
-    case Qt::Key_Escape:
+    case SceneCommand::DeselectEntity:
         deselectEntity();
         response.requestUpdate = true;
         return response;
-    case Qt::Key_Delete:
+    case SceneCommand::DeleteSelectedEntity:
         if (selectedEntityId_ != -1) {
             ecs_.destroyEntity(selectedEntityId_);
             selectedEntityId_ = -1;
             response.requestUpdate = true;
+            response.hudMessage = QString("Selected entity deleted");
         }
         return response;
-    default:
-        break;
-    }
-
-    if (scene_.selectedCells().empty()) return response;
-
-    auto apply = [&](auto fn) {
-        for (int cid : scene_.selectedCells()) {
-            fn(cid);
+    case SceneCommand::IncreaseHeight:
+        if (!requireSelectedCells()) {
+            return response;
         }
-        };
-
-    switch (e->key()) {
-    case Qt::Key_Plus:
-    case Qt::Key_Equal:
-        apply([&](int cid) { scene_.modelMutable().addHeight(cid, +1); });
-        break;
-    case Qt::Key_Minus:
-    case Qt::Key_Underscore:
-        apply([&](int cid) { scene_.modelMutable().addHeight(cid, -1); });
-        break;
-    case Qt::Key_1:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Sea); });
-        break;
-    case Qt::Key_2:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Grass); });
-        break;
-    case Qt::Key_3:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Rock); });
-        break;
-    case Qt::Key_4:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Snow); });
-        break;
-    case Qt::Key_5:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Tundra); });
-        break;
-    case Qt::Key_6:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Desert); });
-        break;
-    case Qt::Key_7:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Savanna); });
-        break;
-    case Qt::Key_8:
-        apply([&](int cid) { scene_.modelMutable().setBiome(cid, Biome::Jungle); });
-        break;
-    default:
+        applyToSelectedCells([&](int cid) { scene_.modelMutable().addHeight(cid, +1); });
+        rebuildDerivedGeometry(response);
+        response.hudMessage = QString("Height +1");
+        return response;
+    case SceneCommand::DecreaseHeight:
+        if (!requireSelectedCells()) {
+            return response;
+        }
+        applyToSelectedCells([&](int cid) { scene_.modelMutable().addHeight(cid, -1); });
+        rebuildDerivedGeometry(response);
+        response.hudMessage = QString("Height -1");
+        return response;
+    case SceneCommand::SetBiomeSea:
+        setSelectedBiome(Biome::Sea, "Sea");
+        return response;
+    case SceneCommand::SetBiomeGrass:
+        setSelectedBiome(Biome::Grass, "Grass");
+        return response;
+    case SceneCommand::SetBiomeRock:
+        setSelectedBiome(Biome::Rock, "Rock");
+        return response;
+    case SceneCommand::SetBiomeSnow:
+        setSelectedBiome(Biome::Snow, "Snow");
+        return response;
+    case SceneCommand::SetBiomeTundra:
+        setSelectedBiome(Biome::Tundra, "Tundra");
+        return response;
+    case SceneCommand::SetBiomeDesert:
+        setSelectedBiome(Biome::Desert, "Desert");
+        return response;
+    case SceneCommand::SetBiomeSavanna:
+        setSelectedBiome(Biome::Savanna, "Savanna");
+        return response;
+    case SceneCommand::SetBiomeJungle:
+        setSelectedBiome(Biome::Jungle, "Jungle");
         return response;
     }
 
-    rebuildModel(response);
     return response;
 }
 
@@ -437,7 +537,10 @@ InputController::Response InputController::setSmoothOneStep(bool on) {
         return contributorModeResponse();
     }
     scene_.setSmoothOneStep(on);
-    rebuildModel(response);
+    if (engine_) {
+        engine_->setPathSmoothMaxDelta(pathSmoothDelta(scene_));
+    }
+    rebuildDerivedGeometry(response);
     return response;
 }
 
@@ -447,7 +550,7 @@ InputController::Response InputController::setStripInset(float v) {
         return contributorModeResponse();
     }
     scene_.setStripInset(v);
-    rebuildModel(response);
+    rebuildDerivedGeometry(response);
     return response;
 }
 
@@ -457,7 +560,7 @@ InputController::Response InputController::setOutlineBias(float v) {
         return contributorModeResponse();
     }
     scene_.setOutlineBias(v);
-    rebuildModel(response);
+    rebuildDerivedGeometry(response);
     return response;
 }
 
@@ -470,20 +573,73 @@ InputController::Response InputController::advanceWaterTime(float dt) {
 
 void InputController::rebuildModel(Response& response) {
     scene_.rebuildModel();
+    syncPathBackendFromScene();
+    uploadBuffers();
+    response.requestUpdate = true;
+}
+
+void InputController::rebuildDerivedGeometry(Response& response) {
+    scene_.rebuildDerivedGeometry();
+    syncPathBackendFromScene();
     uploadBuffers();
     response.requestUpdate = true;
 }
 
 void InputController::uploadSelection() {
+    refreshSceneDagOutputs();
     if (renderer_) {
         renderer_->uploadSelectionOutline(scene_.buildSelectionOutlineVertices());
     }
 }
 
 void InputController::uploadBuffers() {
+    refreshSceneDagOutputs();
     if (renderer_) {
         renderer_->uploadScene(scene_, uploadOptions_);
     }
+}
+
+void InputController::refreshSceneDagOutputs() {
+    if (!engine_ || isContributorMode()) {
+        return;
+    }
+
+    SceneDagRequest request;
+    request.terrain = scene_.captureTerrainSnapshot();
+    request.heightStep = scene_.heightStep();
+    request.outlineBias = scene_.outlineBias();
+    request.smoothOneStep = scene_.smoothOneStep();
+    request.selectedCells.reserve(static_cast<size_t>(scene_.selectedCells().size()));
+    for (int cellId : scene_.selectedCells()) {
+        request.selectedCells.push_back(cellId);
+    }
+    std::sort(request.selectedCells.begin(), request.selectedCells.end());
+
+    ecs_.each<ecs::Mesh, ecs::Transform>([&](const ecs::Entity& entity, const ecs::Mesh& mesh, const ecs::Transform&) {
+        ModelPlacementRequest placement;
+        placement.entityId = entity.id;
+        placement.meshId = mesh.meshId;
+        placement.cellId = entity.currentCell;
+        placement.selected = entity.selected;
+        placement.surfaceOffset = kEntitySurfaceOffset;
+        request.modelRequests.push_back(std::move(placement));
+        });
+
+    SceneDagResult result = engine_->rebuildSceneDerived(request);
+
+    // Keep the legacy selection outline path as a fallback so the UI does not
+    // lose cell highlighting if the scene DAG skips or returns an empty result.
+    if (request.selectedCells.empty() || !result.selectionOutline.vertices.empty()) {
+        scene_.setSelectionOutlineVertices(std::move(result.selectionOutline.vertices));
+    }
+    scene_.setTreePlacements(std::move(result.treePlacements));
+}
+
+void InputController::syncPathBackendFromScene() {
+    if (!engine_ || isContributorMode()) {
+        return;
+    }
+    engine_->setPathTerrainSnapshot(scene_.captureTerrainSnapshot());
 }
 
 void InputController::stageTerrainParams(const TerrainParams& params) {
@@ -514,12 +670,16 @@ void InputController::projectTerrainSnapshot(const TerrainSnapshot& snapshot) {
         return;
     }
     scene_.applyTerrainSnapshot(snapshot);
+    syncPathBackendFromScene();
 }
 
 void InputController::buildAndShowSelectedPath(Response& response) {
     if (renderer_) {
-        if (auto poly = scene_.buildPathPolyline()) {
-            renderer_->uploadPath(*poly);
+        if (auto endpoints = selectedPathEndpoints(scene_)) {
+            const PathResult result = engine_
+                ? engine_->findPath(endpoints->first, endpoints->second)
+                : PathResult{};
+            renderer_->uploadPath(scene_.buildPathPolyline(result.cellIds));
         }
         else {
             renderer_->uploadPath({});
@@ -530,16 +690,10 @@ void InputController::buildAndShowSelectedPath(Response& response) {
 
 void InputController::buildAndShowPathBetween(int startCell, int targetCell, Response& response) {
     if (renderer_) {
-        PathBuilder pb(scene_.model(), pathSmoothDelta(scene_));
-        pb.build();
-        const auto ids = pb.astar(startCell, targetCell);
-        if (!ids.empty()) {
-            const auto poly = pb.polylineOnSphere(ids, kPathSegmentsPerEdge, scene_.pathBias(), scene_.heightStep());
-            renderer_->uploadPath(poly);
-        }
-        else {
-            renderer_->uploadPath({});
-        }
+        const PathResult result = engine_
+            ? engine_->findPath(startCell, targetCell)
+            : PathResult{};
+        renderer_->uploadPath(scene_.buildPathPolyline(result.cellIds));
     }
     response.requestUpdate = true;
 }
@@ -715,7 +869,7 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
     }
 
     buildAndShowPathBetween(oldCell, cellId, response);
-    // Р”Р»СЏ Explorer-РґРІРёР¶РµРЅРёСЏ С…РѕС‚РёРј РїСЂСЏРјСѓСЋ "РїРѕ РїРѕРІРµСЂС…РЅРѕСЃС‚Рё", Р±РµР· РїРѕРґРїСЂС‹РіРёРІР°РЅРёСЏ
+    // Р вЂќР В»РЎРЏ Explorer-Р Т‘Р Р†Р С‘Р В¶Р ВµР Р…Р С‘РЎРЏ РЎвЂ¦Р С•РЎвЂљР С‘Р С Р С—РЎР‚РЎРЏР СРЎС“РЎР‹ "Р С—Р С• Р С—Р С•Р Р†Р ВµРЎР‚РЎвЂ¦Р Р…Р С•РЎРѓРЎвЂљР С‘", Р В±Р ВµР В· Р С—Р С•Р Т‘Р С—РЎР‚РЎвЂ№Р С–Р С‘Р Р†Р В°Р Р…Р С‘РЎРЏ
     if (!applyAnimation(entity->id, cellId, kBaseTraversalSpeed, 0.0f)) {
         if (renderer_) {
             renderer_->uploadPath({});
@@ -828,13 +982,15 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
         return true;
     }
 
-    PathBuilder pb(scene_.model(), pathSmoothDelta(scene_));
-    pb.build();
-    const auto cellPath = pb.astar(startCell, targetCell);
+    const PathResult result = engine_
+        ? engine_->findPath(startCell, targetCell)
+        : PathResult{};
+    const auto& cellPath = result.cellIds;
     if (cellPath.empty()) {
         return false;
     }
 
+    PathBuilder pb(scene_.model(), pathSmoothDelta(scene_));
     const auto rawPathPoints = pb.polylineOnSphere(cellPath, kPathSegmentsPerEdge, scene_.pathBias(), scene_.heightStep());
     if (rawPathPoints.empty()) {
         return false;
@@ -856,7 +1012,7 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
     entity->currentCell = -1;
     transform->position = pathPoints.front();
 
-    // пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
+    // РїС—Р…РїС—Р…РїС—Р…РїС—Р…РїС—Р…РїС—Р… РїС—Р…РїС—Р…РїС—Р…РїС—Р…РїС—Р…РїС—Р…РїС—Р…РїС—Р…
     ecs::Animation& anim = ecs_.emplace<ecs::Animation>(entityId);
     anim.type = ecs::Animation::Type::MoveTo;
     anim.duration = 0.0f;
@@ -921,11 +1077,11 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
             anim.surfaceForward = t.normalized();
         }
     }
-    // РЎРѕС…СЂР°РЅСЏРµРј РЅР°РїСЂР°РІР»РµРЅРёРµ СЃСЂР°Р·Сѓ РІ Transform, С‡С‚РѕР±С‹ РѕРЅРѕ РЅРµ Р·Р°РІРёСЃРµР»Рѕ РѕС‚ РЅР°Р»РёС‡РёСЏ Animation.
+    // Р РЋР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎРЏР ВµР С Р Р…Р В°Р С—РЎР‚Р В°Р Р†Р В»Р ВµР Р…Р С‘Р Вµ РЎРѓРЎР‚Р В°Р В·РЎС“ Р Р† Transform, РЎвЂЎРЎвЂљР С•Р В±РЎвЂ№ Р С•Р Р…Р С• Р Р…Р Вµ Р В·Р В°Р Р†Р С‘РЎРѓР ВµР В»Р С• Р С•РЎвЂљ Р Р…Р В°Р В»Р С‘РЎвЂЎР С‘РЎРЏ Animation.
     transform->surfaceForward = anim.surfaceForward;
 
     speed = std::max(0.01f, speed);
-    // Р•СЃР»Рё caller РїРµСЂРµРґР°Р» 0.0f, РїРѕРґРїСЂС‹РіРёРІР°РЅРёРµ РґРѕР»Р¶РЅРѕ РїРѕР»РЅРѕСЃС‚СЊСЋ РѕС‚РєР»СЋС‡РёС‚СЊСЃСЏ.
+    // Р вЂўРЎРѓР В»Р С‘ caller Р С—Р ВµРЎР‚Р ВµР Т‘Р В°Р В» 0.0f, Р С—Р С•Р Т‘Р С—РЎР‚РЎвЂ№Р С–Р С‘Р Р†Р В°Р Р…Р С‘Р Вµ Р Т‘Р С•Р В»Р В¶Р Р…Р С• Р С—Р С•Р В»Р Р…Р С•РЎРѓРЎвЂљРЎРЉРЎР‹ Р С•РЎвЂљР С”Р В»РЎР‹РЎвЂЎР С‘РЎвЂљРЎРЉРЎРѓРЎРЏ.
     anim.bounceHeight = std::clamp(bounceHeight, 0.0f, bounceHeightForBiome(targetData.biome));
     anim.arcPeakT = arcPeakForBiome(targetData.biome);
     anim.softLanding = usesSoftLanding(targetData.biome);
@@ -947,4 +1103,5 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
 void InputController::updateAnimations(float dt) {
     ecs_.update(dt);
 }
+
 

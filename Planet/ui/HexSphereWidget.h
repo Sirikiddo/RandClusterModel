@@ -39,6 +39,7 @@ public slots:
     void setSmoothOneStep(bool on);
     void setStripInset(float v);
     void setOutlineBias(float v);
+    void triggerCommand(SceneCommand command);
 
 signals:
     void hudTextChanged(const QString&);

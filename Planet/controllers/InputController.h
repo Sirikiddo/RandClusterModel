@@ -23,6 +23,26 @@ class CameraController;
 class EngineFacade;
 class HexSphereModel;
 
+enum class SceneCommand {
+    ClearPath,
+    ToggleOreVisualization,
+    ToggleSmooth,
+    BuildPath,
+    MoveSelectedEntity,
+    DeselectEntity,
+    DeleteSelectedEntity,
+    IncreaseHeight,
+    DecreaseHeight,
+    SetBiomeSea,
+    SetBiomeGrass,
+    SetBiomeRock,
+    SetBiomeSnow,
+    SetBiomeTundra,
+    SetBiomeDesert,
+    SetBiomeSavanna,
+    SetBiomeJungle
+};
+
 class InputController : public ITerrainSceneBridge {
 public:
     struct Response {
@@ -43,6 +63,7 @@ public:
     void mouseRelease(QMouseEvent* e);
     Response wheel(QWheelEvent* e);
     Response keyPress(QKeyEvent* e);
+    Response executeCommand(SceneCommand command);
 
     Response setSubdivisionLevel(int L);
     Response resetView();
@@ -88,8 +109,11 @@ private:
     };
 
     void rebuildModel(Response& response);
+    void rebuildDerivedGeometry(Response& response);
     void uploadSelection();
     void uploadBuffers();
+    void refreshSceneDagOutputs();
+    void syncPathBackendFromScene();
     void buildAndShowSelectedPath(Response& response);
     void buildAndShowPathBetween(int startCell, int targetCell, Response& response);
     void clearPath(Response& response);
@@ -130,3 +154,4 @@ private:
     bool oreVisualizationEnabled_ = true;
     float oreAnimationSpeed_ = 0.1f;
 };
+

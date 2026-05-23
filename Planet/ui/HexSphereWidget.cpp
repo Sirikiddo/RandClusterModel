@@ -112,12 +112,16 @@ void HexSphereWidget::paintGL() {
     inputController_.render();
     if (engine_) {
         const auto& o = engine_->overlay();
-        overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5")
+        const auto& sceneDag = engine_->lastSceneDagStats();
+        overlayText_ = QString("v:%1  dirty:%2  busy:%3  dt:%4ms  fps:%5  dag exec:%6 skip:%7 cache:%8")
             .arg(qulonglong(o.sceneVersion))
             .arg(o.hasPlan ? "1" : "0")
             .arg(o.asyncBusy ? "1" : "0")
             .arg(QString::number(o.dtMs, 'f', 2))
-            .arg(QString::number(o.fps, 'f', 1));
+            .arg(QString::number(o.fps, 'f', 1))
+            .arg(sceneDag.executedNodes)
+            .arg(sceneDag.skippedGuardNodes)
+            .arg(sceneDag.cacheHits);
     }
     else {
         overlayText_ = QString("contributor:1  dt:%1ms").arg(QString::number(dt * 1000.0f, 'f', 2));
@@ -197,6 +201,10 @@ void HexSphereWidget::setStripInset(float v) {
 
 void HexSphereWidget::setOutlineBias(float v) {
     applyResponse(inputController_.setOutlineBias(v));
+}
+
+void HexSphereWidget::triggerCommand(SceneCommand command) {
+    applyResponse(inputController_.executeCommand(command));
 }
 
 void HexSphereWidget::applyResponse(const InputController::Response& response) {

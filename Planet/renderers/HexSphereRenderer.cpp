@@ -662,12 +662,7 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
         uploadWireInternal(scene.buildWireVertices(), options.wireUsage);
         uploadTerrainInternal(scene.terrain(), options.terrainUsage);
         uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
-        if (auto path = scene.buildPathPolyline()) {
-            uploadPathInternal(*path);
-        }
-        else {
-            uploadPathInternal({});
-        }
+        uploadPathInternal({});
         uploadWaterInternal(scene.buildWaterGeometry());
         });
     qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
