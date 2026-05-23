@@ -54,13 +54,7 @@
     <ClCompile Include="culling\TerrainCulling.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="dag\DagBackendBenchmark.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="dag\DagTerrainBackend.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="dag\DagSceneBackend.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="dag\DataAdapters.cpp">
@@ -168,10 +162,16 @@
     <ClCompile Include="ui\PlanetSettingsPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="dag\DagPathBackend.cpp">
+    <ClCompile Include="dag\TerrainDagPipeline.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="dag\TerrainSerialization.cpp">
+    <ClCompile Include="renderers\TerrainVisibility.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="contributor\ContributorParticles.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\ParticleRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -200,13 +200,7 @@
     <ClInclude Include="culling\TerrainCulling.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="dag\DagBackendBenchmark.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="dag\DagTerrainBackend.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\DagSceneBackend.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="dag\DataAdapters.h">
@@ -404,10 +398,22 @@
     <ClInclude Include="resources\HexSphereWidget_shaders.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="dag\DagPathBackend.h">
+    <ClInclude Include="dag\TerrainDagPayloadStore.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="dag\TerrainSerialization.h">
+    <ClInclude Include="dag\TerrainDagPipeline.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="generation\MeshGenerators\TerrainMeshPolicy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\TerrainVisibility.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="contributor\ContributorParticles.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\ParticleRenderer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

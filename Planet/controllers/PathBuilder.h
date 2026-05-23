@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <functional>
 #include <limits>
@@ -6,16 +6,11 @@
 #include <vector>
 
 #include <QVector3D>
+
 #include "model/HexSphereModel.h"
 
 class PathBuilder {
 public:
-
-    struct Adj {
-        int to;
-        float w;
-    };
-
     using WeightFn = std::function<float(const Cell&, const Cell&)>;
     static constexpr int kMaxClimbDelta = 2;
 
@@ -39,8 +34,12 @@ public:
     float traversalCost(const Cell& from, const Cell& to) const;
 
 private:
+    struct Adj {
+        int to;
+        float w;
+    };
+
     const HexSphereModel& model_;
     const int smoothMaxDelta_;
     mutable std::vector<std::vector<Adj>> g_;
 };
-

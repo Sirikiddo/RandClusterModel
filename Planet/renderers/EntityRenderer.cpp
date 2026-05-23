@@ -1,4 +1,4 @@
-// EntityRenderer.cpp - исправленный конструктор
+// EntityRenderer.cpp - ???????????? ???????????
 
 #include "renderers/EntityRenderer.h"
 #include "model/SurfacePlacement.h"
@@ -26,7 +26,7 @@ namespace {
     }
 }
 
-// ИСПРАВЛЕННЫЙ КОНСТРУКТОР - все параметры соответствуют объявлению
+// ???????????? ??????????? - ??? ????????? ????????????? ??????????
 EntityRenderer::EntityRenderer(QOpenGLFunctions_3_3_Core* gl,
     GLuint progWire,
     GLuint progSel,
@@ -42,7 +42,7 @@ EntityRenderer::EntityRenderer(QOpenGLFunctions_3_3_Core* gl,
     GLuint vaoPyramid,
     const GLsizei& pyramidVertexCount,
     const std::shared_ptr<ModelHandler>& treeModel,
-    const std::shared_ptr<ModelHandler>& firTreeModel,  // ДОБАВЛЯЕМ
+    const std::shared_ptr<ModelHandler>& firTreeModel,  // ?????????
     const std::shared_ptr<CarModelHandler>& carModel)
     : gl_(gl)
     , progWire_(progWire)
@@ -59,7 +59,7 @@ EntityRenderer::EntityRenderer(QOpenGLFunctions_3_3_Core* gl,
     , vaoPyramid_(vaoPyramid)
     , pyramidVertexCount_(pyramidVertexCount)
     , treeModel_(treeModel)
-    , firTreeModel_(firTreeModel)  // ИНИЦИАЛИЗИРУЕМ
+    , firTreeModel_(firTreeModel)  // ??????????????
     , carModel_(carModel) {
 }
 
@@ -212,7 +212,7 @@ void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, cons
 }
 
 void EntityRenderer::renderTrees(const HexSphereRenderer::RenderContext& ctx) const {
-    // Проверяем наличие хотя бы одной модели
+    // ????????? ??????? ???? ?? ????? ??????
     if ((!treeModel_ || !treeModel_->isInitialized()) &&
         (!firTreeModel_ || !firTreeModel_->isInitialized())) return;
 
@@ -224,8 +224,16 @@ void EntityRenderer::renderTrees(const HexSphereRenderer::RenderContext& ctx) co
     GLint uUseFoliageColor = gl_->glGetUniformLocation(progModel_, "uUseFoliageColor");
     GLint uFoliageColor = gl_->glGetUniformLocation(progModel_, "uFoliageColor");
     GLint uTrunkColor = gl_->glGetUniformLocation(progModel_, "uTrunkColor");
+    GLint uWindTime = gl_->glGetUniformLocation(progModel_, "uWindTime");
 
     if (uIsCar >= 0) gl_->glUniform1i(uIsCar, 0);
+    static float foliageWindTime = 0.0f;
+    foliageWindTime += 0.016f;
+    if (uWindTime >= 0) {
+        gl_->glUniform1f(uWindTime, foliageWindTime);
+    }
+    const GLboolean cullWasEnabled = gl_->glIsEnabled(GL_CULL_FACE);
+    gl_->glDisable(GL_CULL_FACE);
 
     QVector3D globalLightDir = QVector3D(0.5f, 1.0f, 0.3f).normalized();
     QVector3D eye = (ctx.camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
@@ -243,49 +251,66 @@ void EntityRenderer::renderTrees(const HexSphereRenderer::RenderContext& ctx) co
         orientToSurfaceNormal(model, treePos.normalized());
         model.rotate(placement.rotation * 180.0f / 3.14159f, 0, 1, 0);
 
-        // Выбираем масштаб в зависимости от типа дерева
-        float baseScale = 0.045f;
+        // ???????? ??????? ? ??????????? ?? ???? ??????
+        float baseScale = 0.04f;
         if (placement.treeType == TreeType::Fir) {
-            baseScale = 0.05f;
+            baseScale = 0.045f;
         }
         float scale = baseScale * placement.scale;
         model.scale(scale);
 
         QMatrix4x4 mvpTree = ctx.camera.projection * ctx.camera.view * model;
 
-        // Выбираем нужную модель
+        // ???????? ?????? ??????
         const auto& currentModel = (placement.treeType == TreeType::Fir)
             ? firTreeModel_
             : treeModel_;
 
         if (!currentModel || !currentModel->isInitialized()) continue;
 
-        // ========== РИСУЕМ СТВОЛ ==========
-        if (uUseFoliageColor >= 0) {
-            gl_->glUniform1i(uUseFoliageColor, 0);
+        const bool hasSplitTreeParts =
+            currentModel->hasDrawablePart("trunk") && currentModel->hasDrawablePart("foliage");
+
+        if (hasSplitTreeParts) {
+            // Trunk pass
+            if (uUseFoliageColor >= 0) {
+                gl_->glUniform1i(uUseFoliageColor, 0);
+            }
+            if (uTrunkColor >= 0) {
+                gl_->glUniform3f(uTrunkColor,
+                    placement.trunkColor.x(),
+                    placement.trunkColor.y(),
+                    placement.trunkColor.z());
+            }
+            currentModel->drawPart("trunk", progModel_, mvpTree, model, ctx.camera.view);
+
+            // Foliage pass
+            if (uUseFoliageColor >= 0) {
+                gl_->glUniform1i(uUseFoliageColor, 1);
+            }
+            if (uFoliageColor >= 0) {
+                gl_->glUniform3f(uFoliageColor,
+                    placement.foliageColor.x(),
+                    placement.foliageColor.y(),
+                    placement.foliageColor.z());
+            }
+            currentModel->drawPart("foliage", progModel_, mvpTree, model, ctx.camera.view);
         }
-
-        if (uTrunkColor >= 0) {
-            gl_->glUniform3f(uTrunkColor,
-                placement.trunkColor.x(),
-                placement.trunkColor.y(),
-                placement.trunkColor.z());
+        else {
+            // Fallback for models without split parts.
+            if (uUseFoliageColor >= 0) {
+                gl_->glUniform1i(uUseFoliageColor, 1);
+            }
+            if (uFoliageColor >= 0) {
+                gl_->glUniform3f(uFoliageColor,
+                    placement.foliageColor.x(),
+                    placement.foliageColor.y(),
+                    placement.foliageColor.z());
+            }
+            currentModel->draw(progModel_, mvpTree, model, ctx.camera.view, placement.foliageColor, /*forceTextureOff=*/false);
         }
-
-        currentModel->drawPart("trunk", progModel_, mvpTree, model, ctx.camera.view);
-
-        // ========== РИСУЕМ КРОНУ ==========
-        if (uUseFoliageColor >= 0) {
-            gl_->glUniform1i(uUseFoliageColor, 1);
-        }
-
-        if (uFoliageColor >= 0) {
-            gl_->glUniform3f(uFoliageColor,
-                placement.foliageColor.x(),
-                placement.foliageColor.y(),
-                placement.foliageColor.z());
-        }
-
-        currentModel->drawPart("foliage", progModel_, mvpTree, model, ctx.camera.view);
     }
+
+    if (cullWasEnabled) gl_->glEnable(GL_CULL_FACE);
+    else gl_->glDisable(GL_CULL_FACE);
 }

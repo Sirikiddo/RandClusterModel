@@ -227,6 +227,8 @@ layout(location=3) in vec3 aColor;
 
 uniform mat4 uMVP;
 uniform mat4 uModel;
+uniform bool uUseFoliageColor;
+uniform float uWindTime;
 
 out vec3 vNormal;
 out vec3 vWorldPos;
@@ -234,12 +236,21 @@ out vec2 vUV;
 out vec3 vColor;
 
 void main() {
-    vec4 worldPos = uModel * vec4(aPos, 1.0);
+    vec3 animatedPos = aPos;
+    if (uUseFoliageColor) {
+        // Gentle foliage-only sway in model space.
+        float sway = sin(uWindTime * 2.1 + aPos.x * 8.0 + aPos.z * 6.0) * 0.015;
+        float gust = sin(uWindTime * 0.9 + aPos.y * 3.5) * 0.010;
+        animatedPos.x += sway + gust;
+        animatedPos.z += sway * 0.6;
+    }
+
+    vec4 worldPos = uModel * vec4(animatedPos, 1.0);
     vWorldPos = worldPos.xyz;
     vNormal = mat3(transpose(inverse(uModel))) * aNormal;
     vUV = aUV;
     vColor = aColor;
-    gl_Position = uMVP * vec4(aPos, 1.0);
+    gl_Position = uMVP * vec4(animatedPos, 1.0);
 }
 )GLSL";
 
@@ -302,8 +313,8 @@ void main() {
         return;
     }
     else {
-        // ========== ДЕРЕВО: свет отрицательный (как в оригинале) ==========
-        L = normalize(uLightDir);  // Для деревьев инвертируем, как в FS_TERRAIN
+        // ========== ДЕРЕВО: ламберт как у планеты ==========
+        L = normalize(-uLightDir);
         diff = max(dot(N, L), 0.0);
         
         vec3 baseColor;

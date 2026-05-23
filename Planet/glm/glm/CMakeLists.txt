@@ -67,17 +67,3 @@ else()
 	add_library(glm::glm ALIAS glm)
 	target_link_libraries(glm INTERFACE glm-header-only)
 endif()
-
-set(DAG_SOURCES
-    dag/DagTerrainBackend.cpp
-    dag/DagPathBackend.cpp
-    dag/TerrainSerialization.cpp
-)
-
-set(DAG_HEADERS
-    dag/DagTerrainBackend.h
-    dag/DagPathBackend.h
-    dag/TerrainSerialization.h
-)
-
-target_sources(GameNew PRIVATE ${DAG_SOURCES} ${DAG_HEADERS})

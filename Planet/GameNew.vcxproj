@@ -36,7 +36,7 @@
     <Import Project="$(QtMsBuild)\qt_defaults.props" />
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
-    <QtInstall>msvc2022_64</QtInstall>
+    <QtInstall>Qt6</QtInstall>
     <QtModules>core;gui;widgets;opengl;openglwidgets</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
     <QtHeaderSearchPath>include</QtHeaderSearchPath>
@@ -69,15 +69,15 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>C:\Users\USER\Desktop\GameNew\glm;C:\Users\USER\Desktop\GameNew\include;C:\Users\USER\Desktop\GameNew\third_party\ProcessDAG\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Пользователь\Desktop\heckercat\cpp\Planet3\glm;C:\Users\Пользователь\Downloads\planet\include;C:\Users\Пользователь\Downloads\planet\third_party\ProcessDAG\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalModuleDependencies>C:\Users\USER\Desktop\GameNew\third_party\ProcessDAG\proc\Proc.ixx;C:\Users\USER\Desktop\GameNew\third_party\ProcessDAG\proc\Proc.Core.ixx;C:\Users\USER\Desktop\GameNew\third_party\ProcessDAG\proc\Proc.Schema.ixx;%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
+      <AdditionalModuleDependencies>C:\Users\Пользователь\Desktop\heckercat\cpp\Planet3\third_party\ProcessDAG\proc\Proc.ixx;C:\Users\Пользователь\Downloads\planet\third_party\ProcessDAG\proc\Proc.Core.ixx;C:\Users\Пользователь\Downloads\planet\third_party\ProcessDAG\proc\Proc.Schema.ixx;%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
       <BuildStlModules>false</BuildStlModules>
       <EnableModules>false</EnableModules>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>glew32.lib;glfw3dll.lib;opengl32.lib;freetype.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>C:\Users\USER\Desktop\GameNew\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -117,21 +117,19 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="contributor\ContributorAsset.cpp" />
+    <ClCompile Include="contributor\ContributorParticles.cpp" />
     <ClCompile Include="controllers\CameraController.cpp" />
     <ClCompile Include="controllers\HexSphereSceneController.cpp" />
     <ClCompile Include="controllers\InputController.cpp" />
     <ClCompile Include="controllers\PathBuilder.cpp" />
     <ClCompile Include="core\main.cpp" />
     <ClCompile Include="culling\TerrainCulling.cpp" />
-    <ClCompile Include="dag\DagBackendBenchmark.cpp" />
-    <ClCompile Include="dag\DagPathBackend.cpp" />
-    <ClCompile Include="dag\DagSceneBackend.cpp" />
     <ClCompile Include="dag\DagTerrainBackend.cpp" />
     <ClCompile Include="dag\DataAdapters.cpp" />
     <ClCompile Include="dag\EngineFacade.cpp" />
     <ClCompile Include="dag\LegacyTerrainBackend.cpp" />
     <ClCompile Include="dag\ProcessDagSmoke.cpp" />
-    <ClCompile Include="dag\TerrainSerialization.cpp" />
+    <ClCompile Include="dag\TerrainDagPipeline.cpp" />
     <ClCompile Include="ECS\ComponentStorage.cpp" />
     <ClCompile Include="generation\ClimateBiomeGenerator.cpp" />
     <ClCompile Include="generation\MeshGenerators\SelectionOutlineGenerator.cpp" />
@@ -146,8 +144,10 @@
     <ClCompile Include="model\OreSystem.cpp" />
     <ClCompile Include="renderers\EntityRenderer.cpp" />
     <ClCompile Include="renderers\HexSphereRenderer.cpp" />
+    <ClCompile Include="renderers\ParticleRenderer.cpp" />
     <ClCompile Include="renderers\TerrainRenderer.cpp" />
     <ClCompile Include="renderers\TerrainTessellator.cpp" />
+    <ClCompile Include="renderers\TerrainVisibility.cpp" />
     <ClCompile Include="renderers\WaterRenderer.cpp" />
     <ClCompile Include="scene\Entity.cpp" />
     <ClCompile Include="scene\SceneGraph.cpp" />
@@ -166,6 +166,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="contributor\ContributorAsset.h" />
+    <ClInclude Include="contributor\ContributorParticles.h" />
     <ClInclude Include="controllers\CameraController.h" />
     <ClInclude Include="controllers\HexSphereSceneController.h" />
     <ClInclude Include="controllers\InputController.h" />
@@ -173,9 +174,6 @@
     <ClInclude Include="core\AppViewConfig.h" />
     <ClInclude Include="core\DebugOverlay.h" />
     <ClInclude Include="culling\TerrainCulling.h" />
-    <ClInclude Include="dag\DagBackendBenchmark.h" />
-    <ClInclude Include="dag\DagPathBackend.h" />
-    <ClInclude Include="dag\DagSceneBackend.h" />
     <ClInclude Include="dag\DagTerrainBackend.h" />
     <ClInclude Include="dag\DataAdapters.h" />
     <ClInclude Include="dag\EngineFacade.h" />
@@ -183,7 +181,8 @@
     <ClInclude Include="dag\TerrainBackendContract.h" />
     <ClInclude Include="dag\TerrainBackendSelector.h" />
     <ClInclude Include="dag\TerrainBackendTypes.h" />
-    <ClInclude Include="dag\TerrainSerialization.h" />
+    <ClInclude Include="dag\TerrainDagPayloadStore.h" />
+    <ClInclude Include="dag\TerrainDagPipeline.h" />
     <ClInclude Include="ECS\Animation.h" />
     <ClInclude Include="ECS\Collider.h" />
     <ClInclude Include="ECS\ComponentStorage.h" />
@@ -194,6 +193,7 @@
     <ClInclude Include="generation\ClimateBiomeGenerator.h" />
     <ClInclude Include="generation\MeshGenerators\SelectionOutlineGenerator.h" />
     <ClInclude Include="generation\MeshGenerators\TerrainMeshGenerator.h" />
+    <ClInclude Include="generation\MeshGenerators\TerrainMeshPolicy.h" />
     <ClInclude Include="generation\MeshGenerators\WaterMeshGenerator.h" />
     <ClInclude Include="generation\MeshGenerators\WireMeshGenerator.h" />
     <ClInclude Include="generation\PerlinNoise.h" />
@@ -208,8 +208,10 @@
     <ClInclude Include="model\SurfacePlacement.h" />
     <ClInclude Include="renderers\EntityRenderer.h" />
     <ClInclude Include="renderers\HexSphereRenderer.h" />
+    <ClInclude Include="renderers\ParticleRenderer.h" />
     <ClInclude Include="renderers\TerrainRenderer.h" />
     <ClInclude Include="renderers\TerrainTessellator.h" />
+    <ClInclude Include="renderers\TerrainVisibility.h" />
     <ClInclude Include="renderers\WaterRenderer.h" />
     <ClInclude Include="resources\HexSphereWidget_shaders.h" />
     <ClInclude Include="scene\Entity.h" />

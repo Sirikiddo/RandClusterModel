@@ -1,4 +1,4 @@
-﻿#include "controllers/PathBuilder.h"
+#include "controllers/PathBuilder.h"
 
 #include <algorithm>
 #include <cmath>
@@ -195,4 +195,3 @@ std::vector<QVector3D> PathBuilder::polylineOnSphere(const std::vector<int>& pat
     out.push_back(last.centroid.normalized() * (1.0f + last.height * heightStep + bias));
     return out;
 }
-

@@ -3,7 +3,7 @@
 #include <QOpenGLWidget>
 #include <QtDebug>
 
-#include <QOpenGLVertexArrayObject> 
+#include <QOpenGLVertexArrayObject>
 
 #include "contributor/ContributorAsset.h"
 #include "core/AppViewConfig.h"
@@ -13,6 +13,8 @@
 #include "ui/OverlayRenderer.h"
 #include "renderers/TerrainRenderer.h"
 #include "renderers/WaterRenderer.h"
+#include "dag/EngineFacade.h"
+#include <algorithm>
 
 HexSphereRenderer::HexSphereRenderer(QOpenGLWidget* owner)
     : owner_(owner) {
@@ -23,47 +25,47 @@ HexSphereRenderer::~HexSphereRenderer() {
         return;
     }
 
-    // Проверяем, существует ли ещё контекст OpenGL
+    // РџСЂРѕРІРµСЂСЏРµРј, СЃСѓС‰РµСЃС‚РІСѓРµС‚ Р»Рё РµС‰С‘ РєРѕРЅС‚РµРєСЃС‚ OpenGL
     if (!QOpenGLContext::currentContext()) {
-        // Контекст уже уничтожен - ничего не делаем
+        // РљРѕРЅС‚РµРєСЃС‚ СѓР¶Рµ СѓРЅРёС‡С‚РѕР¶РµРЅ - РЅРёС‡РµРіРѕ РЅРµ РґРµР»Р°РµРј
         glReady_ = false;
         return;
     }
 
     owner_->makeCurrent();
 
-    // 1. Сначала удаляем рендереры (они используют OpenGL)
+    // 1. РЎРЅР°С‡Р°Р»Р° СѓРґР°Р»СЏРµРј СЂРµРЅРґРµСЂРµСЂС‹ (РѕРЅРё РёСЃРїРѕР»СЊР·СѓСЋС‚ OpenGL)
     terrainRenderer_.reset();
     waterRenderer_.reset();
     entityRenderer_.reset();
     overlayRenderer_.reset();
 
-    // 2. Очищаем модель деревьев
+    // 2. РћС‡РёС‰Р°РµРј РјРѕРґРµР»СЊ РґРµСЂРµРІСЊРµРІ
     if (treeModel_.use_count() == 1 && treeModel_) {
         treeModel_->clearGPUResources();
     }
 
-    // 3. Удаляем шейдерные программы
+    // 3. РЈРґР°Р»СЏРµРј С€РµР№РґРµСЂРЅС‹Рµ РїСЂРѕРіСЂР°РјРјС‹
     if (progWire_)    gl_->glDeleteProgram(progWire_);
     if (progTerrain_) gl_->glDeleteProgram(progTerrain_);
     if (progSel_)     gl_->glDeleteProgram(progSel_);
     if (progWater_)   gl_->glDeleteProgram(progWater_);
     if (progModel_)   gl_->glDeleteProgram(progModel_);
 
-    // 4. Удаляем VAO (кроме vaoTerrain_ - он удалится автоматически)
+    // 4. РЈРґР°Р»СЏРµРј VAO (РєСЂРѕРјРµ vaoTerrain_ - РѕРЅ СѓРґР°Р»РёС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё)
     if (vaoWire_ != 0)     gl_->glDeleteVertexArrays(1, &vaoWire_);
     if (vaoSel_ != 0)      gl_->glDeleteVertexArrays(1, &vaoSel_);
     if (vaoWater_ != 0)    gl_->glDeleteVertexArrays(1, &vaoWater_);
     if (vaoPyramid_ != 0)  gl_->glDeleteVertexArrays(1, &vaoPyramid_);
 
-    // 5. Явно уничтожаем QOpenGLVertexArrayObject
+    // 5. РЇРІРЅРѕ СѓРЅРёС‡С‚РѕР¶Р°РµРј QOpenGLVertexArrayObject
     if (vaoTerrain_.isCreated()) {
-        // Убеждаемся, что VAO не привязан
+        // РЈР±РµР¶РґР°РµРјСЃСЏ, С‡С‚Рѕ VAO РЅРµ РїСЂРёРІСЏР·Р°РЅ
         gl_->glBindVertexArray(0);
         vaoTerrain_.destroy();
     }
 
-    // 6. Удаляем буферы
+    // 6. РЈРґР°Р»СЏРµРј Р±СѓС„РµСЂС‹
     if (vboPositions_)   gl_->glDeleteBuffers(1, &vboPositions_);
     if (vboTerrainPos_)  gl_->glDeleteBuffers(1, &vboTerrainPos_);
     if (vboTerrainCol_)  gl_->glDeleteBuffers(1, &vboTerrainCol_);
@@ -216,40 +218,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
 
     initPyramidGeometry();
 
-    const QString modelPath = "resources/tree.obj";
-    treeModel_ = ModelHandler::loadShared(modelPath);
-    if (treeModel_) {
-        treeModel_->uploadToGPU();
-        qDebug() << "Tree model loaded successfully with groups!";
-    }
-
-    const QString firTreePath = "resources/fir_tree.obj";
-    firTreeModel_ = ModelHandler::loadShared(firTreePath);
-    if (firTreeModel_) {
-        firTreeModel_->uploadToGPU();
-        qDebug() << "Fir tree model loaded successfully!";
-    }
-
-    if (defaultAppViewConfig().isContributorMode()) {
-        loadContributorModel();
-    }
-
-    // В HexSphereRenderer::initialize(), после всех остальных инициализаций:
-    owner_->makeCurrent();  // Убеждаемся, что контекст текущий
-
-    const QString carPath = "resources/car/scene.obj";
-    carModel_ = std::make_shared<CarModelHandler>();
-    if (!carModel_->loadFromFile(carPath)) {
-        qDebug() << "Failed to load car model from:" << carPath;
-    }
-    else {
-        carModel_->uploadToGPU();  // Теперь текстуры загрузятся с активным контекстом
-        qDebug() << "Car model loaded successfully";
-    }
-
-    owner_->doneCurrent();  // Можно снять контекст, если нужно
-
-    // СОЗДАЁМ РЕНДЕРЕРЫ ПОСЛЕ ВСЕХ ИНИЦИАЛИЗАЦИЙ
+    // ========== 1. РЎРќРђР§РђР›Рђ РЎРћР—Р”РђРЃРњ Р Р•РќР”Р•Р Р•Р Р« ==========
     terrainRenderer_ = std::make_unique<TerrainRenderer>(
         gl_,
         progTerrain_,
@@ -257,10 +226,73 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         uModel_,
         uLightDir_,
         uNormalMatrix_,
-        vaoTerrain_.objectId()  // ← objectId() возвращает GLuint
+        vaoTerrain_.objectId()
     );
 
     waterRenderer_ = std::make_unique<WaterRenderer>(gl_, progWater_, uMVP_Water_, uTime_Water_, uLightDir_Water_, uViewPos_Water_, uEnvMap_, envCubemap_, vaoWater_, waterIndexCount_);
+
+    // ========== 2. РџРћРўРћРњ РЎРћР—Р”РђРЃРњ ParticleRenderer ==========
+    particleRenderer_ = std::make_unique<ParticleRenderer>();
+    particleRenderer_->initialize();
+
+    // ========== 3. Р—РђР“Р РЈР–РђР•Рњ ПРОЦЕДУРНУЮ МОДЕЛЬ ДЕРЕВА ==========
+    // Reuse the same procedural source used in contributor mode.
+    {
+        ContributorAsset treeAsset = buildContributorAsset();
+        planetTreeParticleTemplate_ = treeAsset.particles;
+
+        auto makeTreeFromMesh = [](const simple3d::Mesh& sourceMesh, const QString& debugName) -> std::shared_ptr<ModelHandler> {
+            if (sourceMesh.positions.empty() || sourceMesh.indices.empty()) {
+                return nullptr;
+            }
+            auto model = std::make_shared<ModelHandler>();
+            simple3d::Mesh meshCopy = sourceMesh;
+            if (!model->loadFromMesh(debugName, std::move(meshCopy))) {
+                return nullptr;
+            }
+            return model;
+            };
+
+        treeModel_ = makeTreeFromMesh(treeAsset.generatedMesh, "planet/procedural_tree_oak");
+        if (!treeModel_) {
+            treeModel_ = makeTreeFromMesh(treeAsset.generatedWoodMesh, "planet/procedural_tree_oak");
+        }
+        if (treeModel_) {
+            treeModel_->uploadToGPU();
+            qDebug() << "Procedural oak tree model loaded for planet mode";
+        }
+
+        firTreeModel_ = makeTreeFromMesh(treeAsset.generatedMesh, "planet/procedural_tree_fir");
+        if (!firTreeModel_) {
+            firTreeModel_ = makeTreeFromMesh(treeAsset.generatedWoodMesh, "planet/procedural_tree_fir");
+        }
+        if (firTreeModel_) {
+            firTreeModel_->uploadToGPU();
+            qDebug() << "Procedural fir tree model loaded for planet mode";
+        }
+    }
+
+    // ========== 4. РўР•РџР•Р Р¬ РњРћР–РќРћ Р—РђР“Р РЈР–РђРўР¬ CONTRIBUTOR РњРћР”Р•Р›Р¬ (РєРѕС‚РѕСЂР°СЏ РёСЃРїРѕР»СЊР·СѓРµС‚ particleRenderer_) ==========
+    if (defaultAppViewConfig().isContributorMode()) {
+        loadContributorModel();
+    }
+
+    // ========== 5. Р—РђР“Р РЈР–РђР•Рњ РњРђРЁРРќРЈ ==========
+    owner_->makeCurrent();
+
+    const QString carPath = "resources/car/scene.obj";
+    carModel_ = std::make_shared<CarModelHandler>();
+    if (!carModel_->loadFromFile(carPath)) {
+        qDebug() << "Failed to load car model from:" << carPath;
+    }
+    else {
+        carModel_->uploadToGPU();
+        qDebug() << "Car model loaded successfully";
+    }
+
+    owner_->doneCurrent();
+
+    // ========== 6. РћРЎРўРђР›Р¬РќР«Р• Р Р•РќР”Р•Р Р•Р Р« ==========
     entityRenderer_ = std::make_unique<EntityRenderer>(
         gl_, progWire_, progSel_, progModel_,
         uMVP_Wire_, uMVP_Sel_, uMVP_Model_, uModel_Model_,
@@ -284,18 +316,23 @@ void HexSphereRenderer::loadContributorModel() {
         contributorModel_ = ModelHandler::loadShared(asset.modelPath);
     }
     else {
-        if (!asset.generatedWoodMesh.positions.empty() && !asset.generatedLeavesMesh.positions.empty()) {
+        // Всегда пытаемся загрузить раздельные модели, если есть wood mesh
+        if (!asset.generatedWoodMesh.positions.empty()) {
             contributorWoodModel_ = std::make_shared<ModelHandler>();
             if (!contributorWoodModel_->loadFromMesh("contributor/generated_wood", std::move(asset.generatedWoodMesh))) {
                 contributorWoodModel_.reset();
             }
+        }
 
+        if (!asset.generatedLeavesMesh.positions.empty()) {
             contributorLeavesModel_ = std::make_shared<ModelHandler>();
             if (!contributorLeavesModel_->loadFromMesh("contributor/generated_leaves", std::move(asset.generatedLeavesMesh))) {
                 contributorLeavesModel_.reset();
             }
         }
-        else {
+
+        // Создаём объединённую модель ТОЛЬКО если нет раздельных
+        if (!contributorWoodModel_ && !contributorLeavesModel_ && !asset.generatedMesh.positions.empty()) {
             contributorModel_ = std::make_shared<ModelHandler>();
             if (!contributorModel_->loadFromMesh("contributor/generated", std::move(asset.generatedMesh))) {
                 contributorModel_.reset();
@@ -303,6 +340,7 @@ void HexSphereRenderer::loadContributorModel() {
         }
     }
 
+    // Загружаем модели в GPU
     if (contributorModel_) {
         contributorModel_->uploadToGPU();
         qDebug() << "Contributor model loaded:" << contributorModel_->loadedPath();
@@ -315,11 +353,17 @@ void HexSphereRenderer::loadContributorModel() {
         contributorLeavesModel_->uploadToGPU();
         qDebug() << "Contributor leaves model loaded:" << contributorLeavesModel_->loadedPath();
     }
+
     if (!contributorModel_ && !contributorWoodModel_ && !contributorLeavesModel_) {
         qDebug() << "Contributor model failed to load";
     }
-}
 
+    // Загружаем частицы
+    if (!asset.particles.empty() && particleRenderer_) {
+        particleRenderer_->updateParticles(asset.particles);
+        qDebug() << "Loaded" << asset.particles.size() << "particles into renderer";
+    }
+}
 void HexSphereRenderer::resize(int w, int h, float devicePixelRatio, QMatrix4x4& proj) {
     const int pw = int(w * devicePixelRatio);
     const int ph = int(h * devicePixelRatio);
@@ -347,7 +391,7 @@ void HexSphereRenderer::uploadWireInternal(const std::vector<float>& vertices, G
 void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum usage) {
     qDebug() << "uploadTerrainInternal - original indices:" << mesh.idx.size();
 
-    // Загружаем вершины (это не меняется)
+    // Р—Р°РіСЂСѓР¶Р°РµРј РІРµСЂС€РёРЅС‹ (СЌС‚Рѕ РЅРµ РјРµРЅСЏРµС‚СЃСЏ)
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
     gl_->glBufferData(GL_ARRAY_BUFFER, mesh.pos.size() * sizeof(float), mesh.pos.data(), usage);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainCol_);
@@ -355,17 +399,20 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainNorm_);
     gl_->glBufferData(GL_ARRAY_BUFFER, mesh.norm.size() * sizeof(float), mesh.norm.data(), usage);
 
-    // НЕ ФИЛЬТРУЕМ здесь - сохраняем все индексы
+    // РќР• Р¤РР›Р¬РўР РЈР•Рњ Р·РґРµСЃСЊ - СЃРѕС…СЂР°РЅСЏРµРј РІСЃРµ РёРЅРґРµРєСЃС‹
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
     gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER,
         mesh.idx.size() * sizeof(uint32_t),
         mesh.idx.data(),
-        GL_DYNAMIC_DRAW);  // Всегда DYNAMIC, так как будем менять
+        GL_DYNAMIC_DRAW);  // Р’СЃРµРіРґР° DYNAMIC, С‚Р°Рє РєР°Рє Р±СѓРґРµРј РјРµРЅСЏС‚СЊ
 
+    fullTerrainMesh_ = mesh;
+    fullTerrainIndices_ = mesh.idx;
+    terrainVisibility_.reset();
     terrainIndexCount_ = GLsizei(mesh.idx.size());
-    totalIndexCount_ = mesh.idx.size();  // Сохраняем для статистики
+    terrainVisibilityDirty_ = true;
 
-    // Создаем VAO один раз
+    // РЎРѕР·РґР°РµРј VAO РѕРґРёРЅ СЂР°Р·
     if (!vaoTerrain_.isCreated()) {
         recreateTerrainVAO();
     }
@@ -373,87 +420,50 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
     qDebug() << "uploadTerrainInternal - total indexCount:" << terrainIndexCount_;
 }
 
-// ========== НОВЫЙ МЕТОД ДЛЯ ОБНОВЛЕНИЯ ВИДИМОСТИ ==========
-//void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
-//    if (!glReady_ || !lastScene_) return;
-//
-//    // Обновляем позицию камеры в сцене
-//    lastScene_->setCameraPosition(cameraPos);
-//
-//    // Наглядно убедиться, что треугольников реально меньше
-//    static QElapsedTimer timer;
-//    if (!timer.isValid()) {
-//        timer.start();
-//    }
-//    if (timer.elapsed() < 100) return;  // Не чаще чем раз в 100 мс
-//    timer.restart();
-//
-//    // Проверяем, двигалась ли камера
-//    if (lastScene_->hasCameraMoved()) {
-//        // Получаем только видимые индексы
-//        std::vector<uint32_t> visibleIndices = lastScene_->getVisibleIndices(cameraPos);
-//
-//        if (visibleIndices.empty()) {
-//            qDebug() << "No visible triangles!";
-//            return;
-//        }
-//
-//        qDebug() << "Updating visibility - visible indices:" << visibleIndices.size();
-//
-//        // Обновляем ТОЛЬКО индексный буфер
-//        gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
-//        gl_->glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
-//            visibleIndices.size() * sizeof(uint32_t),
-//            visibleIndices.data());
-//
-//        // Обновляем счетчик для отрисовки
-//        terrainIndexCount_ = GLsizei(visibleIndices.size());
-//
-//        // Отмечаем, что камера обработана
-//        lastScene_->updateLastCameraPosition();
-//
-//        qDebug() << "Visibility updated, drawing" << terrainIndexCount_ << "indices";
-//    }
-//}
 
 void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
-    if (!glReady_ || !lastScene_) return;
+    if (!glReady_ || fullTerrainIndices_.empty()) return;
 
-    // Обновляем позицию камеры в сцене
-    lastScene_->setCameraPosition(cameraPos);
-    if (!lastScene_->supportsTerrainVisibility()) {
-        terrainIndexCount_ = 0;
-        return;
-    }
 
-    // УДАЛИТЬ эту строку:
-    // lastScene_->updatePrediction(cameraPos);
-
-    // Используем адаптивную логику для определения необходимости обновления
-    if (lastScene_->shouldUpdateVisibility() && lastScene_->hasCameraMoved(0.1f)) {
+    // РСЃРїРѕР»СЊР·СѓРµРј Р°РґР°РїС‚РёРІРЅСѓСЋ Р»РѕРіРёРєСѓ РґР»СЏ РѕРїСЂРµРґРµР»РµРЅРёСЏ РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё РѕР±РЅРѕРІР»РµРЅРёСЏ
+    const bool updateForCamera = terrainVisibility_.shouldUpdate(cameraPos);
+    if (terrainVisibilityDirty_ || updateForCamera) {
         QElapsedTimer filterTimer;
         filterTimer.start();
 
-        // ИСПРАВИТЬ: использовать обычную версию, не с предсказанием
-        std::vector<uint32_t> visibleIndices = lastScene_->getVisibleIndices(cameraPos);
+        std::vector<uint32_t> visibleIndices;
+        if (engine_ && engine_->prepareVisibleTerrainIndices(cameraPos)) {
+            if (const auto* dagVisibleIndices = engine_->currentVisibleTerrainIndices()) {
+                visibleIndices = *dagVisibleIndices;
+            }
+        }
+        if (visibleIndices.empty()) {
+            visibleIndices = buildVisibleTerrainIndices(fullTerrainMesh_, cameraPos);
+        }
+        if (visibleIndices.empty()) {
+            uploadFullTerrainIndexBuffer();
+            terrainVisibility_.markVisibilityApplied(cameraPos);
+            terrainVisibilityDirty_ = false;
+            return;
+        }
 
         qint64 elapsed = filterTimer.elapsed();
 
-        // Статистика
+        // РЎС‚Р°С‚РёСЃС‚РёРєР°
         static int updateCount = 0;
         static qint64 totalTime = 0;
         updateCount++;
         totalTime += elapsed;
 
         if (updateCount % 10 == 0) {
-            qDebug() << "=== ADAPTIVE UPDATE STATS ===";  // Вернуть старое название
+            qDebug() << "=== ADAPTIVE UPDATE STATS ===";
             qDebug() << "Avg filter time:" << (totalTime / updateCount) << "ms";
             qDebug() << "Triangles:" << (visibleIndices.size() / 3)
-                << "/" << (lastScene_->terrain().idx.size() / 3);
+                << "/" << (fullTerrainIndices_.size() / 3);
             qDebug() << "==============================";
         }
 
-        // Обновляем индексный буфер
+        // РћР±РЅРѕРІР»СЏРµРј РёРЅРґРµРєСЃРЅС‹Р№ Р±СѓС„РµСЂ
         gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
         gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER,
             visibleIndices.size() * sizeof(uint32_t),
@@ -461,8 +471,19 @@ void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
             GL_DYNAMIC_DRAW);
 
         terrainIndexCount_ = GLsizei(visibleIndices.size());
-        lastScene_->updateLastCameraPosition();
+        terrainVisibility_.markVisibilityApplied(cameraPos);
+        terrainVisibilityDirty_ = false;
     }
+}
+
+void HexSphereRenderer::uploadFullTerrainIndexBuffer() {
+    gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
+    gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+        fullTerrainIndices_.size() * sizeof(uint32_t),
+        fullTerrainIndices_.empty() ? nullptr : fullTerrainIndices_.data(),
+        GL_DYNAMIC_DRAW);
+
+    terrainIndexCount_ = GLsizei(fullTerrainIndices_.size());
 }
 
 void HexSphereRenderer::recreateTerrainVAO() {
@@ -471,7 +492,7 @@ void HexSphereRenderer::recreateTerrainVAO() {
         return;
     }
 
-    // Если VAO уже создан, не создаем заново
+    // Р•СЃР»Рё VAO СѓР¶Рµ СЃРѕР·РґР°РЅ, РЅРµ СЃРѕР·РґР°РµРј Р·Р°РЅРѕРІРѕ
     if (vaoTerrain_.isCreated()) {
         qDebug() << "VAO already created, skipping recreation";
         return;
@@ -479,7 +500,7 @@ void HexSphereRenderer::recreateTerrainVAO() {
 
     qDebug() << "Creating terrain VAO - START";
 
-    // Создаем новый VAO
+    // РЎРѕР·РґР°РµРј РЅРѕРІС‹Р№ VAO
     if (!vaoTerrain_.create()) {
         qDebug() << "Failed to create VAO!";
         return;
@@ -487,7 +508,7 @@ void HexSphereRenderer::recreateTerrainVAO() {
 
     vaoTerrain_.bind();
 
-    // Настраиваем атрибуты
+    // РќР°СЃС‚СЂР°РёРІР°РµРј Р°С‚СЂРёР±СѓС‚С‹
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
     gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(0);
@@ -500,12 +521,12 @@ void HexSphereRenderer::recreateTerrainVAO() {
     gl_->glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(2);
 
-    // Привязываем индексный буфер
+    // РџСЂРёРІСЏР·С‹РІР°РµРј РёРЅРґРµРєСЃРЅС‹Р№ Р±СѓС„РµСЂ
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
 
     vaoTerrain_.release();
 
-    // Обновляем VAO в рендерере
+    // РћР±РЅРѕРІР»СЏРµРј VAO РІ СЂРµРЅРґРµСЂРµСЂРµ
     if (terrainRenderer_) {
         terrainRenderer_->updateVAO(vaoTerrain_.objectId());
     }
@@ -582,6 +603,13 @@ void HexSphereRenderer::renderContributorModel(const RenderContext& ctx) {
         (contributorLeavesModel_ && contributorLeavesModel_->isInitialized());
     const bool hasSingleModel = contributorModel_ && contributorModel_->isInitialized();
 
+    // Отладка
+    qDebug() << "hasSplitModel:" << hasSplitModel;
+    qDebug() << "woodModel exists:" << (contributorWoodModel_ && contributorWoodModel_->isInitialized());
+    qDebug() << "leavesModel exists:" << (contributorLeavesModel_ && contributorLeavesModel_->isInitialized());
+    qDebug() << "woodColor:" << contributorWoodColor_;
+    qDebug() << "leavesColor:" << contributorLeavesColor_;
+
     if (!hasSplitModel && !hasSingleModel) {
         return;
     }
@@ -652,17 +680,42 @@ void HexSphereRenderer::renderContributorModel(const RenderContext& ctx) {
     else {
         gl_->glDisable(GL_CULL_FACE);
     }
+    if (particleRenderer_ && particleRenderer_->isInitialized()) {
+        particleRenderer_->update(0.016f, windField_, contributorModelPosition_);
+        particleRenderer_->render(ctx.mvp, ctx.camera.view, ctx.cameraPos);
+    }
+    windTime_ += 0.016f;
+    windTime_ += 0.016f;
+    // РќР°СЃС‚СЂРѕР№РєР° РІРµС‚СЂР° (РјРѕР¶РЅРѕ Р±СѓРґРµС‚ РјРµРЅСЏС‚СЊ РёР· UI РїРѕР·Р¶Рµ)
+    windField_.direction = QVector3D(0.8f, 0.2f, 0.4f).normalized();
+    windField_.strength = 0.35f;
+    windField_.gustStrength = 0.4f;
+    windField_.gustSpeed = 1.8f;
+    windField_.turbulence = 0.2f;
+
+    if (particleRenderer_ && particleRenderer_->isInitialized()) {
+        particleRenderer_->update(0.016f, windField_, contributorModelPosition_);
+        particleRenderer_->render(ctx.mvp, ctx.camera.view, ctx.cameraPos);
+    }
 }
 
 void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const UploadOptions& options) {
-    qDebug() << "uploadScene called, setting lastScene_";
-    lastScene_ = const_cast<HexSphereSceneController*>(&scene);
+    qDebug() << "uploadScene called";
+    const TerrainMesh* terrainMesh = nullptr;
+    if (engine_) {
+        terrainMesh = engine_->currentTerrainMesh();
+    }
 
     withContext([&]() {
         uploadWireInternal(scene.buildWireVertices(), options.wireUsage);
-        uploadTerrainInternal(scene.terrain(), options.terrainUsage);
+        uploadTerrainInternal(terrainMesh ? *terrainMesh : scene.terrain(), options.terrainUsage);
         uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
-        uploadPathInternal({});
+        if (auto path = scene.buildPathPolyline()) {
+            uploadPathInternal(*path);
+        }
+        else {
+            uploadPathInternal({});
+        }
         uploadWaterInternal(scene.buildWaterGeometry());
         });
     qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
@@ -674,13 +727,13 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
 
     QVector3D cameraPos = (camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
 
-    // Проверяем, что рендереры существуют
+    // РџСЂРѕРІРµСЂСЏРµРј, С‡С‚Рѕ СЂРµРЅРґРµСЂРµСЂС‹ СЃСѓС‰РµСЃС‚РІСѓСЋС‚
     if (!terrainRenderer_ || !waterRenderer_ || !entityRenderer_ || !overlayRenderer_) {
         qDebug() << "ERROR: One or more renderers are null!";
         return;
     }
 
-    // Обновляем видимость
+    // РћР±РЅРѕРІР»СЏРµРј РІРёРґРёРјРѕСЃС‚СЊ
     updateVisibility(cameraPos);
 
     const float dpr = owner_->devicePixelRatioF();
@@ -712,7 +765,7 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     entityRenderer_->renderEntities(ctx);
     overlayRenderer_->render(ctx);
 
-    // overlay ����� ������ �����/��������� � ����� ������ state
+    // overlay пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ/пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ state
     //gl_->glDisable(GL_BLEND);
     //gl_->glDepthMask(GL_TRUE);
     //gl_->glEnable(GL_DEPTH_TEST);
@@ -725,6 +778,7 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     }
     else {
         entityRenderer_->renderTrees(ctx);
+        renderPlanetTreeParticles(ctx);
     }
 
     if (stats_) stats_->stopGPUTimer();
@@ -801,4 +855,98 @@ void HexSphereRenderer::setOreAnimationTime(float time) {
 
 void HexSphereRenderer::setOreVisualizationEnabled(bool enabled) {
     oreVisualizationEnabled_ = enabled;
+}
+
+void HexSphereRenderer::renderPlanetTreeParticles(const RenderContext& ctx) {
+    if (!particleRenderer_ || !particleRenderer_->isInitialized()) {
+        return;
+    }
+    if (planetTreeParticleTemplate_.empty()) {
+        return;
+    }
+
+    const auto& placements = ctx.graph.scene.getTreePlacements();
+    if (placements.empty()) {
+        return;
+    }
+
+    // Keep particle count bounded to avoid excessive per-frame CPU/GPU uploads.
+    constexpr size_t kMaxTreesWithParticles = 24;
+    constexpr size_t kMaxParticlesTotal = 18000;
+
+    const size_t treeCount = std::min(placements.size(), kMaxTreesWithParticles);
+
+    // Rebuild particle cloud only when tree placements change.
+    uint64_t placementHash = 1469598103934665603ull;
+    auto hashCombine = [&placementHash](uint64_t v) {
+        placementHash ^= v;
+        placementHash *= 1099511628211ull;
+        };
+    hashCombine(static_cast<uint64_t>(treeCount));
+    for (size_t i = 0; i < treeCount; ++i) {
+        const auto& p = placements[i];
+        hashCombine(static_cast<uint64_t>(p.cellId + 10007));
+        hashCombine(static_cast<uint64_t>(p.treeType));
+        hashCombine(static_cast<uint64_t>(p.triangleIdx + 1009));
+    }
+
+    if (placementHash != planetTreeParticlesPlacementHash_) {
+        std::vector<ContributorParticle> worldParticles;
+        worldParticles.reserve(std::min(kMaxParticlesTotal, treeCount * planetTreeParticleTemplate_.size()));
+
+        for (size_t i = 0; i < treeCount; ++i) {
+            const auto& placement = placements[i];
+            QVector3D treePos = computeSurfacePoint(ctx.graph.scene, placement, ctx.graph.heightStep);
+            QVector3D up = treePos.normalized();
+
+            QMatrix4x4 transform;
+            transform.translate(treePos);
+            transform.rotate(placement.rotation * 180.0f / 3.14159f, up);
+            float baseScale = (placement.treeType == TreeType::Fir) ? 0.045f : 0.04f;
+            transform.scale(baseScale * placement.scale);
+
+            // Biome-dependent foliage palette for particles.
+            QVector3D foliageColor = placement.foliageColor;
+            if (placement.colorType == TreePlacement::TreeColorType::Autumn) {
+                foliageColor = QVector3D(0.85f, 0.48f, 0.18f);
+            }
+            else {
+                foliageColor = QVector3D(0.22f, 0.68f, 0.24f);
+            }
+
+            for (const auto& src : planetTreeParticleTemplate_) {
+                if (worldParticles.size() >= kMaxParticlesTotal) {
+                    break;
+                }
+                ContributorParticle p = src;
+                const QVector3D localRest = src.restPosition;
+                const QVector3D localPos = src.position;
+                p.restPosition = (transform * QVector4D(localRest, 1.0f)).toVector3D();
+                p.position = (transform * QVector4D(localPos, 1.0f)).toVector3D();
+                p.color = foliageColor;
+                p.size *= 0.65f;
+                p.windWeight *= 1.1f;
+                worldParticles.push_back(p);
+            }
+            if (worldParticles.size() >= kMaxParticlesTotal) {
+                break;
+            }
+        }
+
+        if (worldParticles.empty()) {
+            return;
+        }
+
+        particleRenderer_->updateParticles(worldParticles);
+        planetTreeParticlesPlacementHash_ = placementHash;
+    }
+
+    windField_.direction = QVector3D(0.8f, 0.2f, 0.4f).normalized();
+    windField_.strength = 0.35f;
+    windField_.gustStrength = 0.4f;
+    windField_.gustSpeed = 1.8f;
+    windField_.turbulence = 0.2f;
+
+    particleRenderer_->update(0.016f, windField_, QVector3D(0.0f, 0.0f, 0.0f));
+    particleRenderer_->render(ctx.mvp, ctx.camera.view, ctx.cameraPos);
 }

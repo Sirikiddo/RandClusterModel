@@ -1,18 +1,13 @@
-﻿#include "EngineFacade.h"
+#include "EngineFacade.h"
 
 #include <memory>
 #include "TerrainBackendSelector.h"
 
-// Расширяем Impl для поддержки PathBackend
 struct EngineFacade::Impl {
-    SelectedTerrainBackend terrainBackend;
-    DagPathBackend pathBackend;
-    DagSceneBackend sceneBackend;
+    SelectedTerrainBackend backend;
 };
 
 static_assert(TerrainBackend<SelectedTerrainBackend>);
-
-// ===== КОНСТРУКТОР / ДЕСТРУКТОР =====
 
 EngineFacade::EngineFacade()
     : impl_(std::make_unique<Impl>()) {
@@ -22,86 +17,73 @@ EngineFacade::EngineFacade()
 EngineFacade::~EngineFacade() {
     impl_.reset();
 }
-
 EngineFacade::EngineFacade(EngineFacade&&) noexcept = default;
 EngineFacade& EngineFacade::operator=(EngineFacade&&) noexcept = default;
 
-// ===== ТЕРРЕЙН =====
-
 void EngineFacade::attachTerrainBridge(ITerrainSceneBridge* bridge) {
-    impl_->terrainBackend.attachTerrainBridge(bridge);
+    impl_->backend.attachTerrainBridge(bridge);
 }
 
 void EngineFacade::initializeTerrainState() {
-    impl_->terrainBackend.initializeTerrainState();
+    impl_->backend.initializeTerrainState();
     overlay_.hasPlan = kUsesDagTerrainBackend;
 }
 
 void EngineFacade::setTerrainParams(const TerrainParams& params) {
-    impl_->terrainBackend.setTerrainParams(params);
+    impl_->backend.setTerrainParams(params);
 }
 
 void EngineFacade::setGeneratorByIndex(int idx) {
-    impl_->terrainBackend.setGeneratorByIndex(idx);
+    impl_->backend.setGeneratorByIndex(idx);
 }
 
 void EngineFacade::setSubdivisionLevel(int level) {
-    impl_->terrainBackend.setSubdivisionLevel(level);
+    impl_->backend.setSubdivisionLevel(level);
+}
+
+void EngineFacade::setTerrainRenderConfig(const TerrainRenderConfig& config) {
+    impl_->backend.setTerrainRenderConfig(config);
 }
 
 TerrainRegenerationResult EngineFacade::regenerateTerrain() {
-    const auto result = impl_->terrainBackend.regenerateTerrain();
-
+    const auto result = impl_->backend.regenerateTerrain();
     if (result) {
         ++overlay_.sceneVersion;
-
-        // После успешной регенерации террейна обновляем PathBackend
-        const TerrainSnapshot* snapshot = impl_->terrainBackend.currentTerrainSnapshot();
-        if (snapshot) {
-            impl_->pathBackend.setTerrainSnapshot(*snapshot);
-        }
     }
-
     return result;
 }
 
+bool EngineFacade::prepareTerrainMesh() {
+    return impl_->backend.prepareTerrainMesh();
+}
+
+bool EngineFacade::prepareVisibleTerrainIndices(const QVector3D& cameraPos) {
+    return impl_->backend.prepareVisibleTerrainIndices(cameraPos);
+}
+
 const TerrainSnapshot* EngineFacade::currentTerrainSnapshot() const {
-    return impl_->terrainBackend.currentTerrainSnapshot();
+    return impl_->backend.currentTerrainSnapshot();
 }
 
-// ===== ПОИСК ПУТИ =====
-
-void EngineFacade::setPathSmoothMaxDelta(int delta) {
-    impl_->pathBackend.setSmoothMaxDelta(delta);
+const TerrainMesh* EngineFacade::currentTerrainMesh() const {
+    return impl_->backend.currentTerrainMesh();
 }
 
-void EngineFacade::setPathTerrainSnapshot(const TerrainSnapshot& snapshot) {
-    impl_->pathBackend.setTerrainSnapshot(snapshot);
+const std::vector<uint32_t>* EngineFacade::currentVisibleTerrainIndices() const {
+    return impl_->backend.currentVisibleTerrainIndices();
 }
 
-PathResult EngineFacade::findPath(int startCellId, int goalCellId) {
-    return impl_->pathBackend.findPath(startCellId, goalCellId);
+TerrainDagStats EngineFacade::terrainDagStats() const {
+    return impl_->backend.debugStats();
 }
-
-const PathResult& EngineFacade::lastPathResult() const {
-    return impl_->pathBackend.lastResult();
-}
-
-// ===== ПРОИЗВОДНЫЕ ДАННЫЕ СЦЕНЫ =====
-
-SceneDagResult EngineFacade::rebuildSceneDerived(const SceneDagRequest& request) {
-    return impl_->sceneBackend.rebuild(request);
-}
-
-const DagDebugStats& EngineFacade::lastSceneDagStats() const {
-    return impl_->sceneBackend.lastStats();
-}
-
-// ===== TICK =====
 
 void EngineFacade::tick(float dtSeconds) {
     overlay_.dtMs = dtSeconds * 1000.0f;
     overlay_.hasPlan = kUsesDagTerrainBackend;
+    const TerrainDagStats stats = impl_->backend.debugStats();
+    overlay_.terrainBuildCount = stats.terrainBuildCount;
+    overlay_.meshBuildCount = stats.meshBuildCount;
+    overlay_.visibilityBuildCount = stats.visibilityBuildCount;
 
     fpsAccum_ += dtSeconds;
     ++fpsFrames_;

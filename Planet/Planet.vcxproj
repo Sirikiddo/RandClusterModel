@@ -209,6 +209,8 @@
     <ClInclude Include="scene\SceneGraph.h" />
     <ClInclude Include="scene\Transform.h" />
     <ClInclude Include="dag\DataAdapters.h" />
+    <ClInclude Include="contributor\ContributorParticles.h" />
+    <ClInclude Include="renderers\ParticleRenderer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="controllers\CameraController.cpp" />
@@ -262,6 +264,8 @@
       <ExcludedFromBuild Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="contributor\ContributorParticles.cpp" />
+    <ClCompile Include="renderers\ParticleRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="resources\HexSphereWidget_shaders.h" />

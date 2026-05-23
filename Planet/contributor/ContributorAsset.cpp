@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <QDebug>
 #include <random>
 #include <vector>
+#include "contributor/ContributorParticles.h"
 
 namespace {
 
@@ -48,32 +50,28 @@ namespace {
     struct TreeMeshes {
         Mesh wood;
         Mesh leaves;
+        std::vector<Vec3> branchTips;  // ← добавить эту строку
     };
 
     struct TreeParams {
         int trunkSegments = 14;
         int radialSegments = 10;
-
         float trunkHeight = 6.0f;
         float trunkRadiusBase = 0.35f;
         float trunkRadiusTop = 0.10f;
-
         int branchCount = 7;
         int branchSegments = 5;
         float branchLengthMin = 1.0f;
         float branchLengthMax = 2.1f;
         float branchRadiusFactor = 0.38f;
         float branchUpBias = 0.45f;
-
         float trunkBend = 0.7f;
         float trunkNoise = 0.25f;
-
         int leafBlobSubdivLat = 6;
         int leafBlobSubdivLon = 8;
         float leafBlobRadiusMin = 0.45f;
         float leafBlobRadiusMax = 0.90f;
         int leafBlobsPerBranch = 2;
-
         uint32_t seed = 1337;
     };
 
@@ -290,10 +288,12 @@ namespace {
         RNG rng(p.seed);
         TreeMeshes out;
 
+        // Генерация ствола
         const std::vector<Vec3> trunk = makeTrunkCurve(p, rng);
         const std::vector<float> trunkRadii = makeTrunkRadii(p);
         appendTube(out.wood, trunk, trunkRadii, p.radialSegments);
 
+        // Генерация веток
         for (int i = 0; i < p.branchCount; ++i) {
             const float t = rng.uniform(0.28f, 0.88f);
             const float fIndex = t * static_cast<float>(p.trunkSegments);
@@ -311,22 +311,14 @@ namespace {
             const auto branchRadii = makeBranchRadii(branchRadius, p.branchSegments);
             appendTube(out.wood, branch, branchRadii, std::max(6, p.radialSegments - 2));
 
+            // Сохраняем конец ветки
             const Vec3 tip = branch.back();
-            for (int k = 0; k < p.leafBlobsPerBranch; ++k) {
-                const Vec3 offset{ rng.uniform(-0.25f, 0.25f), rng.uniform(-0.10f, 0.20f), rng.uniform(-0.25f, 0.25f) };
-                appendSphereBlob(
-                    out.leaves,
-                    tip + offset,
-                    rng.uniform(p.leafBlobRadiusMin, p.leafBlobRadiusMax),
-                    p.leafBlobSubdivLat,
-                    p.leafBlobSubdivLon);
-            }
+            out.branchTips.push_back(tip);
         }
 
         return out;
     }
-
-    void appendToSimpleMesh(simple3d::Mesh& dst, const Mesh& src) {
+    void appendToSimpleMesh(simple3d::Mesh& dst, const Mesh& src, uint32_t materialIndex = UINT32_MAX) {
         const uint32_t vertexOffset = static_cast<uint32_t>(dst.vertexCount());
 
         for (const Vertex& vertex : src.vertices) {
@@ -338,40 +330,162 @@ namespace {
         for (uint32_t index : src.indices) {
             dst.indices.push_back(vertexOffset + index);
         }
+
+        if (materialIndex != UINT32_MAX) {
+            const size_t triCount = src.indices.size() / 3;
+            dst.faceMaterial.insert(dst.faceMaterial.end(), triCount, materialIndex);
+        }
     }
 
     void appendGeneratedStylizedTreeMeshes(ContributorAsset& asset) {
-        TreeParams params;
-        params.seed = 42;
-        params.branchCount = 8;
-        params.leafBlobsPerBranch = 3;
+        struct TreeVariant {
+            TreeParams params;
+            float offsetX;
+            QString name;
+        };
 
-        const TreeMeshes tree = generateStylizedTree(params);
+        std::vector<TreeVariant> variants = {
+            // 1. Дуб — прежний, раскидистый
+            {
+                {14, 10, 5.0f, 0.40f, 0.12f, 8, 5, 1.2f, 2.5f, 0.42f, 0.50f, 0.5f, 0.20f, 6, 8, 0.50f, 0.95f, 3, 42},
+                -6.0f, "Oak"
+            },
+            // 2. Яблоня — невысокая, округлая крона
+            {
+                {14, 10, 3.5f, 0.35f, 0.12f, 7, 6, 1.0f, 1.8f, 0.40f, 0.55f, 0.3f, 0.12f, 6, 8, 0.55f, 0.85f, 3, 201},
+                -2.0f, "Apple"
+            },
+            // 3. Берёза — стройная, ветки вверх
+            {
+                {14, 10, 6.5f, 0.25f, 0.06f, 10, 6, 1.0f, 1.8f, 0.28f, 0.70f, 0.15f, 0.08f, 6, 8, 0.40f, 0.70f, 2, 301},
+                2.0f, "Birch"
+            },
+            // 4. Акация — прежняя, зонтичная
+            {
+                {14, 10, 7.0f, 0.25f, 0.15f, 5, 5, 2.0f, 3.5f, 0.28f, 0.85f, 0.2f, 0.10f, 6, 8, 0.40f, 0.75f, 2, 300},
+                6.0f, "Acacia"
+            },
+        };
 
-        appendToSimpleMesh(asset.generatedWoodMesh, tree.wood);
-        appendToSimpleMesh(asset.generatedLeavesMesh, tree.leaves);
-        asset.generatedMesh = asset.generatedWoodMesh;
-        appendToSimpleMesh(asset.generatedMesh, tree.leaves);
+        for (const auto& variant : variants) {
+            TreeParams p = variant.params;
+            TreeMeshes tree = generateStylizedTree(p);
+
+            for (auto& v : tree.wood.vertices) {
+                v.pos.x += variant.offsetX;
+            }
+
+            Mesh anonymousWoodMesh;
+            anonymousWoodMesh.vertices = tree.wood.vertices;
+            anonymousWoodMesh.indices = tree.wood.indices;
+            appendToSimpleMesh(asset.generatedWoodMesh, anonymousWoodMesh);
+
+            for (const auto& tip : tree.branchTips) {
+                asset.branchTips.push_back(QVector3D(tip.x + variant.offsetX, tip.y, tip.z));
+            }
+        }
+
+        asset.generatedMesh = simple3d::Mesh{};
+        asset.generatedMesh.materialNames = { "trunk" };
+
+        Mesh combinedAnonymous;
+        for (size_t i = 0; i < asset.generatedWoodMesh.vertexCount(); ++i) {
+            Vertex v;
+            v.pos.x = asset.generatedWoodMesh.positions[i * 3 + 0];
+            v.pos.y = asset.generatedWoodMesh.positions[i * 3 + 1];
+            v.pos.z = asset.generatedWoodMesh.positions[i * 3 + 2];
+            if (!asset.generatedWoodMesh.normals.empty()) {
+                v.normal.x = asset.generatedWoodMesh.normals[i * 3 + 0];
+                v.normal.y = asset.generatedWoodMesh.normals[i * 3 + 1];
+                v.normal.z = asset.generatedWoodMesh.normals[i * 3 + 2];
+            }
+            if (!asset.generatedWoodMesh.texcoords.empty()) {
+                v.uv.x = asset.generatedWoodMesh.texcoords[i * 2 + 0];
+                v.uv.y = asset.generatedWoodMesh.texcoords[i * 2 + 1];
+            }
+            combinedAnonymous.vertices.push_back(v);
+        }
+        combinedAnonymous.indices = asset.generatedWoodMesh.indices;
+        appendToSimpleMesh(asset.generatedMesh, combinedAnonymous, 0u);
+
+        printf("Total branch tips: %d\n", (int)asset.branchTips.size());
     }
-
 } // namespace
 
 ContributorAsset buildContributorAsset() {
     ContributorAsset asset;
 
-    // Option A: load an authored model. Change this path to inspect another OBJ/STL.
-    //asset.source = ContributorAssetSource::ModelFile;
-    //asset.modelPath = "resources/tree.obj";
-
-    // Option B: generate a model directly into the engine buffers. No OBJ export/import needed.
     asset.source = ContributorAssetSource::GeneratedMesh;
     appendGeneratedStylizedTreeMeshes(asset);
 
+    // ========== НАСТРОЙКИ РЕНДЕРИНГА ==========
+    const float treeScale = 0.5f;
+
     asset.render.position = QVector3D(0.0f, 0.0f, 0.0f);
     asset.render.rotationDegrees = QVector3D(0.0f, 0.0f, 0.0f);
-    asset.render.scale = 0.5f;
+    asset.render.scale = treeScale;
     asset.render.fallbackColor = QVector3D(0.24f, 0.62f, 0.22f);
     asset.woodColor = QVector3D(0.46f, 0.27f, 0.12f);
     asset.leavesColor = QVector3D(0.18f, 0.58f, 0.20f);
+
+    // ========== ГЕНЕРАЦИЯ ЧАСТИЦ ==========
+    std::mt19937 rng(12345);
+
+    // Распределения для размеров блобов
+    std::uniform_real_distribution<float> distRadiusSmall(0.35f, 0.45f);
+    std::uniform_real_distribution<float> distRadiusMedium(0.45f, 0.55f);
+    std::uniform_real_distribution<float> distRadiusLarge(0.55f, 0.65f);
+    std::uniform_real_distribution<float> distType(0.0f, 1.0f);
+
+    std::uniform_real_distribution<float> distCountSmall(200, 400);
+    std::uniform_real_distribution<float> distCountMedium(400, 800);
+    std::uniform_real_distribution<float> distCountLarge(800, 1200);
+
+    // Цвета
+    std::uniform_real_distribution<float> distGreen(0.18f, 0.28f);
+    std::uniform_real_distribution<float> distGreenG(0.60f, 0.75f);
+    std::uniform_real_distribution<float> distGreenB(0.15f, 0.28f);
+
+    std::vector<ContributorParticleBlob> blobs;
+
+    // Для каждого конца ветки создаём облако частиц
+    for (const auto& tip : asset.branchTips) {
+        ContributorParticleBlob blob;
+        blob.center = QVector3D(tip.x() * treeScale, tip.y() * treeScale, tip.z() * treeScale);
+
+        float typeRand = distType(rng);
+
+        if (typeRand < 0.33f) {
+            blob.radius = distRadiusSmall(rng);
+            blob.particleCount = int(distCountSmall(rng));
+        }
+        else if (typeRand < 0.66f) {
+            blob.radius = distRadiusMedium(rng);
+            blob.particleCount = int(distCountMedium(rng));
+        }
+        else {
+            blob.radius = distRadiusLarge(rng);
+            blob.particleCount = int(distCountLarge(rng));
+        }
+
+        blob.color = QVector3D(
+            distGreen(rng),
+            distGreenG(rng),
+            distGreenB(rng)
+        );
+
+        blobs.push_back(blob);
+    }
+
+    // Собираем частицы
+    asset.particles.clear();
+    for (const auto& blob : blobs) {
+        auto blobParticles = generateParticleBlob(blob, rng);
+        asset.particles.insert(asset.particles.end(), blobParticles.begin(), blobParticles.end());
+    }
+
+    debugPrintParticleCount(asset.particles);
+    qDebug() << "Number of branch tips:" << asset.branchTips.size();
+
     return asset;
 }
