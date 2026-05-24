@@ -46,6 +46,75 @@ void ModelHandler::parsePartsFromMesh() {
 
     if (mesh_.positions.empty()) return;
 
+    const size_t triangleCount = mesh_.indices.size() / 3;
+    const bool hasFaceMaterials = !mesh_.faceMaterial.empty() && mesh_.faceMaterial.size() == triangleCount;
+    const bool hasMaterialNames = !mesh_.materialNames.empty();
+    if (hasFaceMaterials && hasMaterialNames) {
+        auto materialRole = [](const std::string& name) -> QString {
+            const QString n = QString::fromStdString(name).toLower();
+            if (n.contains("trunk") || n.contains("wood")) return "trunk";
+            if (n.contains("foliage") || n.contains("leaf")) return "foliage";
+            return {};
+            };
+
+        std::unordered_map<QString, ModelPart> splitParts;
+        std::unordered_map<QString, std::unordered_map<uint32_t, uint32_t>> remap;
+
+        for (size_t tri = 0; tri < triangleCount; ++tri) {
+            const uint32_t matIdx = mesh_.faceMaterial[tri];
+            if (matIdx >= mesh_.materialNames.size()) continue;
+
+            const QString role = materialRole(mesh_.materialNames[matIdx]);
+            if (role.isEmpty()) continue;
+
+            ModelPart& part = splitParts[role];
+            part.name = role;
+            auto& indexRemap = remap[role];
+
+            for (int corner = 0; corner < 3; ++corner) {
+                const uint32_t srcIndex = mesh_.indices[tri * 3 + corner];
+                auto it = indexRemap.find(srcIndex);
+                uint32_t dstIndex = 0;
+                if (it == indexRemap.end()) {
+                    dstIndex = static_cast<uint32_t>(part.positions.size() / 3);
+                    indexRemap.emplace(srcIndex, dstIndex);
+
+                    part.positions.insert(part.positions.end(), {
+                        mesh_.positions[srcIndex * 3 + 0],
+                        mesh_.positions[srcIndex * 3 + 1],
+                        mesh_.positions[srcIndex * 3 + 2]
+                        });
+
+                    if (!mesh_.normals.empty() && (srcIndex * 3 + 2) < mesh_.normals.size()) {
+                        part.normals.insert(part.normals.end(), {
+                            mesh_.normals[srcIndex * 3 + 0],
+                            mesh_.normals[srcIndex * 3 + 1],
+                            mesh_.normals[srcIndex * 3 + 2]
+                            });
+                    }
+                }
+                else {
+                    dstIndex = it->second;
+                }
+                part.indices.push_back(dstIndex);
+            }
+        }
+
+        if (!splitParts.empty()) {
+            if (splitParts.count("trunk")) {
+                splitParts["trunk"].indexCount = static_cast<GLsizei>(splitParts["trunk"].indices.size());
+                parts_["trunk"] = std::move(splitParts["trunk"]);
+            }
+            if (splitParts.count("foliage")) {
+                splitParts["foliage"].indexCount = static_cast<GLsizei>(splitParts["foliage"].indices.size());
+                parts_["foliage"] = std::move(splitParts["foliage"]);
+            }
+            if (!parts_.empty()) {
+                return;
+            }
+        }
+    }
+
     // Ствол - первые 8 вершин
     ModelPart trunk;
     trunk.name = "trunk";
@@ -372,6 +441,15 @@ void ModelHandler::drawPart(const QString& partName, GLuint shader,
 
 bool ModelHandler::hasPart(const QString& partName) const {
     return parts_.find(partName) != parts_.end();
+}
+
+bool ModelHandler::hasDrawablePart(const QString& partName) const {
+    auto it = parts_.find(partName);
+    if (it == parts_.end()) {
+        return false;
+    }
+    const ModelPart& part = it->second;
+    return part.initialized && part.indexCount > 0;
 }
 
 void ModelHandler::draw(GLuint shader,

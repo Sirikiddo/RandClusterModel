@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <QMatrix4x4>
 #include <QOpenGLFunctions_3_3_Core>
@@ -8,6 +8,7 @@
 #include <QtOpenGL>
 #include <GL/gl.h>
 #include <functional>
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -19,20 +20,22 @@
 #include "model/CarModelHandler.h"
 #include "model/FactoryModelHandler.h"
 #include "model/MineModelHandler.h"
-#include "renderers/TerrainVisibility.h"
+#include "renderers/ParticleRenderer.h"
+#include "contributor/ContributorParticles.h"
+
+#include <QMutex>
+#include <QtConcurrent/QtConcurrent>
 
 class TerrainRenderer;
 class WaterRenderer;
 class EntityRenderer;
 class OverlayRenderer;
-class EngineFacade;
 
 class HexSphereRenderer {
 public:
 
     void setOreAnimationTime(float time);
     void setOreVisualizationEnabled(bool enabled);
-    void attachEngine(EngineFacade* engine) { engine_ = engine; }
 
     void updateVisibility(const QVector3D& cameraPos);
 
@@ -85,6 +88,22 @@ public:
     bool ready() const { return glReady_; }
     GLuint envCubemap() const { return envCubemap_; }
 
+    // ��� ������� �����������
+    struct VisibilityBuffer {
+        std::vector<uint32_t> indices;
+        bool ready = false;
+        int frameAge = 0;
+    };
+
+    VisibilityBuffer buffers_[2];
+    int currentBuffer_ = 0;
+    int nextBuffer_ = 1;
+
+    void swapBuffers() {
+        std::swap(currentBuffer_, nextBuffer_);
+        buffers_[nextBuffer_].ready = false;
+    }
+
 private:
     GLuint makeProgram(const char* vs, const char* fs);
     void generateEnvCubemap();
@@ -97,11 +116,12 @@ private:
     void uploadWaterInternal(const WaterGeometryData& data);
     void loadContributorModel();
     void renderContributorModel(const RenderContext& ctx);
+    void renderPlanetTreeParticles(const RenderContext& ctx);
 
+    // ����� �����
     void recreateTerrainVAO();
-    void uploadFullTerrainIndexBuffer();
 
-    EngineFacade* engine_ = nullptr;
+    HexSphereSceneController* lastScene_ = nullptr;
 
     QOpenGLWidget* owner_ = nullptr;
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
@@ -136,7 +156,6 @@ private:
     GLsizei pathVertexCount_ = 0;
     GLsizei pyramidVertexCount_ = 0;
     GLsizei waterIndexCount_ = 0;
-    bool terrainVisibilityDirty_ = true;
 
     std::shared_ptr<ModelHandler> treeModel_;
     std::shared_ptr<ModelHandler> firTreeModel_;
@@ -163,11 +182,16 @@ private:
 
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
-    TerrainMesh fullTerrainMesh_;
-    std::vector<uint32_t> fullTerrainIndices_;
-    TerrainVisibilityController terrainVisibility_;
+    bool firstRenderDone_ = false;
+
+    size_t totalIndexCount_ = 0;
 
     std::shared_ptr<CarModelHandler> carModel_;
     std::shared_ptr<FactoryModelHandler> factoryModel_;
     std::shared_ptr<MineModelHandler> mineModel_;
+    std::unique_ptr<ParticleRenderer> particleRenderer_;
+    std::vector<ContributorParticle> planetTreeParticleTemplate_;
+    uint64_t planetTreeParticlesPlacementHash_ = 0;
+    ContributorWindField windField_;
 };
+

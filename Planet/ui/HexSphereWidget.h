@@ -15,6 +15,11 @@ struct TerrainParams;
 class QMouseEvent;
 class QWheelEvent;
 class QKeyEvent;
+class QLabel;
+class QFrame;
+class QToolButton;
+class QResizeEvent;
+class QVariantAnimation;
 
 class EngineFacade;
 
@@ -39,6 +44,7 @@ public slots:
     void setSmoothOneStep(bool on);
     void setStripInset(float v);
     void setOutlineBias(float v);
+    void triggerCommand(SceneCommand command);
 
 signals:
     void hudTextChanged(const QString&);
@@ -46,6 +52,7 @@ signals:
 protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
+    void resizeEvent(QResizeEvent* e) override;
     void paintGL() override;
     void paintEvent(QPaintEvent* e) override;
 
@@ -59,6 +66,10 @@ private:
     void applyResponse(const InputController::Response& response);
     void initOreSystem();
     void updateOreAnimation(float deltaTime);
+    void updateOverlayLayout();
+    void syncPlacementPanelState();
+    void togglePlacementSelection(InputController::PlacementModel model);
+    void setPlacementPanelExpanded(bool expanded, bool animated);
 
     AppViewConfig viewConfig_{};
     CameraController& cameraController_;
@@ -73,6 +84,19 @@ private:
     bool timerStarted_ = false;
 
     QString overlayText_;
+    QLabel* hudLabel_ = nullptr;
+    QFrame* placementPanel_ = nullptr;
+    QFrame* placementContent_ = nullptr;
+    QToolButton* placementToggleButton_ = nullptr;
+    QToolButton* factoryButton_ = nullptr;
+    QToolButton* mineButton_ = nullptr;
+    QToolButton* deleteButton_ = nullptr;
+    QVariantAnimation* placementPanelWidthAnimation_ = nullptr;
+    QVariantAnimation* placementContentWidthAnimation_ = nullptr;
+    int placementPanelCollapsedWidth_ = 0;
+    int placementPanelExpandedWidth_ = 0;
+    int placementContentExpandedWidth_ = 0;
+    bool placementPanelExpanded_ = true;
     QTimer* waterTimer_ = nullptr;
 
     QTimer* animationTimer_ = nullptr;

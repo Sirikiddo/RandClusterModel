@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+// в”Ђв”Ђв”Ђ РЁРµР№РґРµСЂС‹ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 static const char* VS_WIRE = R"GLSL(
 #version 330 core
 layout(location=0) in vec3 aPos;
@@ -21,7 +22,7 @@ layout(location=2) in vec3 aNormal;
 
 uniform mat4 uMVP;
 uniform mat4 uModel;
-uniform mat3 uNormalMatrix;
+uniform mat3 uNormalMatrix; 
 
 out vec3 vColor;
 out vec3 vNormal;
@@ -64,6 +65,7 @@ out vec4 FragColor;
 void main(){ FragColor = vec4(1.0,1.0,0.2,1.0); }
 )GLSL";
 
+// в”Ђв”Ђв”Ђ Water shader в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 static const char* VS_WATER = R"GLSL(
 #version 330 core
 layout(location=0) in vec3 aPos;
@@ -84,37 +86,37 @@ float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
-
+    
     float a = hash(i);
     float b = hash(i + vec2(1.0, 0.0));
     float c = hash(i + vec2(0.0, 1.0));
     float d = hash(i + vec2(1.0, 1.0));
-
+    
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
 void main() {
     vTexCoord = aPos.xz * 2.0;
-
+    
     float wave1 = sin(aPos.x * 4.0 + uTime * 1.5) * 0.02;
     float wave2 = sin(aPos.z * 3.0 + uTime * 1.2) * 0.015;
-
+    
     float noiseWave = noise(vec2(aPos.x * 3.0 + uTime * 0.8, aPos.z * 3.0)) * 0.01;
     float noiseWave2 = noise(vec2(aPos.x * 6.0 - uTime * 0.6, aPos.z * 6.0)) * 0.005;
-
+    
     float totalWave = wave1 + wave2 + noiseWave + noiseWave2;
-
+    
     vec3 displaced = aPos + vec3(0.0, totalWave, 0.0);
     vWorldPos = displaced;
-
+    
     float h = 0.01;
-    float dx = noise(vec2((aPos.x + h) * 3.0 + uTime * 0.8, aPos.z * 3.0)) -
+    float dx = noise(vec2((aPos.x + h) * 3.0 + uTime * 0.8, aPos.z * 3.0)) - 
                noise(vec2((aPos.x - h) * 3.0 + uTime * 0.8, aPos.z * 3.0));
-    float dz = noise(vec2(aPos.x * 3.0 + uTime * 0.8, (aPos.z + h) * 3.0)) -
+    float dz = noise(vec2(aPos.x * 3.0 + uTime * 0.8, (aPos.z + h) * 3.0)) - 
                noise(vec2(aPos.x * 3.0 + uTime * 0.8, (aPos.z - h) * 3.0));
-
+    
     vNormal = normalize(vec3(-dx * 2.0, 1.0, -dz * 2.0));
-
+    
     gl_Position = uMVP * vec4(displaced, 1.0);
 }
 )GLSL";
@@ -148,7 +150,7 @@ float fbm(vec2 p) {
     float value = 0.0;
     float amplitude = 0.5;
     float frequency = 1.0;
-
+    
     for (int i = 0; i < 4; i++) {
         value += amplitude * noise(p * frequency);
         amplitude *= 0.5;
@@ -164,55 +166,58 @@ float fresnel(vec3 normal, vec3 viewDir) {
 void main() {
     vec3 viewDir = normalize(uViewPos - vWorldPos);
     vec3 normal = normalize(vNormal);
-
+    
     float depth = max(0.0, 1.0 - length(vWorldPos) * 0.8);
-
+    
     vec3 shallowColor = vec3(0.1, 0.4, 0.8);
     vec3 deepColor = vec3(0.0, 0.15, 0.4);
-
+    
     float colorVariation = fbm(vTexCoord * 0.5 + uTime * 0.1) * 0.2 - 0.1;
     shallowColor.r += colorVariation * 0.1;
     shallowColor.g += colorVariation * 0.2;
-
+    
     vec3 waterColor = mix(deepColor, shallowColor, depth);
-
+    
     vec3 reflectDir = reflect(-viewDir, normal);
     vec3 reflection = texture(uEnvMap, reflectDir).rgb;
     reflection *= 0.6;
-
+    
     float fresnelFactor = fresnel(normal, viewDir);
-
+    
     vec3 lightDir = normalize(-uLightDir);
     float diff = max(dot(normal, lightDir), 0.0);
-
+    
     vec3 diffuse = diff * waterColor * 0.4;
-
+    
     vec3 halfDir = normalize(lightDir + viewDir);
     float spec = pow(max(dot(normal, halfDir), 0.0), 128.0);
-
+    
     vec3 specularColor = vec3(0.3, 0.5, 1.0);
     vec3 specular = spec * specularColor * 0.6;
-
+    
     vec3 subsurface = vec3(0.0, 0.15, 0.3) * (1.0 - diff) * 0.2;
-
+    
     vec3 baseColor = waterColor + diffuse + subsurface;
     vec3 finalColor = mix(baseColor, reflection, fresnelFactor * 0.4);
     finalColor += specular;
-
+    
     float surfaceNoise = fbm(vTexCoord * 2.0 + uTime * 0.2) * 0.15 + 0.85;
     finalColor *= surfaceNoise;
-
+    
     float hueShift = sin(uTime * 0.5 + vTexCoord.x * 3.0) * 0.05;
     finalColor.g += hueShift * 0.1;
     finalColor.b += hueShift * 0.05;
-
+    
     float alpha = 0.8 + depth * 0.15 + fresnelFactor * 0.05;
     finalColor = clamp(finalColor, 0.0, 1.0);
-
+    
     FragColor = vec4(finalColor, alpha);
 }
 )GLSL";
 
+// --- РћР‘РЄР•Р”РРќР•РќРќР«Р™ РњРћР”Р•Р›Р¬РќР«Р™ РЁР•Р™Р”Р•Р  ---
+// Р”Р»СЏ РјР°С€РёРЅ: РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ Р»РѕРіРёРєР° РёР· РІС‚РѕСЂРѕР№ РІРµСЂСЃРёРё (С‚РµРєСЃС‚СѓСЂС‹, РІРµСЂС€РёРЅРЅС‹Рµ С†РІРµС‚Р°, Р±Р»РёРєРё)
+// Р”Р»СЏ РґРµСЂРµРІСЊРµРІ: РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ Р»РѕРіРёРєР° РёР· РїРµСЂРІРѕР№ РІРµСЂСЃРёРё (РѕСЂРёРіРёРЅР°Р»СЊРЅРѕРµ РѕСЃРІРµС‰РµРЅРёРµ)
 static const char* VS_MODEL = R"GLSL(
 #version 330 core
 layout(location=0) in vec3 aPos;
@@ -222,6 +227,8 @@ layout(location=3) in vec3 aColor;
 
 uniform mat4 uMVP;
 uniform mat4 uModel;
+uniform bool uUseFoliageColor;
+uniform float uWindTime;
 
 out vec3 vNormal;
 out vec3 vWorldPos;
@@ -229,12 +236,21 @@ out vec2 vUV;
 out vec3 vColor;
 
 void main() {
-    vec4 worldPos = uModel * vec4(aPos, 1.0);
+    vec3 animatedPos = aPos;
+    if (uUseFoliageColor) {
+        // Gentle foliage-only sway in model space.
+        float sway = sin(uWindTime * 2.1 + aPos.x * 8.0 + aPos.z * 6.0) * 0.015;
+        float gust = sin(uWindTime * 0.9 + aPos.y * 3.5) * 0.010;
+        animatedPos.x += sway + gust;
+        animatedPos.z += sway * 0.6;
+    }
+
+    vec4 worldPos = uModel * vec4(animatedPos, 1.0);
     vWorldPos = worldPos.xyz;
     vNormal = mat3(transpose(inverse(uModel))) * aNormal;
     vUV = aUV;
     vColor = aColor;
-    gl_Position = uMVP * vec4(aPos, 1.0);
+    gl_Position = uMVP * vec4(animatedPos, 1.0);
 }
 )GLSL";
 
@@ -253,68 +269,83 @@ uniform vec3 uColor;
 uniform bool uUseTexture;
 uniform bool uUseVertexColor;
 uniform int uIsCar;
+
+// Uniform'С‹ РґР»СЏ РґРµСЂРµРІСЊРµРІ (РёР· РїРµСЂРІРѕР№ РІРµСЂСЃРёРё)
 uniform bool uUseFoliageColor;
 uniform vec3 uFoliageColor;
 uniform vec3 uTrunkColor;
+
 uniform sampler2D uTexture;
 
 void main() {
     vec3 N = normalize(vNormal);
-
+    
     vec3 L;
     float diff;
-
+    
     if (uIsCar == 1) {
-        L = normalize(-uLightDir);
+        // ========== РњРђРЁРРќРђ: СЃРІРµС‚ РёРЅРІРµСЂС‚РёСЂРѕРІР°РЅ ==========
+        L = normalize(-uLightDir);  // Р”Р»СЏ РјР°С€РёРЅ uLightDir СѓР¶Рµ РїРѕР»РѕР¶РёС‚РµР»СЊРЅС‹Р№, РёСЃРїРѕР»СЊР·СѓРµРј РєР°Рє РµСЃС‚СЊ
         diff = max(dot(N, L), 0.0);
-
+        
         vec3 baseColor = uColor;
-
+        
         if (uUseTexture) {
             baseColor *= texture(uTexture, vUV).rgb;
         }
         if (uUseVertexColor) {
             baseColor *= vColor;
         }
-
+        
+        // Ambient + Diffuse РґР»СЏ РјР°С€РёРЅС‹
         vec3 ambient = 0.3 * baseColor;
         vec3 diffuse = 0.7 * diff * baseColor;
-
+        
+        // Specular-Р±Р»РёРє РґР»СЏ РјР°С€РёРЅС‹
         vec3 V = normalize(uViewPos - vWorldPos);
         vec3 H = normalize(L + V);
         float ndh = max(dot(N, H), 0.0);
         float shininess = 64.0;
         float carSpec = pow(ndh, shininess);
         vec3 specular = 0.45 * carSpec * vec3(1.0, 1.0, 0.9);
-
+        
         FragColor = vec4(ambient + diffuse + specular, 1.0);
         return;
     }
     else {
-        L = normalize(uLightDir);
+        // ========== Р”Р•Р Р•Р’Рћ: Р»Р°РјР±РµСЂС‚ РєР°Рє Сѓ РїР»Р°РЅРµС‚С‹ ==========
+        L = normalize(-uLightDir);
         diff = max(dot(N, L), 0.0);
-
+        
         vec3 baseColor;
-
+        
         if (uUseFoliageColor) {
+            // РљСЂРѕРЅР°
             baseColor = uFoliageColor;
+            
+            // Р”РѕР±Р°РІР»СЏРµРј РЅРµР±РѕР»СЊС€СѓСЋ РІР°СЂРёР°С†РёСЋ РґР»СЏ РѕР±СЉРµРјР°
             float leafVar = 0.85 + (sin(vUV.x * 20.0 + vUV.y * 30.0) * 0.15);
             baseColor = baseColor * leafVar;
-
+            
+            // РџРѕРґСЃРІРµС‚РєР° РІРµСЂС…СѓС€РµРє
             if (vUV.y > 0.7) {
                 float highlight = (vUV.y - 0.7) * 1.5;
                 baseColor += vec3(0.15, 0.1, 0.05) * highlight;
             }
         } else {
+            // РЎС‚РІРѕР»
             baseColor = uTrunkColor;
+            
+            // РўРµРєСЃС‚СѓСЂР° РєРѕСЂС‹
             float barkVar = 0.8 + (sin(vUV.x * 50.0) * 0.2);
             baseColor = baseColor * barkVar;
         }
-
+        
+        // РћР РР“РРќРђР›Р¬РќРћР• РћРЎР’Р•Р©Р•РќРР• РёР· РїРµСЂРІРѕР№ РІРµСЂСЃРёРё
         vec3 ambient = 0.3 * baseColor;
         vec3 diffuse = 0.7 * diff * baseColor;
         vec3 result = ambient + diffuse;
-
+        
         FragColor = vec4(result, 1.0);
         return;
     }
@@ -446,3 +477,4 @@ void main() {
     FragColor = vec4(steamColor, soft * vAlpha * dissolve * 0.62);
 }
 )GLSL";
+

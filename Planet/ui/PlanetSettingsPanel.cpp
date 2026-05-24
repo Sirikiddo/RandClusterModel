@@ -1,4 +1,4 @@
-#include "PlanetSettingsPanel.h"
+﻿#include "PlanetSettingsPanel.h"
 #include "generation/TerrainGenerator.h"
 
 #include <QComboBox>
@@ -15,7 +15,8 @@ PlanetSettingsPanel::PlanetSettingsPanel(QWidget* parent) : QWidget(parent) {
     genBox_->addItem("NoOp");
     genBox_->addItem("Sine");
     genBox_->addItem("Perlin");
-    genBox_->addItem("Climate"); // Íîâàÿ îïöèÿ èç âåðñèè 1
+    genBox_->addItem("Climate"); // ГЌГ®ГўГ Гї Г®ГЇГ¶ГЁГї ГЁГ§ ГўГҐГ°Г±ГЁГЁ 1
+    genBox_->setCurrentIndex(3);
 
     seedBox_ = new QSpinBox(this);
     seedBox_->setRange(0, INT_MAX);
@@ -120,3 +121,4 @@ void PlanetSettingsPanel::emitVisuals() {
         insetBox_->value(),
         outlineBox_->value());
 }
+

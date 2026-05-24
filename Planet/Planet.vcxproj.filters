@@ -90,9 +90,6 @@
     <ClCompile Include="dag\DagTerrainBackend.cpp">
       <Filter>dag</Filter>
     </ClCompile>
-    <ClCompile Include="dag\TerrainDagPipeline.cpp">
-      <Filter>dag</Filter>
-    </ClCompile>
     <ClCompile Include="dag\ProcessDagSmoke.cpp">
       <Filter>dag</Filter>
     </ClCompile>
@@ -155,9 +152,6 @@
     </ClCompile>
     <ClCompile Include="generation\MeshGenerators\SelectionOutlineGenerator.cpp">
       <Filter>generation\MeshGenerators</Filter>
-    </ClCompile>
-    <ClCompile Include="renderers\TerrainVisibility.cpp">
-      <Filter>renderers</Filter>
     </ClCompile>
     <ClCompile Include="generation\MeshGenerators\TerrainMeshGenerator.cpp">
       <Filter>generation\MeshGenerators</Filter>
@@ -254,9 +248,6 @@
     <ClInclude Include="dag\DagTerrainBackend.h">
       <Filter>dag</Filter>
     </ClInclude>
-    <ClInclude Include="dag\TerrainDagPipeline.h">
-      <Filter>dag</Filter>
-    </ClInclude>
     <ClInclude Include="generation\ClimateBiomeGenerator.h">
       <Filter>generation</Filter>
     </ClInclude>
@@ -267,9 +258,6 @@
       <Filter>generation</Filter>
     </ClInclude>
     <ClInclude Include="generation\MeshGenerators\SelectionOutlineGenerator.h">
-      <Filter>generation\MeshGenerators</Filter>
-    </ClInclude>
-    <ClInclude Include="generation\MeshGenerators\TerrainMeshPolicy.h">
       <Filter>generation\MeshGenerators</Filter>
     </ClInclude>
     <ClInclude Include="generation\MeshGenerators\TerrainMeshGenerator.h">
@@ -306,9 +294,6 @@
       <Filter>renderers</Filter>
     </ClInclude>
     <ClInclude Include="renderers\HexSphereRenderer.h">
-      <Filter>renderers</Filter>
-    </ClInclude>
-    <ClInclude Include="renderers\TerrainVisibility.h">
       <Filter>renderers</Filter>
     </ClInclude>
     <ClInclude Include="renderers\TerrainRenderer.h">
@@ -369,9 +354,6 @@
       <Filter>scene</Filter>
     </ClInclude>
     <ClInclude Include="dag\DataAdapters.h">
-      <Filter>dag</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\TerrainDagPayloadStore.h">
       <Filter>dag</Filter>
     </ClInclude>
     <ClInclude Include="third_party\ProcessDAG\include\proc\ProcessDag.h">

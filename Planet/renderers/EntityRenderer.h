@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <QOpenGLFunctions_3_3_Core>
 #include <QtOpenGL>
@@ -64,6 +64,7 @@ private:
         float spinDegrees = 0.0f;
         bool initialized = false;
     };
+
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
     GLuint progWire_ = 0;
     GLuint progSel_ = 0;
@@ -101,5 +102,3 @@ private:
     std::shared_ptr<MineModelHandler> mineModel_;
     mutable std::unordered_map<ecs::EntityId, WheelAnimationState> wheelAnimationStates_;
 };
-
-

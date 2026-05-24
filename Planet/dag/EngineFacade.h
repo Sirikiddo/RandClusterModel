@@ -1,13 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #include <memory>
-#include <vector>
-
-#include <QVector3D>
 
 #include "DebugOverlay.h"
 #include "TerrainBackendContract.h"
-#include "renderers/TerrainTessellator.h"
+#include "DagPathBackend.h"
+#include "DagSceneBackend.h"
 
 class EngineFacade {
 public:
@@ -19,22 +17,34 @@ public:
     EngineFacade(const EngineFacade&) = delete;
     EngineFacade& operator=(const EngineFacade&) = delete;
 
+    // ===== ТЕРРЕЙН =====
     void attachTerrainBridge(ITerrainSceneBridge* bridge);
     void initializeTerrainState();
 
     void setTerrainParams(const TerrainParams& params);
     void setGeneratorByIndex(int idx);
     void setSubdivisionLevel(int level);
-    void setTerrainRenderConfig(const TerrainRenderConfig& config);
     TerrainRegenerationResult regenerateTerrain();
-    bool prepareTerrainMesh();
-    bool prepareVisibleTerrainIndices(const QVector3D& cameraPos);
 
     const TerrainSnapshot* currentTerrainSnapshot() const;
-    const TerrainMesh* currentTerrainMesh() const;
-    const std::vector<uint32_t>* currentVisibleTerrainIndices() const;
-    TerrainDagStats terrainDagStats() const;
 
+    // ===== ПОИСК ПУТИ =====
+
+    /// Установить параметр сглаживания подъёмов
+    void setPathSmoothMaxDelta(int delta);
+    void setPathTerrainSnapshot(const TerrainSnapshot& snapshot);
+
+    /// Найти путь между двумя ячейками
+    PathResult findPath(int startCellId, int goalCellId);
+
+    /// Получить последний результат поиска пути
+    const PathResult& lastPathResult() const;
+
+    // ===== ПРОИЗВОДНЫЕ ДАННЫЕ СЦЕНЫ =====
+    SceneDagResult rebuildSceneDerived(const SceneDagRequest& request);
+    const DagDebugStats& lastSceneDagStats() const;
+
+    // ===== ОБЩЕЕ =====
     void tick(float dtSeconds);
 
     bool shouldRender() const { return true; }

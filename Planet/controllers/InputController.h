@@ -2,6 +2,7 @@
 
 #include <QMatrix4x4>
 #include <QPoint>
+#include <QSet>
 #include <QVector3D>
 #include <memory>
 #include <optional>
@@ -23,8 +24,35 @@ class CameraController;
 class EngineFacade;
 class HexSphereModel;
 
+enum class SceneCommand {
+    ClearPath,
+    ToggleOreVisualization,
+    ToggleSmooth,
+    BuildPath,
+    MoveSelectedEntity,
+    DeselectEntity,
+    DeleteSelectedEntity,
+    IncreaseHeight,
+    DecreaseHeight,
+    SetBiomeSea,
+    SetBiomeGrass,
+    SetBiomeRock,
+    SetBiomeSnow,
+    SetBiomeTundra,
+    SetBiomeDesert,
+    SetBiomeSavanna,
+    SetBiomeJungle
+};
+
 class InputController : public ITerrainSceneBridge {
 public:
+    enum class PlacementModel {
+        None,
+        Factory,
+        Mine,
+        Delete
+    };
+
     struct Response {
         bool requestUpdate = false;
         std::optional<QString> hudMessage{};
@@ -33,7 +61,7 @@ public:
     explicit InputController(CameraController& camera, SceneViewMode viewMode = SceneViewMode::Planet);
     ~InputController();
 
-    void attachEngine(EngineFacade* engine);
+    void attachEngine(EngineFacade* engine) { engine_ = engine; }
     void initialize(QOpenGLWidget* owner);
     void resize(int w, int h, float devicePixelRatio);
     Response render();
@@ -43,6 +71,7 @@ public:
     void mouseRelease(QMouseEvent* e);
     Response wheel(QWheelEvent* e);
     Response keyPress(QKeyEvent* e);
+    Response executeCommand(SceneCommand command);
 
     Response setSubdivisionLevel(int L);
     Response resetView();
@@ -65,6 +94,10 @@ public:
 
     Response setOreAnimationSpeed(float speed);
     Response regenerateOreDeposits();
+    Response setPlacementModel(PlacementModel model);
+
+    PlacementModel placementModel() const { return placementModel_; }
+    bool isPlacementModeActive() const { return placementModel_ != PlacementModel::None; }
 
     bool applyAnimation(int entityId, int targetCell, float speed = 1.0f, float bounceHeight = 0.05f);
     void updateAnimations(float dt);
@@ -88,9 +121,12 @@ private:
     };
 
     void rebuildModel(Response& response);
+    void rebuildDerivedGeometry(Response& response);
     void uploadSelection();
     void uploadBuffers();
-    void syncTerrainRenderConfigToEngine();
+    void refreshSceneDagOutputs();
+    void syncPathBackendFromScene();
+    void refreshEntityTransformsForTerrain();
     void buildAndShowSelectedPath(Response& response);
     void buildAndShowPathBetween(int startCell, int targetCell, Response& response);
     void clearPath(Response& response);
@@ -104,6 +140,14 @@ private:
     void selectEntity(int entityId, Response& response);
     void deselectEntity();
     void moveSelectedEntityToCell(int cellId, Response& response);
+    bool isCellOccupied(int cellId, std::optional<int> ignoredEntityId = std::nullopt) const;
+    Response placeBuildingOnCell(int cellId);
+    bool isDeletableEntity(int entityId) const;
+    Response deleteEntityAtHit(const PickHit& hit);
+    std::optional<int> explorerCurrentCell() const;
+    void refreshBuildPreview();
+    bool canBuildOnCell(int cellId) const;
+    bool isBuildingPlacementMode() const;
 
     bool isContributorMode() const { return viewMode_ == SceneViewMode::Contributor; }
     Response contributorModeResponse() const;
@@ -126,8 +170,13 @@ private:
 
     float waterTime_ = 0.0f;
     QVector3D lightDir_ = QVector3D(1, 1, 1).normalized();
+    PlacementModel placementModel_ = PlacementModel::None;
+    QSet<int> buildPreviewCells_{};
+    bool lastBuildPreviewActive_ = false;
+    int lastBuildPreviewAnchorCell_ = -2;
 
     float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
     float oreAnimationSpeed_ = 0.1f;
 };
+
