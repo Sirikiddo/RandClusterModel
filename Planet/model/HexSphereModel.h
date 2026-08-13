@@ -55,12 +55,12 @@ enum class TreeType : uint8_t {
     Fir = 1       // Ёлочка
 };
 
-struct OreVisualParams {
-    float density = 0.0f;           // Плотность [0-1]
-    float grainSize = 0.05f;        // Размер зерна (0.01-0.1)
-    float grainContrast = 1.0f;     // Контрастность зерен (1-3)
-    QVector3D baseColor;            // Базовый цвет руды
-    QVector3D grainColor;           // Цвет зерен
+enum class OreType : uint8_t {
+    None = 0,
+    Iron = 1,
+    Copper = 2,
+    Gold = 3,
+    Diamond = 4
 };
 
 // Forward declaration
@@ -123,9 +123,7 @@ struct Cell {
 
     // Данные о руде (из старой версии)
     float oreDensity = 0.0f;     // плотность руды [0..1]
-    uint8_t oreType = 0;         // тип руды (0-нет, 1-железо, 2-медь, и т.д.)
-    OreVisualParams oreVisual;   // Визуальные параметры руды
-    float oreNoiseOffset = 0.0f; // Смещение для анимации шума
+    OreType oreType = OreType::None;
 };
 
 struct PickTri { // geometry for ray picking
@@ -176,12 +174,12 @@ public:
     void setHumidity(int cellId, float humidity);
     void setPressure(int cellId, float pressure);
     void setOreDensity(int cellId, float oreDensity);
-    void setOreType(int cellId, uint8_t oreType);
+    void setOreType(int cellId, OreType oreType);
 
     // Утилиты для климатических данных
     float getAverageTemperature() const;
     float getAverageHumidity() const;
-    std::vector<int> getCellsWithOre(uint8_t oreType) const;
+    std::vector<int> getCellsWithOre(OreType oreType) const;
     void resetClimateData();
 
     // Утилиты

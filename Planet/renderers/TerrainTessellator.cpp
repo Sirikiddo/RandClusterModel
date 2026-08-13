@@ -86,13 +86,13 @@ QVector3D TerrainTessellator::colorForCell(const Cell& c) const {
 
     const float blend = beachBlendForCell(c);
     if (blend <= 0.0f) {
-        return calculateCellColorWithOre(c, baseColor, c.centroid);
+        return baseColor;
     }
 
     const bool wet = coastalBand && (coastalBand->isFlatCoast(c.id) || coastalBand->isSea(c.id) || coastalBand->isCoastStepUp(c.id));
     const QVector3D sand = wet ? resolved.wetSandColor : resolved.drySandColor;
     const QVector3D mixed = sand * blend + baseColor * (1.0f - blend);
-    return calculateCellColorWithOre(c, mixed, c.centroid);
+    return mixed;
 }
 
 QVector3D TerrainTessellator::cliffColorForEdge(const Cell& c) const {
@@ -212,15 +212,15 @@ QVector3D TerrainTessellator::calculateCellColorWithOre(
 
     QVector3D oreColor;
     switch (cell.oreType) {
-    case 1:
+    case OreType::Iron:
         oreColor = QVector3D(0.7f, 0.4f, 0.2f);
         grainSize *= 1.2f;
         break;
-    case 2:
+    case OreType::Copper:
         oreColor = QVector3D(0.8f, 0.5f, 0.2f);
         grainContrast *= 1.5f;
         break;
-    case 3:
+    case OreType::Gold:
         oreColor = QVector3D(0.9f, 0.9f, 0.1f);
         grainSize *= 0.8f;
         grainContrast *= 2.0f;
@@ -334,6 +334,21 @@ void TerrainTessellator::MeshBuilder::triToward(
     pos.insert(pos.end(), { A.x(), A.y(), A.z(), B.x(), B.y(), B.z(), C.x(), C.y(), C.z() });
     col.insert(col.end(), { color.x(), color.y(), color.z(), color.x(), color.y(), color.z(), color.x(), color.y(), color.z() });
     norm.insert(norm.end(), { n.x(), n.y(), n.z(), n.x(), n.y(), n.z(), n.x(), n.y(), n.z() });
+
+    float oreDensity = 0.0f;
+    float oreType = 0.0f;
+    if (cells && cellOwner >= 0 && cellOwner < static_cast<int>(cells->size())) {
+        const Cell& cell = (*cells)[static_cast<size_t>(cellOwner)];
+        if (cell.biome == Biome::Rock && cell.oreType != OreType::None && cell.oreDensity > 0.0f) {
+            oreDensity = std::clamp(cell.oreDensity, 0.0f, 1.0f);
+            oreType = static_cast<float>(cell.oreType);
+        }
+    }
+    ore.insert(ore.end(), {
+        oreDensity, oreType,
+        oreDensity, oreType,
+        oreDensity, oreType
+    });
     idx.insert(idx.end(), { base, base + 1, base + 2 });
 
     if (owner) {
@@ -534,10 +549,11 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
     const auto& cells = model.cells();
     const auto& dual = model.dualVerts();
 
-    MeshBuilder mb{ M.pos, M.col, M.norm, M.idx };
+    MeshBuilder mb{ M.pos, M.col, M.norm, M.ore, M.idx };
     mb.owner = &M.triOwner;
     mb.surfaceRole = &M.triSurfaceRole;
     mb.beachTriCount = &M.beachTriCount;
+    mb.cells = &cells;
     EdgeRegistry reg;
 
     for (size_t cid = 0; cid < cells.size(); ++cid) {

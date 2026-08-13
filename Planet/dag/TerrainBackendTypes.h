@@ -13,9 +13,7 @@ struct TerrainCellSnapshot {
     float humidity = 0.0f;
     float pressure = 0.0f;
     float oreDensity = 0.0f;
-    uint8_t oreType = 0;
-    OreVisualParams oreVisual{};
-    float oreNoiseOffset = 0.0f;
+    OreType oreType = OreType::None;
 };
 
 struct TerrainSnapshot {

@@ -7,7 +7,6 @@
 
 #include "core/AppViewConfig.h"
 #include "controllers/InputController.h"
-#include "model/OreSystem.h"
 
 class CameraController;
 struct TerrainParams;
@@ -66,8 +65,6 @@ protected:
 
 private:
     void applyResponse(const InputController::Response& response);
-    void initOreSystem();
-    void updateOreAnimation(float deltaTime);
     void updateOverlayLayout();
     void syncPlacementPanelState();
     void togglePlacementSelection(InputController::PlacementModel model);
@@ -77,9 +74,6 @@ private:
     CameraController& cameraController_;
     InputController& inputController_;
 
-    std::unique_ptr<OreSystem> oreSystem_;
-    float oreAnimationTime_ = 0.0f;
-    bool oreVisualizationEnabled_ = true;
 
     std::unique_ptr<EngineFacade> engine_;
     QElapsedTimer frameTimer_;

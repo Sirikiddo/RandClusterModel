@@ -37,7 +37,7 @@
     <Import Project="$(QtMsBuild)\qt_defaults.props" />
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
-    <QtInstall>msvc2022_64</QtInstall>
+    <QtInstall>680</QtInstall>
     <QtModules>core;gui;widgets;opengl;openglwidgets</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
     <QtHeaderSearchPath>include</QtHeaderSearchPath>
@@ -140,6 +140,7 @@
     <ClCompile Include="generation\MeshGenerators\TerrainMeshGenerator.cpp" />
     <ClCompile Include="generation\MeshGenerators\WaterMeshGenerator.cpp" />
     <ClCompile Include="generation\MeshGenerators\WireMeshGenerator.cpp" />
+    <ClCompile Include="generation\OreGenerator.cpp" />
     <ClCompile Include="generation\PerlinNoise.cpp" />
     <ClCompile Include="generation\TerrainGenerator.cpp" />
     <ClCompile Include="generation\WaterWaveModel.cpp" />
@@ -148,7 +149,6 @@
     <ClCompile Include="model\HexSphereModel.cpp" />
     <ClCompile Include="model\MineModelHandler.cpp" />
     <ClCompile Include="model\ModelHandler.cpp" />
-    <ClCompile Include="model\OreSystem.cpp" />
     <ClCompile Include="renderers\EntityRenderer.cpp" />
     <ClCompile Include="renderers\HexSphereRenderer.cpp" />
     <ClCompile Include="renderers\ParticleRenderer.cpp" />
@@ -206,6 +206,7 @@
     <ClInclude Include="generation\MeshGenerators\TerrainMeshGenerator.h" />
     <ClInclude Include="generation\MeshGenerators\WaterMeshGenerator.h" />
     <ClInclude Include="generation\MeshGenerators\WireMeshGenerator.h" />
+    <ClInclude Include="generation\OreGenerator.h" />
     <ClInclude Include="generation\PerlinNoise.h" />
     <ClInclude Include="generation\TerrainGenerator.h" />
     <ClInclude Include="generation\WaterWaveModel.h" />
@@ -215,7 +216,6 @@
     <ClInclude Include="model\HexSphereModel.h" />
     <ClInclude Include="model\MineModelHandler.h" />
     <ClInclude Include="model\ModelHandler.h" />
-    <ClInclude Include="model\OreSystem.h" />
     <ClInclude Include="model\SceneEntity.h" />
     <ClInclude Include="model\simple3d_parser.hpp" />
     <ClInclude Include="model\SurfacePlacement.h" />

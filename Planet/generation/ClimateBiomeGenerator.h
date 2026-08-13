@@ -16,7 +16,6 @@ public:
         float seaLevel = 0.0f;
         uint32_t seed = 12345;
         float pressureScale = 1.8f;
-        float oreScale = 4.0f;
     };
 
     void generate(HexSphereModel& model, const ClimateParams& params);
@@ -26,7 +25,5 @@ private:
     float calculateTemperature(const QVector3D& position, float elevation, const ClimateParams& params, Perlin3D& tempNoise);
     float calculateHumidity(const QVector3D& position, const ClimateParams& params, Perlin3D& humidityNoise);
     float calculatePressure(const QVector3D& position, const ClimateParams& params, Perlin3D& pressureNoise);
-    float calculateOreDensity(const QVector3D& position, float elevation, const ClimateParams& params, Perlin3D& oreNoise);
-    uint8_t determineOreType(float oreDensity, float elevation);
     Biome determineBiome(float elevation, float temperature, float humidity, float seaLevel);
 };

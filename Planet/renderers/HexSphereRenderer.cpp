@@ -187,6 +187,7 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (vboTerrainPos_)  gl_->glDeleteBuffers(1, &vboTerrainPos_);
     if (vboTerrainCol_)  gl_->glDeleteBuffers(1, &vboTerrainCol_);
     if (vboTerrainNorm_) gl_->glDeleteBuffers(1, &vboTerrainNorm_);
+    if (vboTerrainOre_)  gl_->glDeleteBuffers(1, &vboTerrainOre_);
     if (iboTerrain_)     gl_->glDeleteBuffers(1, &iboTerrain_);
     if (vboSel_)         gl_->glDeleteBuffers(1, &vboSel_);
     if (vboPath_)        gl_->glDeleteBuffers(1, &vboPath_);
@@ -298,6 +299,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     uModel_ = gl_->glGetUniformLocation(progTerrain_, "uModel");
     uLightDir_ = gl_->glGetUniformLocation(progTerrain_, "uLightDir");
     uNormalMatrix_ = gl_->glGetUniformLocation(progTerrain_, "uNormalMatrix");
+    uOreEnabled_ = gl_->glGetUniformLocation(progTerrain_, "uOreVisualizationEnabled");
 
     gl_->glUseProgram(progSel_);
     uMVP_Sel_ = gl_->glGetUniformLocation(progSel_, "uMVP");
@@ -356,6 +358,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     gl_->glGenBuffers(1, &vboTerrainPos_);
     gl_->glGenBuffers(1, &vboTerrainCol_);
     gl_->glGenBuffers(1, &vboTerrainNorm_);
+    gl_->glGenBuffers(1, &vboTerrainOre_);
     gl_->glGenBuffers(1, &iboTerrain_);
     gl_->glGenVertexArrays(1, &vaoSel_);
     gl_->glGenBuffers(1, &vboSel_);
@@ -496,6 +499,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         uModel_,
         uLightDir_,
         uNormalMatrix_,
+        uOreEnabled_,
         vaoTerrain_.objectId()  // в†ђ objectId() РІРѕР·РІСЂР°С‰Р°РµС‚ GLuint
     );
 
@@ -606,6 +610,8 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
     gl_->glBufferData(GL_ARRAY_BUFFER, mesh.col.size() * sizeof(float), mesh.col.data(), usage);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainNorm_);
     gl_->glBufferData(GL_ARRAY_BUFFER, mesh.norm.size() * sizeof(float), mesh.norm.data(), usage);
+    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainOre_);
+    gl_->glBufferData(GL_ARRAY_BUFFER, mesh.ore.size() * sizeof(float), mesh.ore.data(), usage);
 
     // РќР• Р¤РР›Р¬РўР РЈР•Рњ Р·РґРµСЃСЊ - СЃРѕС…СЂР°РЅСЏРµРј РІСЃРµ РёРЅРґРµРєСЃС‹
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
@@ -751,6 +757,10 @@ void HexSphereRenderer::recreateTerrainVAO() {
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainNorm_);
     gl_->glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(2);
+
+    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainOre_);
+    gl_->glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    gl_->glEnableVertexAttribArray(3);
 
     // РџСЂРёРІСЏР·С‹РІР°РµРј РёРЅРґРµРєСЃРЅС‹Р№ Р±СѓС„РµСЂ
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
@@ -1228,11 +1238,10 @@ void HexSphereRenderer::initPyramidGeometry() {
     pyramidVertexCount_ = static_cast<GLsizei>(pyramidVertices.size() / 3);
 }
 
-void HexSphereRenderer::setOreAnimationTime(float time) {
-    oreAnimationTime_ = time;
-}
-
 void HexSphereRenderer::setOreVisualizationEnabled(bool enabled) {
     oreVisualizationEnabled_ = enabled;
+    if (terrainRenderer_) {
+        terrainRenderer_->setOreVisualizationEnabled(enabled);
+    }
 }
 

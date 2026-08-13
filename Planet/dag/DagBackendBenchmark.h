@@ -20,6 +20,8 @@ struct DagBenchmarkRow {
     int skippedGuardNodes = 0;
     int cacheHits = 0;
     int cacheMisses = 0;
+    int planCacheHits = 0;
+    int planCacheMisses = 0;
 };
 
 struct DagBenchmarkReport {

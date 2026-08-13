@@ -87,14 +87,10 @@ public:
     Response advanceWaterTime(float dt);
 
     Response toggleOreVisualization();
-    void setOreAnimationTime(float time);
     void setOreVisualizationEnabled(bool enabled);
-    float getOreAnimationTime() const;
     bool isOreVisualizationEnabled() const;
     HexSphereModel* getModel();
 
-    Response setOreAnimationSpeed(float speed);
-    Response regenerateOreDeposits();
     Response setPlacementModel(PlacementModel model);
 
     PlacementModel placementModel() const { return placementModel_; }
@@ -130,6 +126,7 @@ private:
     void refreshEntityTransformsForTerrain();
     void buildAndShowSelectedPath(Response& response);
     void buildAndShowPathBetween(int startCell, int targetCell, Response& response);
+    void showPathForCells(const std::vector<int>& cellIds, Response& response);
     void clearPath(Response& response);
     void updateBufferUsageStrategy(int subdivisionLevel);
 
@@ -141,6 +138,7 @@ private:
     void selectEntity(int entityId, Response& response);
     void deselectEntity();
     void moveSelectedEntityToCell(int cellId, Response& response);
+    bool applyAnimationWithPath(int entityId, int targetCell, const std::vector<int>& cellPath, float speed, float bounceHeight);
     bool isCellOccupied(int cellId, std::optional<int> ignoredEntityId = std::nullopt) const;
     Response placeBuildingOnCell(int cellId);
     bool isDeletableEntity(int entityId) const;
@@ -176,8 +174,6 @@ private:
     bool lastBuildPreviewActive_ = false;
     int lastBuildPreviewAnchorCell_ = -2;
 
-    float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
-    float oreAnimationSpeed_ = 0.1f;
 };
 

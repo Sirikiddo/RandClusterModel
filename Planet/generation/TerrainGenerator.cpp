@@ -285,7 +285,7 @@ void NoOpTerrainGenerator::generate(HexSphereModel& model, const TerrainParams& 
         model.setHumidity(cid, 0.5f);
         model.setPressure(cid, 0.5f);
         model.setOreDensity(cid, 0.0f);
-        model.setOreType(cid, 0);
+        model.setOreType(cid, OreType::None);
     }
 
     qDebug() << "NoOpTerrainGenerator: Created transparent sphere with" << n << "cells";

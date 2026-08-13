@@ -51,6 +51,8 @@ public:
     bool ack_outputs();
 
     Plan plan_from_changed(const FieldSet& changed_fields) const;
+    std::size_t plan_cache_hits() const noexcept;
+    std::size_t plan_cache_misses() const noexcept;
 
     FieldSet dirty_inputs() const;
     ValueStore input_snapshot() const;

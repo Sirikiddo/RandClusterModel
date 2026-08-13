@@ -8,6 +8,7 @@
 
 // �?обавляем н�?жн�?е include
 #include "generation/MeshGenerators/WireMeshGenerator.h"
+#include "generation/OreGenerator.h"
 #include "generation/MeshGenerators/SelectionOutlineGenerator.h"
 #include <QVector3D>
 #include <QElapsedTimer>
@@ -152,6 +153,12 @@ void HexSphereSceneController::regenerateTerrain() {
 
     if (generator_) {
         generateCanonicalTerrain(*generator_, model_, genParams_);
+        if (generatorIndex_ == 0) {
+            OreGenerator::clear(model_);
+        }
+        else {
+            OreGenerator::generate(model_, genParams_.seed);
+        }
     }
     updateTerrainMesh();
     generateTreePlacements();
@@ -269,8 +276,6 @@ TerrainSnapshot HexSphereSceneController::captureTerrainSnapshot() const {
         cellSnapshot.pressure = cell.pressure;
         cellSnapshot.oreDensity = cell.oreDensity;
         cellSnapshot.oreType = cell.oreType;
-        cellSnapshot.oreVisual = cell.oreVisual;
-        cellSnapshot.oreNoiseOffset = cell.oreNoiseOffset;
         snapshot.cells.push_back(cellSnapshot);
     }
 
@@ -302,8 +307,6 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
         target.pressure = source.pressure;
         target.oreDensity = source.oreDensity;
         target.oreType = source.oreType;
-        target.oreVisual = source.oreVisual;
-        target.oreNoiseOffset = source.oreNoiseOffset;
     }
 
     selectedCells_.clear();

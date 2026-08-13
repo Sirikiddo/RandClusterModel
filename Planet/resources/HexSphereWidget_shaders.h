@@ -19,6 +19,7 @@ static const char* VS_TERRAIN = R"GLSL(
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aColor;
 layout(location=2) in vec3 aNormal;
+layout(location=3) in vec2 aOreData;
 
 uniform mat4 uMVP;
 uniform mat4 uModel;
@@ -27,12 +28,16 @@ uniform mat3 uNormalMatrix;
 out vec3 vColor;
 out vec3 vNormal;
 out vec3 vWorldPos;
+out float vOreDensity;
+flat out int vOreType;
 
 void main() {
     vec4 worldPos = uModel * vec4(aPos, 1.0);
     vWorldPos = worldPos.xyz;
     vNormal = mat3(transpose(inverse(uModel))) * aNormal;
     vColor = aColor;
+    vOreDensity = aOreData.x;
+    vOreType = int(aOreData.y + 0.5);
     gl_Position = uMVP * vec4(aPos, 1.0);
 }
 )GLSL";
@@ -42,11 +47,51 @@ static const char* FS_TERRAIN = R"GLSL(
 in vec3 vColor;
 in vec3 vNormal;
 in vec3 vWorldPos;
+in float vOreDensity;
+flat in int vOreType;
 
 out vec4 FragColor;
 
 uniform vec3 uLightDir;
 uniform vec3 uViewPos;
+uniform bool uOreVisualizationEnabled;
+
+float hash31(vec3 p) {
+    p = fract(p * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+}
+
+float valueNoise(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(
+        mix(mix(hash31(i), hash31(i + vec3(1,0,0)), f.x),
+            mix(hash31(i + vec3(0,1,0)), hash31(i + vec3(1,1,0)), f.x), f.y),
+        mix(mix(hash31(i + vec3(0,0,1)), hash31(i + vec3(1,0,1)), f.x),
+            mix(hash31(i + vec3(0,1,1)), hash31(i + vec3(1,1,1)), f.x), f.y),
+        f.z);
+}
+
+float fbm(vec3 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    for (int i = 0; i < 4; ++i) {
+        value += amplitude * valueNoise(p);
+        p = p * 2.03 + vec3(17.1, 9.2, 13.7);
+        amplitude *= 0.5;
+    }
+    return value;
+}
+
+vec3 oreColor(int oreType) {
+    if (oreType == 1) return vec3(0.72, 0.30, 0.10);
+    if (oreType == 2) return vec3(0.95, 0.43, 0.12);
+    if (oreType == 3) return vec3(1.00, 0.82, 0.12);
+    if (oreType == 4) return vec3(0.22, 0.72, 1.00);
+    return vec3(0.0);
+}
 
 void main() {
     vec3 N = normalize(vNormal);
@@ -55,6 +100,19 @@ void main() {
     vec3 ambient = 0.3 * vColor;
     vec3 diffuse = 0.7 * diff * vColor;
     vec3 result = ambient + diffuse;
+    if (uOreVisualizationEnabled && vOreDensity > 0.0 && vOreType > 0) {
+        vec3 p = normalize(vWorldPos) * 34.0;
+        float ridge = 1.0 - abs(fbm(p) * 2.0 - 1.0);
+        float detail = fbm(p * 2.7 + float(vOreType) * 11.3);
+        float vein = smoothstep(0.72 - 0.20 * vOreDensity,
+                                0.86 - 0.10 * vOreDensity, ridge);
+        float mineral = vein * mix(0.65, 1.0, smoothstep(0.48, 0.78, detail)) * vOreDensity;
+        float halo = smoothstep(0.58 - 0.12 * vOreDensity,
+                                0.76 - 0.08 * vOreDensity, ridge) * vOreDensity;
+        vec3 mineralColor = oreColor(vOreType);
+        result = mix(result, mineralColor, clamp(mineral * 0.88, 0.0, 0.88));
+        result += mineralColor * halo * 0.16;
+    }
     FragColor = vec4(result, 1.0);
 }
 )GLSL";

@@ -3,10 +3,12 @@
 #include <QtDebug>
 
 #include <optional>
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 
 #include "generation/TerrainGenerator.h"
+#include "generation/OreGenerator.h"
 #include "model/HexSphereModel.h"
 #include "TerrainSerialization.h"
 
@@ -17,7 +19,7 @@
 #include <proc/ScenarioReader.h>
 
 namespace {
-TerrainSnapshot buildTerrainSnapshot(int generatorIndex, int subdivisionLevel, const TerrainParams& params) {
+TerrainSnapshot buildBaseTerrainSnapshot(int generatorIndex, int subdivisionLevel, const TerrainParams& params) {
     IcosphereBuilder builder;
     HexSphereModel model;
     model.rebuildFromIcosphere(builder.build(subdivisionLevel));
@@ -40,11 +42,34 @@ TerrainSnapshot buildTerrainSnapshot(int generatorIndex, int subdivisionLevel, c
         cellSnapshot.pressure = cell.pressure;
         cellSnapshot.oreDensity = cell.oreDensity;
         cellSnapshot.oreType = cell.oreType;
-        cellSnapshot.oreVisual = cell.oreVisual;
-        cellSnapshot.oreNoiseOffset = cell.oreNoiseOffset;
         snapshot.cells.push_back(cellSnapshot);
     }
 
+    return snapshot;
+}
+
+TerrainSnapshot generateOreField(TerrainSnapshot snapshot) {
+    IcosphereBuilder builder;
+    HexSphereModel model;
+    model.rebuildFromIcosphere(builder.build(snapshot.subdivisionLevel));
+    auto& cells = model.cells();
+    const size_t count = std::min(cells.size(), snapshot.cells.size());
+    for (size_t i = 0; i < count; ++i) {
+        cells[i].height = snapshot.cells[i].height;
+        cells[i].biome = snapshot.cells[i].biome;
+    }
+
+    if (normalizeTerrainGeneratorIndex(snapshot.generatorIndex) == 0) {
+        OreGenerator::clear(model);
+    }
+    else {
+        OreGenerator::generate(model, snapshot.params.seed);
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        snapshot.cells[i].oreDensity = cells[i].oreDensity;
+        snapshot.cells[i].oreType = cells[i].oreType;
+    }
     return snapshot;
 }
 
@@ -86,6 +111,7 @@ struct DagTerrainBackend::Impl {
                 {"seaLevel", "int"},
                 {"scale", "scalar"},
                 {"subdivisionLevel", "int"},
+                {"baseTerrainSnapshot", "str"},
                 {"terrainSnapshot", "str"},
             },
             {
@@ -93,12 +119,25 @@ struct DagTerrainBackend::Impl {
                     "TerrainBuild",
                     "buildTerrain",
                     {"generatorIndex", "seed", "seaLevel", "scale", "subdivisionLevel"},
+                    {"baseTerrainSnapshot"},
+                    std::nullopt,
+                },
+                proc::GraphSchemaBuilder::NodeDef{
+                    "OreBuild",
+                    "generateOre",
+                    {"baseTerrainSnapshot"},
                     {"terrainSnapshot"},
                     std::nullopt,
                 },
             },
-            proc::make_builtin_operation_registry(),
+            makeOperationRegistry(),
             proc::make_builtin_algebra_registry());
+    }
+
+    static proc::OperationRegistry makeOperationRegistry() {
+        proc::OperationRegistry registry = proc::make_builtin_operation_registry();
+        registry.register_op("generateOre", proc::v2::OpId{ 300 });
+        return registry;
     }
 
     static int readIntField(
@@ -135,9 +174,19 @@ struct DagTerrainBackend::Impl {
         return parsed;
     }
 
+    static std::string readStringField(
+        const proc::RuntimeOperationRegistry::ReadHandleFn& readHandle,
+        proc::v2::FieldSlot slot) {
+        const auto handle = readHandle(slot);
+        const auto view = proc::Commit::debug_view(handle);
+        return std::string(view.data(), view.size());
+    }
+
     static proc::RuntimeOperationRegistry buildRuntimeRegistry(const proc::GraphSchema& schema) {
-        proc::RuntimeOperationRegistry registry(proc::make_builtin_operation_registry());
+        proc::RuntimeOperationRegistry registry(makeOperationRegistry());
         const auto nodeSlot = schema.find_node("TerrainBuild");
+        const auto baseOutputSlot = schema.find_field("baseTerrainSnapshot");
+        const auto oreNodeSlot = schema.find_node("OreBuild");
         const auto outputSlot = schema.find_field("terrainSnapshot");
         const auto generatorSlot = schema.find_field("generatorIndex");
         const auto seedSlot = schema.find_field("seed");
@@ -145,14 +194,14 @@ struct DagTerrainBackend::Impl {
         const auto scaleSlot = schema.find_field("scale");
         const auto subdivisionSlot = schema.find_field("subdivisionLevel");
 
-        if (!nodeSlot || !outputSlot || !generatorSlot || !seedSlot || !seaLevelSlot || !scaleSlot || !subdivisionSlot) {
+        if (!nodeSlot || !baseOutputSlot || !oreNodeSlot || !outputSlot || !generatorSlot || !seedSlot || !seaLevelSlot || !scaleSlot || !subdivisionSlot) {
             throw std::runtime_error("DagTerrainBackend failed to bind terrain DAG schema slots");
         }
 
         registry.bind_executor(
             schema.op_of(*nodeSlot),
             *nodeSlot,
-            [schema, outputSlot = *outputSlot, generatorSlot = *generatorSlot, seedSlot = *seedSlot,
+            [schema, outputSlot = *baseOutputSlot, generatorSlot = *generatorSlot, seedSlot = *seedSlot,
              seaLevelSlot = *seaLevelSlot, scaleSlot = *scaleSlot, subdivisionSlot = *subdivisionSlot](
                 const proc::RuntimeOperationRegistry::ReadHandleFn& readHandle,
                 const proc::RuntimeOperationRegistry::FieldNameFn& fieldName,
@@ -169,12 +218,33 @@ struct DagTerrainBackend::Impl {
                 const int subdivisionLevel = Impl::readIntField(
                     readHandle, fieldName, subdivisionSlot, kDefaultTerrainSubdivisionLevel);
 
-                const auto snapshot = buildTerrainSnapshot(generatorIndex, subdivisionLevel, params);
+                const auto snapshot = buildBaseTerrainSnapshot(generatorIndex, subdivisionLevel, params);
 
                 proc::Commit commit;
                 commit.set(
                     outputSlot,
                     serializeTerrainSnapshot(snapshot).toStdString(),
+                    proc::v2::WriteLifetime::Persistent,
+                    std::string(schema.field_name(outputSlot)));
+                return commit;
+            });
+        registry.bind_executor(
+            schema.op_of(*oreNodeSlot),
+            *oreNodeSlot,
+            [schema, baseSlot = *baseOutputSlot, outputSlot = *outputSlot](
+                const proc::RuntimeOperationRegistry::ReadHandleFn& readHandle,
+                const proc::RuntimeOperationRegistry::FieldNameFn&,
+                const proc::RuntimeOperationRegistry::DebugStringFn&) -> proc::Commit {
+                proc::Commit commit;
+                const auto encoded = Impl::readStringField(readHandle, baseSlot);
+                const auto snapshot = deserializeTerrainSnapshot(QString::fromUtf8(encoded.data(), static_cast<qsizetype>(encoded.size())));
+                if (!snapshot) {
+                    return commit;
+                }
+                const TerrainSnapshot withOre = generateOreField(*snapshot);
+                commit.set(
+                    outputSlot,
+                    serializeTerrainSnapshot(withOre).toStdString(),
                     proc::v2::WriteLifetime::Persistent,
                     std::string(schema.field_name(outputSlot)));
                 return commit;

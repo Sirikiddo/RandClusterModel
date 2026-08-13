@@ -3,29 +3,39 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonParseError>
 
 namespace {
+constexpr int kCurrentTerrainSnapshotVersion = 2;
 
-    QJsonArray serializeVec3(const QVector3D& value) {
-        return QJsonArray{ value.x(), value.y(), value.z() };
-    }
+bool isSupportedOreType(int value) {
+    return value >= static_cast<int>(OreType::None)
+        && value <= static_cast<int>(OreType::Diamond);
+}
 
-    QVector3D deserializeVec3(const QJsonValue& value) {
-        const QJsonArray array = value.toArray();
-        if (array.size() != 3) {
-            return {};
-        }
-        return QVector3D(
-            static_cast<float>(array[0].toDouble()),
-            static_cast<float>(array[1].toDouble()),
-            static_cast<float>(array[2].toDouble()));
-    }
+bool isSupportedBiome(int value) {
+    return value >= static_cast<int>(Biome::Sea)
+        && value <= static_cast<int>(Biome::Jungle);
+}
 
+bool isIntegralNumber(const QJsonValue& value) {
+    return value.isDouble() && value.toDouble() == static_cast<double>(value.toInt());
+}
+
+bool hasNumericCellFields(const QJsonObject& entry) {
+    return entry["height"].isDouble()
+        && entry["biome"].isDouble()
+        && entry["temperature"].isDouble()
+        && entry["humidity"].isDouble()
+        && entry["pressure"].isDouble()
+        && entry["oreDensity"].isDouble()
+        && entry["oreType"].isDouble();
+}
 } // namespace
 
 QString serializeTerrainSnapshot(const TerrainSnapshot& snapshot) {
     QJsonObject root;
-    root["version"] = 1;
+    root["version"] = kCurrentTerrainSnapshotVersion;
     root["subdivisionLevel"] = snapshot.subdivisionLevel;
     root["generatorIndex"] = snapshot.generatorIndex;
     root["seed"] = static_cast<qint64>(snapshot.params.seed);
@@ -42,12 +52,6 @@ QString serializeTerrainSnapshot(const TerrainSnapshot& snapshot) {
         entry["pressure"] = cell.pressure;
         entry["oreDensity"] = cell.oreDensity;
         entry["oreType"] = static_cast<int>(cell.oreType);
-        entry["oreVisualDensity"] = cell.oreVisual.density;
-        entry["oreVisualGrainSize"] = cell.oreVisual.grainSize;
-        entry["oreVisualGrainContrast"] = cell.oreVisual.grainContrast;
-        entry["oreVisualBaseColor"] = serializeVec3(cell.oreVisual.baseColor);
-        entry["oreVisualGrainColor"] = serializeVec3(cell.oreVisual.grainColor);
-        entry["oreNoiseOffset"] = cell.oreNoiseOffset;
         cells.push_back(entry);
     }
     root["cells"] = cells;
@@ -56,37 +60,68 @@ QString serializeTerrainSnapshot(const TerrainSnapshot& snapshot) {
 }
 
 std::optional<TerrainSnapshot> deserializeTerrainSnapshot(const QString& encoded) {
-    const QJsonDocument doc = QJsonDocument::fromJson(encoded.toUtf8());
-    if (!doc.isObject()) {
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(encoded.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
         return std::nullopt;
     }
 
     const QJsonObject root = doc.object();
+    if (!isIntegralNumber(root["version"])) {
+        return std::nullopt;
+    }
+    const int version = root["version"].toInt();
+    if (version != 1 && version != kCurrentTerrainSnapshotVersion) {
+        return std::nullopt;
+    }
+    if (!root["subdivisionLevel"].isDouble()
+        || !root["generatorIndex"].isDouble()
+        || !root["seed"].isDouble()
+        || !root["seaLevel"].isDouble()
+        || !root["scale"].isDouble()
+        || !root["cells"].isArray()) {
+        return std::nullopt;
+    }
+
     TerrainSnapshot snapshot;
-    snapshot.subdivisionLevel = root["subdivisionLevel"].toInt(2);
-    snapshot.generatorIndex = root["generatorIndex"].toInt(3);
+    snapshot.subdivisionLevel = root["subdivisionLevel"].toInt();
+    snapshot.generatorIndex = root["generatorIndex"].toInt();
     snapshot.params.seed = static_cast<uint32_t>(root["seed"].toInteger());
     snapshot.params.seaLevel = root["seaLevel"].toInt();
-    snapshot.params.scale = static_cast<float>(root["scale"].toDouble(1.0));
+    snapshot.params.scale = static_cast<float>(root["scale"].toDouble());
 
     const QJsonArray cells = root["cells"].toArray();
     snapshot.cells.reserve(static_cast<size_t>(cells.size()));
     for (const auto& value : cells) {
+        if (!value.isObject()) {
+            return std::nullopt;
+        }
         const QJsonObject entry = value.toObject();
+        if (!hasNumericCellFields(entry)) {
+            return std::nullopt;
+        }
+
+        if (!isIntegralNumber(entry["biome"]) || !isIntegralNumber(entry["oreType"])) {
+            return std::nullopt;
+        }
+        const int biome = entry["biome"].toInt(-1);
+        const int oreType = entry["oreType"].toInt(-1);
+        const double oreDensity = entry["oreDensity"].toDouble(-1.0);
+        if (!isSupportedBiome(biome)
+            || !isSupportedOreType(oreType)
+            || oreDensity < 0.0
+            || oreDensity > 1.0) {
+            return std::nullopt;
+        }
+
         TerrainCellSnapshot cell;
         cell.height = entry["height"].toInt();
-        cell.biome = static_cast<Biome>(entry["biome"].toInt(static_cast<int>(Biome::Grass)));
+        cell.biome = static_cast<Biome>(biome);
         cell.temperature = static_cast<float>(entry["temperature"].toDouble());
         cell.humidity = static_cast<float>(entry["humidity"].toDouble());
         cell.pressure = static_cast<float>(entry["pressure"].toDouble());
-        cell.oreDensity = static_cast<float>(entry["oreDensity"].toDouble());
-        cell.oreType = static_cast<uint8_t>(entry["oreType"].toInt());
-        cell.oreVisual.density = static_cast<float>(entry["oreVisualDensity"].toDouble());
-        cell.oreVisual.grainSize = static_cast<float>(entry["oreVisualGrainSize"].toDouble(0.05));
-        cell.oreVisual.grainContrast = static_cast<float>(entry["oreVisualGrainContrast"].toDouble(1.0));
-        cell.oreVisual.baseColor = deserializeVec3(entry["oreVisualBaseColor"]);
-        cell.oreVisual.grainColor = deserializeVec3(entry["oreVisualGrainColor"]);
-        cell.oreNoiseOffset = static_cast<float>(entry["oreNoiseOffset"].toDouble());
+        cell.oreDensity = static_cast<float>(oreDensity);
+        cell.oreType = static_cast<OreType>(oreType);
         snapshot.cells.push_back(cell);
     }
 

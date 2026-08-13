@@ -7,11 +7,9 @@ void ClimateBiomeGenerator::generate(HexSphereModel& model, const ClimateParams&
     Perlin3D tempNoise(params.seed + 1000);
     Perlin3D humidityNoise(params.seed + 2000);
     Perlin3D pressureNoise(params.seed + 3000);
-    Perlin3D oreNoise(params.seed + 4000);
 
     auto& cells = model.cells();
 
-    std::srand(params.seed);
 
     for (auto& cell : cells) {
 
@@ -30,7 +28,6 @@ void ClimateBiomeGenerator::generate(HexSphereModel& model, const ClimateParams&
         float pressure = calculatePressure(position, params, pressureNoise);
 
         // 5. Плотность руды (новый параметр)
-        float oreDensity = calculateOreDensity(position, elevation, params, oreNoise);
 
         // 6. Определяем биом по таблице
         Biome biome = determineBiome(elevation, temperature, humidity, params.seaLevel);
@@ -43,13 +40,6 @@ void ClimateBiomeGenerator::generate(HexSphereModel& model, const ClimateParams&
         cell.temperature = temperature;
         cell.humidity = humidity;
         cell.pressure = pressure;
-        cell.oreDensity = oreDensity;
-        cell.oreType = determineOreType(oreDensity, elevation);
-
-        if (std::rand() % 100 < 25) {
-            cell.oreType = 1 + (std::rand() % 4); // тип 1-4
-            cell.oreDensity = 0.3f + (std::rand() % 70) / 100.0f; // плотность 0.3-1.0
-        }
     }
 }
 
@@ -64,38 +54,6 @@ float ClimateBiomeGenerator::calculatePressure(const QVector3D& position, const 
     // Нормализуем к [0, 1]
     pressure = (pressure + 1.0f) * 0.5f;
     return std::clamp(pressure, 0.0f, 1.0f);
-}
-
-float ClimateBiomeGenerator::calculateOreDensity(const QVector3D& position, float elevation, const ClimateParams& params, Perlin3D& oreNoise) {
-    // Плотность руды зависит от высоты и отдельного шума
-    float ore = oreNoise.noise(
-        position.x() * params.oreScale,
-        position.y() * params.oreScale,
-        position.z() * params.oreScale
-    );
-
-    // Увеличиваем вероятность руды в горах
-    if (elevation > 0.7f - kElevationDatum) {
-        ore *= 1.5f;
-    }
-
-    ore = (ore + 1.0f) * 0.5f;
-    return std::clamp(ore, 0.0f, 1.0f);
-}
-
-uint8_t ClimateBiomeGenerator::determineOreType(float oreDensity, float elevation) {
-    if (oreDensity < 0.3f) return 0; // Нет руды
-
-    // Определяем тип руды на основе плотности и высоты
-    if (elevation > 0.8f - kElevationDatum) {
-        return 1; // Горная руда (железо)
-    }
-    else if (oreDensity > 0.7f) {
-        return 2; // Богатая руда (медь)
-    }
-    else {
-        return 1; // Обычная руда (железо)
-    }
 }
 
 float ClimateBiomeGenerator::calculateElevation(const QVector3D& position, const ClimateParams& params, Perlin3D& elevationNoise) {

@@ -46,8 +46,6 @@ namespace {
             dst.pressure = src.pressure;
             dst.oreDensity = src.oreDensity;
             dst.oreType = src.oreType;
-            dst.oreVisual = src.oreVisual;
-            dst.oreNoiseOffset = src.oreNoiseOffset;
             // centroid уже установлен в rebuildFromIcosphere
         }
 

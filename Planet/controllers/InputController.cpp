@@ -41,6 +41,26 @@ namespace {
         }
     }
 
+    QString oreTypeName(OreType type) {
+        switch (type) {
+        case OreType::Iron: return QString("Iron");
+        case OreType::Copper: return QString("Copper");
+        case OreType::Gold: return QString("Gold");
+        case OreType::Diamond: return QString("Diamond");
+        case OreType::None:
+        default: return QString("None");
+        }
+    }
+
+    QString cellOreHudText(const Cell& cell) {
+        const int densityPercent = std::clamp(
+            static_cast<int>(std::lround(cell.oreDensity * 100.0f)), 0, 100);
+        return QString("Cell %1 | Ore: %2 | Density: %3%")
+            .arg(cell.id)
+            .arg(oreTypeName(cell.oreType))
+            .arg(densityPercent);
+    }
+
     bool rayTriangleMT(const QVector3D& o, const QVector3D& d,
         const QVector3D& v0, const QVector3D& v1, const QVector3D& v2,
         float& tOut) {
@@ -186,6 +206,7 @@ void InputController::initialize(QOpenGLWidget* owner) {
 
     renderer_ = std::make_unique<HexSphereRenderer>(owner_);
     renderer_->initialize(owner_, gl, &stats_);
+    renderer_->setOreVisualizationEnabled(oreVisualizationEnabled_);
 
     if (!isContributorMode()) {
         const int startCell = chooseInitialExplorerCell(scene_);
@@ -254,9 +275,22 @@ InputController::Response InputController::mousePress(QMouseEvent* e) {
             selectEntity(hit->entityId, response);
         }
         else if (hit->cellId >= 0) {
-            scene_.toggleCellSelection(hit->cellId);
-            uploadSelection();
-            moveSelectedEntityToCell(hit->cellId, response);
+            if (selectedEntityId_ != -1) {
+                moveSelectedEntityToCell(hit->cellId, response);
+            }
+            else {
+                scene_.toggleCellSelection(hit->cellId);
+                uploadSelection();
+                if (scene_.selectedCells().contains(hit->cellId)) {
+                    const auto& cells = scene_.model().cells();
+                    if (hit->cellId < static_cast<int>(cells.size())) {
+                        response.hudMessage = cellOreHudText(cells[static_cast<size_t>(hit->cellId)]);
+                    }
+                }
+                else {
+                    response.hudMessage = QString("Cell %1 deselected").arg(hit->cellId);
+                }
+            }
         }
         response.requestUpdate = true;
     }
@@ -428,8 +462,11 @@ InputController::Response InputController::executeCommand(SceneCommand command) 
         bool moved = false;
         for (int next : currentCell.neighbors) {
             if (next < 0) continue;
-            buildAndShowPathBetween(entity->currentCell, next, response);
-            moved = applyAnimation(entity->id, next, kBaseTraversalSpeed, 0.0f);
+            const PathResult result = engine_
+                ? engine_->findPath(entity->currentCell, next)
+                : PathResult{};
+            showPathForCells(result.cellIds, response);
+            moved = applyAnimationWithPath(entity->id, next, result.cellIds, kBaseTraversalSpeed, 0.0f);
             if (moved) {
                 break;
             }
@@ -806,11 +843,15 @@ void InputController::buildAndShowSelectedPath(Response& response) {
 }
 
 void InputController::buildAndShowPathBetween(int startCell, int targetCell, Response& response) {
+    const PathResult result = engine_
+        ? engine_->findPath(startCell, targetCell)
+        : PathResult{};
+    showPathForCells(result.cellIds, response);
+}
+
+void InputController::showPathForCells(const std::vector<int>& cellIds, Response& response) {
     if (renderer_) {
-        const PathResult result = engine_
-            ? engine_->findPath(startCell, targetCell)
-            : PathResult{};
-        renderer_->uploadPath(scene_.buildPathPolyline(result.cellIds));
+        renderer_->uploadPath(scene_.buildPathPolyline(cellIds));
     }
     response.requestUpdate = true;
 }
@@ -995,9 +1036,12 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
         return;
     }
 
-    buildAndShowPathBetween(oldCell, cellId, response);
+    const PathResult result = engine_
+        ? engine_->findPath(oldCell, cellId)
+        : PathResult{};
+    showPathForCells(result.cellIds, response);
     // Р вЂќР В»РЎРЏ Explorer-Р Т‘Р Р†Р С‘Р В¶Р ВµР Р…Р С‘РЎРЏ РЎвЂ¦Р С•РЎвЂљР С‘Р С Р С—РЎР‚РЎРЏР СРЎС“РЎР‹ "Р С—Р С• Р С—Р С•Р Р†Р ВµРЎР‚РЎвЂ¦Р Р…Р С•РЎРѓРЎвЂљР С‘", Р В±Р ВµР В· Р С—Р С•Р Т‘Р С—РЎР‚РЎвЂ№Р С–Р С‘Р Р†Р В°Р Р…Р С‘РЎРЏ
-    if (!applyAnimation(entity->id, cellId, kBaseTraversalSpeed, 0.0f)) {
+    if (!applyAnimationWithPath(entity->id, cellId, result.cellIds, kBaseTraversalSpeed, 0.0f)) {
         if (renderer_) {
             renderer_->uploadPath({});
         }
@@ -1117,7 +1161,9 @@ InputController::Response InputController::toggleOreVisualization() {
         return contributorModeResponse();
     }
     oreVisualizationEnabled_ = !oreVisualizationEnabled_;
-    oreAnimationTime_ = 0.0f;
+    if (renderer_) {
+        renderer_->setOreVisualizationEnabled(oreVisualizationEnabled_);
+    }
 
     qDebug() << "Ore visualization toggled to:" << oreVisualizationEnabled_;
 
@@ -1129,16 +1175,11 @@ InputController::Response InputController::toggleOreVisualization() {
     return response;
 }
 
-void InputController::setOreAnimationTime(float time) {
-    oreAnimationTime_ = time;
-}
-
 void InputController::setOreVisualizationEnabled(bool enabled) {
     oreVisualizationEnabled_ = enabled;
-}
-
-float InputController::getOreAnimationTime() const {
-    return oreAnimationTime_;
+    if (renderer_) {
+        renderer_->setOreVisualizationEnabled(enabled);
+    }
 }
 
 bool InputController::isOreVisualizationEnabled() const {
@@ -1147,28 +1188,6 @@ bool InputController::isOreVisualizationEnabled() const {
 
 HexSphereModel* InputController::getModel() {
     return &scene_.modelMutable();
-}
-
-InputController::Response InputController::setOreAnimationSpeed(float speed) {
-    if (isContributorMode()) {
-        return contributorModeResponse();
-    }
-    oreAnimationSpeed_ = std::clamp(speed, 0.0f, 2.0f);
-
-    Response response;
-    response.requestUpdate = true;
-    response.hudMessage = QString("Ore animation speed: %1").arg(oreAnimationSpeed_);
-    return response;
-}
-
-InputController::Response InputController::regenerateOreDeposits() {
-    if (isContributorMode()) {
-        return contributorModeResponse();
-    }
-    Response response;
-    response.requestUpdate = true;
-    response.hudMessage = QString("Ore deposits regenerated");
-    return response;
 }
 
 InputController::Response InputController::setPlacementModel(PlacementModel model) {
@@ -1231,7 +1250,44 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
     const PathResult result = engine_
         ? engine_->findPath(startCell, targetCell)
         : PathResult{};
-    const auto& cellPath = result.cellIds;
+    return applyAnimationWithPath(entityId, targetCell, result.cellIds, speed, bounceHeight);
+}
+
+bool InputController::applyAnimationWithPath(int entityId, int targetCell, const std::vector<int>& cellPath, float speed, float bounceHeight) {
+    auto* entity = ecs_.getEntity(entityId);
+    if (!entity) {
+        qDebug() << "Entity" << entityId << "not found for animation";
+        return false;
+    }
+
+    if (ecs_.get<ecs::Animation>(entityId)) {
+        return false;
+    }
+
+    auto* transform = ecs_.get<ecs::Transform>(entityId);
+    if (!transform) {
+        qDebug() << "Entity" << entityId << "has no transform component";
+        return false;
+    }
+
+    const int startCell = entity->currentCell;
+    if (startCell < 0 || startCell >= scene_.model().cellCount()) {
+        qDebug() << "Entity" << entityId << "has invalid current cell:" << startCell;
+        return false;
+    }
+    if (targetCell < 0 || targetCell >= scene_.model().cellCount()) {
+        return false;
+    }
+    if (targetCell != startCell && isCellOccupied(targetCell, entityId)) {
+        qDebug() << "Entity" << entityId << "cannot move to occupied cell" << targetCell;
+        return false;
+    }
+    if (targetCell == startCell) {
+        transform->position = computeSurfacePoint(scene_, targetCell, scene_.heightStep(), kEntitySurfaceOffset);
+        refreshBuildPreview();
+        return true;
+    }
+
     if (cellPath.empty()) {
         return false;
     }

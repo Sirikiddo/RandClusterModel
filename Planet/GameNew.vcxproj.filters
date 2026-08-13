@@ -120,9 +120,6 @@
     <ClCompile Include="model\ModelHandler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="model\OreSystem.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="renderers\EntityRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -315,9 +312,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="model\ModelHandler.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="model\OreSystem.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="model\SceneEntity.h">

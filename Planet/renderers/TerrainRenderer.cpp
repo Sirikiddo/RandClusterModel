@@ -7,6 +7,7 @@ TerrainRenderer::TerrainRenderer(QOpenGLFunctions_3_3_Core* gl,
     GLint uModel,
     GLint uLightDir,
     GLint uNormalMatrix,
+    GLint uOreEnabled,
     GLuint vao)
     : gl_(gl)
     , program_(program)
@@ -14,6 +15,7 @@ TerrainRenderer::TerrainRenderer(QOpenGLFunctions_3_3_Core* gl,
     , uModel_(uModel)
     , uLightDir_(uLightDir)
     , uNormalMatrix_(uNormalMatrix)
+    , uOreEnabled_(uOreEnabled)
     , vao_(vao) {
 }
 
@@ -33,6 +35,9 @@ void TerrainRenderer::render(const HexSphereRenderer::RenderContext& ctx, GLsize
 
     const QVector3D& lightDir = ctx.lighting.direction;
     gl_->glUniform3f(uLightDir_, lightDir.x(), lightDir.y(), lightDir.z());
+    if (uOreEnabled_ >= 0) {
+        gl_->glUniform1i(uOreEnabled_, oreVisualizationEnabled_ ? 1 : 0);
+    }
 
     gl_->glBindVertexArray(vao_);
 

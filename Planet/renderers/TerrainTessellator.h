@@ -24,6 +24,7 @@ struct TerrainMesh {
     std::vector<float> pos;
     std::vector<float> col;
     std::vector<float> norm;
+    std::vector<float> ore;
     std::vector<uint32_t> idx;
     std::vector<int> triOwner;
     std::vector<TriangleSurfaceRole> triSurfaceRole;
@@ -83,6 +84,7 @@ public:
         const Cell& cell,
         const QVector3D& baseColor,
         const QVector3D& position) const;
+
     QVector3D colorForCell(const Cell& c) const;
     QVector3D cliffColorForEdge(const Cell& c) const;
     bool isSeaEdge(const Cell& c, int edgeIdx, const std::vector<Cell>& cells) const;
@@ -116,10 +118,12 @@ public:
         std::vector<float>& pos;
         std::vector<float>& col;
         std::vector<float>& norm;
+        std::vector<float>& ore;
         std::vector<uint32_t>& idx;
         std::vector<int>* owner = nullptr;
         std::vector<TriangleSurfaceRole>* surfaceRole = nullptr;
         int* beachTriCount = nullptr;
+        const std::vector<Cell>* cells = nullptr;
 
         void triToward(
             QVector3D A,

@@ -22,7 +22,6 @@
 #include "controllers/CameraController.h"
 #include "controllers/InputController.h"
 
-#include "model/OreSystem.h"
 
 HexSphereWidget::HexSphereWidget(const AppViewConfig& viewConfig,
     CameraController& cameraController,
@@ -33,7 +32,7 @@ HexSphereWidget::HexSphereWidget(const AppViewConfig& viewConfig,
     , cameraController_(cameraController)
     , inputController_(inputController)
     , engine_(viewConfig.isContributorMode() ? nullptr : std::make_unique<EngineFacade>())
-    , oreSystem_(nullptr) {
+    {
 
     if (engine_) {
         inputController_.attachEngine(engine_.get());
@@ -330,9 +329,6 @@ void HexSphereWidget::regenerateTerrain() {
 
     // ����� ����������� ���� ������������������ ������� ���
     // ����� ���������, ���� ��� ����� ������������
-    QTimer::singleShot(100, this, [this]() {
-        initOreSystem();
-        });
 }
 
 void HexSphereWidget::setSmoothOneStep(bool on) {
@@ -439,33 +435,4 @@ void HexSphereWidget::setPlacementPanelExpanded(bool expanded, bool animated) {
 
     syncPlacementPanelState();
     updateOverlayLayout();
-}
-
-void HexSphereWidget::initOreSystem() {
-    // ������� ������� ���
-    oreSystem_ = std::make_unique<OreSystem>();
-
-    // �������� ������ ����� InputController
-    HexSphereModel* model = inputController_.getModel();
-    if (model) {
-        oreSystem_->initialize(*model);
-        qDebug() << "OreSystem initialized with" << oreSystem_->getDepositCount() << "deposits";
-    }
-    else {
-        qDebug() << "Failed to initialize OreSystem: model is null";
-    }
-
-    oreAnimationTime_ = 0.0f;
-    oreVisualizationEnabled_ = true;
-
-    // ��������� ���������� � �������� ��������
-    inputController_.setOreAnimationTime(oreAnimationTime_);
-    inputController_.setOreVisualizationEnabled(oreVisualizationEnabled_);
-}
-
-void HexSphereWidget::updateOreAnimation(float deltaTime) {
-    oreAnimationTime_ += deltaTime * 0.1f; // �������� ��������
-
-    // ��������� ����� �������� � InputController
-    inputController_.setOreAnimationTime(oreAnimationTime_);
 }

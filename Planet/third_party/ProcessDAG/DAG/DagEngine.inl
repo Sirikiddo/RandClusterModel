@@ -2,7 +2,10 @@
 
 #include "DagStorage.h"
 
+#include <algorithm>
 #include <iostream>
+#include <unordered_map>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 
@@ -62,6 +65,29 @@ CommitT make_init_commit(const ValueStore& init_snapshot) {
     return initial_inputs;
 }
 
+inline std::string make_plan_cache_key(const FieldSet& changed_fields, const std::vector<Field>& outputs) {
+    std::vector<std::string> changed;
+    changed.reserve(changed_fields.size());
+    for (const auto& field : changed_fields) {
+        changed.push_back(field);
+    }
+    std::sort(changed.begin(), changed.end());
+
+    std::vector<std::string> requested(outputs.begin(), outputs.end());
+    std::sort(requested.begin(), requested.end());
+
+    std::ostringstream stream;
+    stream << "changed:";
+    for (const auto& field : changed) {
+        stream << field.size() << ':' << field << ';';
+    }
+    stream << "|outputs:";
+    for (const auto& field : requested) {
+        stream << field.size() << ':' << field << ';';
+    }
+    return stream.str();
+}
+
 } // namespace detail
 
 template <class Policy, template <class> class BaseStoreT, template <class> class OverlayStoreT, class CommitT>
@@ -109,6 +135,9 @@ struct DagEngine<Policy, BaseStoreT, OverlayStoreT, CommitT>::Impl final {
     Planner planner;
     GuardRegistry guard_registry;
     Executor executor;
+    std::unordered_map<std::string, v2::ExecutionPlan> plan_cache;
+    std::size_t plan_cache_hits = 0;
+    std::size_t plan_cache_misses = 0;
     FlushFailurePolicy failure_policy = FlushFailurePolicy::InvalidateAllInputs;
     bool initialized = false;
     bool prepared_pending_ack = false;
@@ -167,13 +196,24 @@ bool DagEngine<Policy, BaseStoreT, OverlayStoreT, CommitT>::flush_prepare(const 
         return false;
     }
 
-    const auto plan = impl_->planner.build_plan(dirty_inputs, outputs);
+    const auto plan_key = detail::make_plan_cache_key(dirty_inputs, outputs);
+    const v2::ExecutionPlan* plan = nullptr;
+    if (auto it = impl_->plan_cache.find(plan_key); it != impl_->plan_cache.end()) {
+        ++impl_->plan_cache_hits;
+        plan = &it->second;
+    }
+    else {
+        auto built_plan = impl_->planner.build_plan(dirty_inputs, outputs);
+        auto [inserted, _] = impl_->plan_cache.emplace(std::move(plan_key), std::move(built_plan));
+        ++impl_->plan_cache_misses;
+        plan = &inserted->second;
+    }
 
     try {
         impl_->storage.begin_run();
         try {
             impl_->executor.run(
-                plan,
+                *plan,
                 impl_->schema,
                 impl_->storage,
                 impl_->memory_policy,
@@ -222,6 +262,16 @@ template <class Policy, template <class> class BaseStoreT, template <class> clas
 typename DagEngine<Policy, BaseStoreT, OverlayStoreT, CommitT>::Plan
 DagEngine<Policy, BaseStoreT, OverlayStoreT, CommitT>::plan_from_changed(const FieldSet& changed_fields) const {
     return impl_->plan_from_changed(changed_fields);
+}
+
+template <class Policy, template <class> class BaseStoreT, template <class> class OverlayStoreT, class CommitT>
+std::size_t DagEngine<Policy, BaseStoreT, OverlayStoreT, CommitT>::plan_cache_hits() const noexcept {
+    return impl_->plan_cache_hits;
+}
+
+template <class Policy, template <class> class BaseStoreT, template <class> class OverlayStoreT, class CommitT>
+std::size_t DagEngine<Policy, BaseStoreT, OverlayStoreT, CommitT>::plan_cache_misses() const noexcept {
+    return impl_->plan_cache_misses;
 }
 
 template <class Policy, template <class> class BaseStoreT, template <class> class OverlayStoreT, class CommitT>

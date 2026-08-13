@@ -13,6 +13,7 @@ public:
         GLint uModel,
         GLint uLightDir,
         GLint uNormalMatrix,
+        GLint uOreEnabled,
         GLuint vao);
 
     void render(const HexSphereRenderer::RenderContext& ctx, GLsizei indexCount) const;
@@ -20,6 +21,7 @@ public:
         vao_ = newVao;
         qDebug() << "TerrainRenderer VAO updated to:" << newVao;
     }
+    void setOreVisualizationEnabled(bool enabled) { oreVisualizationEnabled_ = enabled; }
 
 private:
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
@@ -28,5 +30,7 @@ private:
     GLint uModel_ = -1;
     GLint uLightDir_ = -1;
     GLint uNormalMatrix_ = -1;
+    GLint uOreEnabled_ = -1;
+    bool oreVisualizationEnabled_ = true;
     GLuint vao_ = 0;
 };

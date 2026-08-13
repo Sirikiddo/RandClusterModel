@@ -181,7 +181,7 @@ void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
         cell.humidity = 0.5f;
         cell.pressure = 0.5f;
         cell.oreDensity = 0.0f;
-        cell.oreType = 0;
+        cell.oreType = OreType::None;
     }
 
     // 3) Build unique wire edges of the dual mesh
@@ -260,7 +260,7 @@ void HexSphereModel::setOreDensity(int cellId, float oreDensity) {
     }
 }
 
-void HexSphereModel::setOreType(int cellId, uint8_t oreType) {
+void HexSphereModel::setOreType(int cellId, OreType oreType) {
     if (cellId >= 0 && cellId < (int)cells_.size()) {
         cells_[cellId].oreType = oreType;
     }
@@ -278,7 +278,7 @@ float HexSphereModel::getAverageHumidity() const {
     return cells_.empty() ? 0.0f : sum / cells_.size();
 }
 
-std::vector<int> HexSphereModel::getCellsWithOre(uint8_t oreType) const {
+std::vector<int> HexSphereModel::getCellsWithOre(OreType oreType) const {
     std::vector<int> result;
     for (const auto& cell : cells_) {
         if (cell.oreType == oreType && cell.oreDensity > 0.1f) {
@@ -294,7 +294,7 @@ void HexSphereModel::resetClimateData() {
         cell.humidity = 0.0f;
         cell.pressure = 0.0f;
         cell.oreDensity = 0.0f;
-        cell.oreType = 0;
+        cell.oreType = OreType::None;
     }
 }
 

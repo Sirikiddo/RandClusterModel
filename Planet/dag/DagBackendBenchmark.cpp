@@ -2,9 +2,13 @@
 
 #include <QElapsedTimer>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTextStream>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -12,7 +16,10 @@
 #include "DagTerrainBackend.h"
 #include "LegacyTerrainBackend.h"
 #include "TerrainBackendContract.h"
+#include "TerrainSerialization.h"
 #include "controllers/HexSphereSceneController.h"
+#include "generation/OreGenerator.h"
+#include "renderers/TerrainTessellator.h"
 
 namespace {
 
@@ -66,6 +73,166 @@ struct LegacySceneDerivedResult {
     int treeCount = 0;
 };
 
+bool sameOreField(const HexSphereModel& lhs, const HexSphereModel& rhs) {
+    if (lhs.cells().size() != rhs.cells().size()) {
+        return false;
+    }
+    for (size_t i = 0; i < lhs.cells().size(); ++i) {
+        if (lhs.cells()[i].oreDensity != rhs.cells()[i].oreDensity
+            || lhs.cells()[i].oreType != rhs.cells()[i].oreType) {
+            return false;
+        }
+    }
+    return true;
+}
+
+HexSphereModel buildRockOreModel(uint32_t seed) {
+    IcosphereBuilder builder;
+    HexSphereModel model;
+    model.rebuildFromIcosphere(builder.build(2));
+    for (auto& cell : model.cells()) {
+        cell.biome = Biome::Rock;
+    }
+    OreGenerator::generate(model, seed);
+    return model;
+}
+
+bool runOrePipelineChecks(QString* failure) {
+    const auto fail = [failure](const QString& message) {
+        if (failure) {
+            *failure = message;
+        }
+        return false;
+    };
+
+    const HexSphereModel first = buildRockOreModel(12345u);
+    const HexSphereModel repeated = buildRockOreModel(12345u);
+    const HexSphereModel changed = buildRockOreModel(54321u);
+    if (!sameOreField(first, repeated) || sameOreField(first, changed)) {
+        return fail("determinism or seed variation");
+    }
+
+    int oreCells = 0;
+    for (const auto& cell : first.cells()) {
+        if (cell.oreDensity < 0.0f || cell.oreDensity > 1.0f) {
+            return fail("density outside [0,1]");
+        }
+        if (cell.oreDensity > 0.0f) {
+            ++oreCells;
+            if (cell.oreType == OreType::None) {
+                return fail("positive density without ore type");
+            }
+        }
+        else if (cell.oreType != OreType::None) {
+            return fail("zero density with non-None type");
+        }
+    }
+    if (oreCells == 0) {
+        return fail("standard seed produced no ore");
+    }
+
+    IcosphereBuilder builder;
+    HexSphereModel biomeMaskModel;
+    biomeMaskModel.rebuildFromIcosphere(builder.build(1));
+    for (size_t i = 0; i < biomeMaskModel.cells().size(); ++i) {
+        auto& cell = biomeMaskModel.cells()[i];
+        cell.biome = (i % 2 == 0) ? Biome::Rock : Biome::Grass;
+        cell.oreDensity = 1.0f;
+        cell.oreType = OreType::Diamond;
+    }
+    OreGenerator::generate(biomeMaskModel, 12345u);
+    for (const auto& cell : biomeMaskModel.cells()) {
+        if (cell.biome != Biome::Rock
+            && (cell.oreDensity != 0.0f || cell.oreType != OreType::None)) {
+            return fail("non-Rock biome contains ore");
+        }
+    }
+
+    HexSphereModel meshModel;
+    meshModel.rebuildFromIcosphere(builder.build(0));
+    for (auto& cell : meshModel.cells()) {
+        cell.biome = Biome::Grass;
+        cell.oreDensity = 0.9f;
+        cell.oreType = OreType::Gold;
+    }
+    meshModel.cells().front().biome = Biome::Rock;
+    meshModel.cells().front().oreDensity = 0.75f;
+    meshModel.cells().front().oreType = OreType::Copper;
+    const TerrainMesh mesh = TerrainTessellator{}.build(meshModel);
+    if (mesh.ore.size() != mesh.pos.size() / 3 * 2
+        || mesh.triOwner.size() != mesh.idx.size() / 3) {
+        return fail("terrain mesh attribute size");
+    }
+    for (size_t triangle = 0; triangle < mesh.triOwner.size(); ++triangle) {
+        const bool expectedOre = mesh.triOwner[triangle] == 0;
+        for (size_t vertex = 0; vertex < 3; ++vertex) {
+            const size_t offset = triangle * 6 + vertex * 2;
+            const float expectedDensity = expectedOre ? 0.75f : 0.0f;
+            const float expectedType = expectedOre ? static_cast<float>(OreType::Copper) : 0.0f;
+            if (mesh.ore[offset] != expectedDensity || mesh.ore[offset + 1] != expectedType) {
+                return fail("terrain mesh ore masking");
+            }
+        }
+    }
+
+    TerrainSnapshot snapshot;
+    snapshot.subdivisionLevel = 2;
+    snapshot.generatorIndex = 3;
+    snapshot.params = TerrainParams{ 12345u, 3, 3.0f };
+    snapshot.cells.push_back(TerrainCellSnapshot{
+        4, Biome::Rock, 0.25f, 0.5f, 0.75f, 0.8f, OreType::Gold
+    });
+
+    const QString encodedV2 = serializeTerrainSnapshot(snapshot);
+    const QJsonDocument v2Document = QJsonDocument::fromJson(encodedV2.toUtf8());
+    if (!v2Document.isObject()
+        || v2Document.object()["version"].toInt() != 2
+        || v2Document.object()["cells"].toArray().at(0).toObject().contains("oreVisualDensity")) {
+        return fail("snapshot v2 shape");
+    }
+    const auto roundTrip = deserializeTerrainSnapshot(encodedV2);
+    if (!roundTrip
+        || roundTrip->cells.size() != 1
+        || roundTrip->cells.front().oreType != OreType::Gold
+        || std::abs(roundTrip->cells.front().oreDensity - 0.8f) > 0.0001f) {
+        return fail("snapshot v2 round-trip");
+    }
+
+    QJsonObject v1Root = v2Document.object();
+    v1Root["version"] = 1;
+    QJsonArray v1Cells = v1Root["cells"].toArray();
+    QJsonObject v1Cell = v1Cells.at(0).toObject();
+    v1Cell["oreVisualDensity"] = 0.8;
+    v1Cell["oreNoiseOffset"] = 2.0;
+    v1Cells[0] = v1Cell;
+    v1Root["cells"] = v1Cells;
+    if (!deserializeTerrainSnapshot(
+            QString::fromUtf8(QJsonDocument(v1Root).toJson(QJsonDocument::Compact)))) {
+        return fail("snapshot v1 compatibility");
+    }
+
+    QJsonObject invalidVersion = v2Document.object();
+    invalidVersion["version"] = 3;
+    if (deserializeTerrainSnapshot(
+            QString::fromUtf8(QJsonDocument(invalidVersion).toJson(QJsonDocument::Compact)))) {
+        return fail("unknown snapshot version accepted");
+    }
+
+    QJsonObject invalidType = v2Document.object();
+    QJsonArray invalidCells = invalidType["cells"].toArray();
+    QJsonObject invalidCell = invalidCells.at(0).toObject();
+    invalidCell["oreType"] = 99;
+    invalidCells[0] = invalidCell;
+    invalidType["cells"] = invalidCells;
+    if (deserializeTerrainSnapshot(
+            QString::fromUtf8(QJsonDocument(invalidType).toJson(QJsonDocument::Compact)))
+        || deserializeTerrainSnapshot("{broken json")) {
+        return fail("invalid snapshot payload accepted");
+    }
+
+    return true;
+}
+
 bool snapshotsCompatible(const TerrainSnapshot* lhs, const TerrainSnapshot* rhs) {
     if (!lhs || !rhs) {
         return false;
@@ -78,8 +245,10 @@ bool snapshotsCompatible(const TerrainSnapshot* lhs, const TerrainSnapshot* rhs)
 
     const size_t probeCount = std::min<size_t>(lhs->cells.size(), 32);
     for (size_t i = 0; i < probeCount; ++i) {
-        if (lhs->cells[i].height != rhs->cells[i].height ||
-            lhs->cells[i].biome != rhs->cells[i].biome) {
+        if (lhs->cells[i].height != rhs->cells[i].height
+            || lhs->cells[i].biome != rhs->cells[i].biome
+            || lhs->cells[i].oreDensity != rhs->cells[i].oreDensity
+            || lhs->cells[i].oreType != rhs->cells[i].oreType) {
             return false;
         }
     }
@@ -257,6 +426,8 @@ void appendSceneDerivedRows(
         dagRow.skippedGuardNodes = dagStats.skippedGuardNodes;
         dagRow.cacheHits = dagStats.cacheHits;
         dagRow.cacheMisses = dagStats.cacheMisses;
+        dagRow.planCacheHits = dagStats.planCacheHits;
+        dagRow.planCacheMisses = dagStats.planCacheMisses;
         report.rows.push_back(dagRow);
 
         DagBenchmarkRow legacyRow;
@@ -283,7 +454,7 @@ bool writeCsv(const QString& csvPath, const std::vector<DagBenchmarkRow>& rows) 
     }
 
     QTextStream out(&file);
-    out << "category,scenario,operation,backend,iteration,elapsed_ms,cell_count,compatible,selection_count,tree_count,model_count,executed_nodes,skipped_guard_nodes,cache_hits,cache_misses\n";
+    out << "category,scenario,operation,backend,iteration,elapsed_ms,cell_count,compatible,selection_count,tree_count,model_count,executed_nodes,skipped_guard_nodes,cache_hits,cache_misses,plan_cache_hits,plan_cache_misses\n";
     for (const auto& row : rows) {
         out << '"' << row.category << '"' << ','
             << '"' << row.scenario << '"' << ','
@@ -299,7 +470,9 @@ bool writeCsv(const QString& csvPath, const std::vector<DagBenchmarkRow>& rows) 
             << row.executedNodes << ','
             << row.skippedGuardNodes << ','
             << row.cacheHits << ','
-            << row.cacheMisses << '\n';
+            << row.cacheMisses << ','
+            << row.planCacheHits << ','
+            << row.planCacheMisses << '\n';
     }
     return true;
 }
@@ -309,6 +482,17 @@ bool writeCsv(const QString& csvPath, const std::vector<DagBenchmarkRow>& rows) 
 DagBenchmarkReport runDagBackendBenchmark(const QString& csvPath, int iterations) {
     DagBenchmarkReport report;
     report.csvPath = csvPath;
+    QString oreCheckFailure;
+    report.ok = runOrePipelineChecks(&oreCheckFailure);
+    if (!report.ok) {
+        DagBenchmarkRow row;
+        row.category = "self-check";
+        row.scenario = oreCheckFailure;
+        row.operation = "ore_pipeline";
+        row.backend = "DAG terrain";
+        row.compatible = false;
+        report.rows.push_back(row);
+    }
 
     const std::vector<TerrainScenario> scenarios = {
         { "cold climate L2", 3, 2, TerrainParams{ 12345u, 3, 3.0f } },

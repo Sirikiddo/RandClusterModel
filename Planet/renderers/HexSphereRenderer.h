@@ -36,7 +36,6 @@ class PlanetSurfaceAtlasPass;
 class HexSphereRenderer {
 public:
 
-    void setOreAnimationTime(float time);
     void setOreVisualizationEnabled(bool enabled);
 
     void updateVisibility(const QVector3D& cameraPos);
@@ -147,14 +146,14 @@ private:
     GLuint progWater_ = 0, progModel_ = 0, progFactory_ = 0, progSteam_ = 0;
     GLint uMVP_Wire_ = -1, uMVP_Terrain_ = -1, uMVP_Sel_ = -1;
     GLint uModel_ = -1, uLightDir_ = -1;
-    GLint uNormalMatrix_ = -1;
+    GLint uNormalMatrix_ = -1, uOreEnabled_ = -1;
     GLint uMVP_Model_ = -1, uModel_Model_ = -1, uLightDir_Model_ = -1, uViewPos_Model_ = -1, uColor_Model_ = -1, uUseTexture_ = -1;
     GLint uMVP_Factory_ = -1, uModel_Factory_ = -1, uLightDir_Factory_ = -1, uViewPos_Factory_ = -1, uColor_Factory_ = -1, uUseTexture_Factory_ = -1;
     GLint uMVP_Steam_ = -1, uModel_Steam_ = -1, uTime_Steam_ = -1, uViewPos_Steam_ = -1;
 
     GLuint vaoWire_ = 0, vboPositions_ = 0;
     QOpenGLVertexArrayObject vaoTerrain_;
-    GLuint vboTerrainPos_ = 0, vboTerrainCol_ = 0, vboTerrainNorm_ = 0, iboTerrain_ = 0;
+    GLuint vboTerrainPos_ = 0, vboTerrainCol_ = 0, vboTerrainNorm_ = 0, vboTerrainOre_ = 0, iboTerrain_ = 0;
     GLuint vaoSel_ = 0, vboSel_ = 0;
     GLuint vaoPath_ = 0, vboPath_ = 0;
     GLuint vaoPyramid_ = 0, vboPyramid_ = 0;
@@ -192,7 +191,6 @@ private:
 
     GLuint createTreeColorTexture();
 
-    float oreAnimationTime_ = 0.0f;
     bool oreVisualizationEnabled_ = true;
     bool firstRenderDone_ = false;
 

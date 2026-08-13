@@ -117,8 +117,6 @@ HexSphereModel buildModelFromSnapshot(const TerrainSnapshot& snapshot) {
         target.pressure = source.pressure;
         target.oreDensity = source.oreDensity;
         target.oreType = source.oreType;
-        target.oreVisual = source.oreVisual;
-        target.oreNoiseOffset = source.oreNoiseOffset;
     }
 
     return model;
@@ -717,6 +715,8 @@ struct DagSceneBackend::Impl {
     }
 
     SceneDagResult rebuild(const SceneDagRequest& request) {
+        const std::size_t planCacheHitsBefore = engine.plan_cache_hits();
+        const std::size_t planCacheMissesBefore = engine.plan_cache_misses();
         const QString terrainJson = serializeTerrainSnapshot(request.terrain);
         const QString selectedJson = serializeSelectedCells(request.selectedCells);
         const QString visualJson = serializeVisualParams(VisualParams{
@@ -772,6 +772,9 @@ struct DagSceneBackend::Impl {
         if (auto value = proc::get_value_view(prepared, "modelPlacements")) {
             result.modelPlacements = deserializeModelPlacements(QString::fromUtf8(value->data(), static_cast<int>(value->size())));
         }
+
+        lastStats.planCacheHits = static_cast<int>(engine.plan_cache_hits() - planCacheHitsBefore);
+        lastStats.planCacheMisses = static_cast<int>(engine.plan_cache_misses() - planCacheMissesBefore);
 
         engine.ack_outputs();
         return result;
