@@ -32,6 +32,9 @@
     <Filter Include="resources">
       <UniqueIdentifier>{4B660D4E-5C18-468F-AC33-DC0A5C641125}</UniqueIdentifier>
     </Filter>
+    <Filter Include="resources\water">
+      <UniqueIdentifier>{018E98B5-D516-4A62-A138-999BB7888F50}</UniqueIdentifier>
+    </Filter>
     <Filter Include="tools">
       <UniqueIdentifier>{A1D8B7BA-57E7-4D5E-B099-1E4A1CDBB361}</UniqueIdentifier>
     </Filter>
@@ -87,7 +90,22 @@
     <ClCompile Include="contributor\ContributorAsset.cpp">
       <Filter>contributor</Filter>
     </ClCompile>
+    <ClCompile Include="contributor\ContributorParticles.cpp">
+      <Filter>contributor</Filter>
+    </ClCompile>
     <ClCompile Include="dag\DagTerrainBackend.cpp">
+      <Filter>dag</Filter>
+    </ClCompile>
+    <ClCompile Include="dag\DagBackendBenchmark.cpp">
+      <Filter>dag</Filter>
+    </ClCompile>
+    <ClCompile Include="dag\DagPathBackend.cpp">
+      <Filter>dag</Filter>
+    </ClCompile>
+    <ClCompile Include="dag\DagSceneBackend.cpp">
+      <Filter>dag</Filter>
+    </ClCompile>
+    <ClCompile Include="dag\TerrainSerialization.cpp">
       <Filter>dag</Filter>
     </ClCompile>
     <ClCompile Include="dag\ProcessDagSmoke.cpp">
@@ -150,6 +168,9 @@
     <ClCompile Include="generation\TerrainGenerator.cpp">
       <Filter>generation</Filter>
     </ClCompile>
+    <ClCompile Include="generation\WaterWaveModel.cpp">
+      <Filter>generation</Filter>
+    </ClCompile>
     <ClCompile Include="generation\MeshGenerators\SelectionOutlineGenerator.cpp">
       <Filter>generation\MeshGenerators</Filter>
     </ClCompile>
@@ -165,6 +186,12 @@
     <ClCompile Include="model\CarModelHandler.cpp">
       <Filter>model</Filter>
     </ClCompile>
+    <ClCompile Include="model\FactoryModelHandler.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
+    <ClCompile Include="model\MineModelHandler.cpp">
+      <Filter>model</Filter>
+    </ClCompile>
     <ClCompile Include="model\HexSphereModel.cpp">
       <Filter>model</Filter>
     </ClCompile>
@@ -174,6 +201,9 @@
     <ClCompile Include="renderers\EntityRenderer.cpp">
       <Filter>renderers</Filter>
     </ClCompile>
+    <ClCompile Include="renderers\ParticleRenderer.cpp">
+      <Filter>renderers</Filter>
+    </ClCompile>
     <ClCompile Include="renderers\HexSphereRenderer.cpp">
       <Filter>renderers</Filter>
     </ClCompile>
@@ -181,6 +211,9 @@
       <Filter>renderers</Filter>
     </ClCompile>
     <ClCompile Include="renderers\TerrainTessellator.cpp">
+      <Filter>renderers</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\PlanetSurfaceAtlasPass.cpp">
       <Filter>renderers</Filter>
     </ClCompile>
     <ClCompile Include="renderers\WaterRenderer.cpp">
@@ -200,6 +233,12 @@
     </ClCompile>
     <ClCompile Include="ui\PlanetSettingsPanel.cpp">
       <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\WaterWaveModelTests.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp">
+      <Filter>tests</Filter>
     </ClCompile>
     <ClCompile Include="ECS\ComponentStorage.cpp">
       <Filter>ECS</Filter>
@@ -233,6 +272,9 @@
     <ClInclude Include="contributor\ContributorAsset.h">
       <Filter>contributor</Filter>
     </ClInclude>
+    <ClInclude Include="contributor\ContributorParticles.h">
+      <Filter>contributor</Filter>
+    </ClInclude>
     <ClInclude Include="controllers\CameraController.h">
       <Filter>controllers</Filter>
     </ClInclude>
@@ -248,6 +290,18 @@
     <ClInclude Include="dag\DagTerrainBackend.h">
       <Filter>dag</Filter>
     </ClInclude>
+    <ClInclude Include="dag\DagBackendBenchmark.h">
+      <Filter>dag</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\DagPathBackend.h">
+      <Filter>dag</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\DagSceneBackend.h">
+      <Filter>dag</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\TerrainSerialization.h">
+      <Filter>dag</Filter>
+    </ClInclude>
     <ClInclude Include="generation\ClimateBiomeGenerator.h">
       <Filter>generation</Filter>
     </ClInclude>
@@ -255,6 +309,9 @@
       <Filter>generation</Filter>
     </ClInclude>
     <ClInclude Include="generation\TerrainGenerator.h">
+      <Filter>generation</Filter>
+    </ClInclude>
+    <ClInclude Include="generation\WaterWaveModel.h">
       <Filter>generation</Filter>
     </ClInclude>
     <ClInclude Include="generation\MeshGenerators\SelectionOutlineGenerator.h">
@@ -270,6 +327,12 @@
       <Filter>generation\MeshGenerators</Filter>
     </ClInclude>
     <ClInclude Include="model\CarModelHandler.h">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\FactoryModelHandler.h">
+      <Filter>model</Filter>
+    </ClInclude>
+    <ClInclude Include="model\MineModelHandler.h">
       <Filter>model</Filter>
     </ClInclude>
     <ClInclude Include="model\DebugModel.h">
@@ -293,6 +356,9 @@
     <ClInclude Include="renderers\EntityRenderer.h">
       <Filter>renderers</Filter>
     </ClInclude>
+    <ClInclude Include="renderers\ParticleRenderer.h">
+      <Filter>renderers</Filter>
+    </ClInclude>
     <ClInclude Include="renderers\HexSphereRenderer.h">
       <Filter>renderers</Filter>
     </ClInclude>
@@ -300,6 +366,9 @@
       <Filter>renderers</Filter>
     </ClInclude>
     <ClInclude Include="renderers\TerrainTessellator.h">
+      <Filter>renderers</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\PlanetSurfaceAtlasPass.h">
       <Filter>renderers</Filter>
     </ClInclude>
     <ClInclude Include="renderers\WaterRenderer.h">
@@ -319,6 +388,12 @@
     </ClInclude>
     <ClInclude Include="ui\PlanetSettingsPanel.h">
       <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\WaterWaveModelTests.h">
+      <Filter>tests</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\ClimateBiomeGeneratorTests.h">
+      <Filter>tests</Filter>
     </ClInclude>
     <ClInclude Include="ECS\Collider.h">
       <Filter>ECS</Filter>
@@ -453,6 +528,24 @@
   <ItemGroup>
     <None Include="resources\HexSphereWidget_shaders.h">
       <Filter>resources</Filter>
+    </None>
+    <None Include="resources\water\water_common.glsl">
+      <Filter>resources\water</Filter>
+    </None>
+    <None Include="resources\water\water_intersection.glsl">
+      <Filter>resources\water</Filter>
+    </None>
+    <None Include="resources\water\water_shading.glsl">
+      <Filter>resources\water</Filter>
+    </None>
+    <None Include="resources\water\water_shell.frag">
+      <Filter>resources\water</Filter>
+    </None>
+    <None Include="resources\water\water_shell.vert">
+      <Filter>resources\water</Filter>
+    </None>
+    <None Include="resources\water\water_surface.glsl">
+      <Filter>resources\water</Filter>
     </None>
     <None Include="docs\rendering_refactor_task.md">
       <Filter>docs</Filter>

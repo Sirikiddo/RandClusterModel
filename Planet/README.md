@@ -275,7 +275,8 @@ core/main.cpp
   * двигает выбранную сущность по поверхности.
 * Управляет перестройкой сцены:
 
-  * `rebuildModel()` — пересобирает модель планеты при изменении параметров генерации, уровня разбиения, ручном изменении высот или биомов (через методы `setSubdivisionLevel`, `regenerateTerrain`, изменение параметров сглаживания и т.п.);
+  * terrain parameters и subdivision передаёт через `EngineFacade`; после применения backend snapshot обновляет производную геометрию сцены;
+  * `rebuildDerivedGeometry()` пока обслуживает legacy-операции ручного изменения высот и биомов;
   * `uploadBuffers()` — отправляет данные на GPU;
   * `render()` — собирает `RenderGraph` (структуру данных для кадра), `RenderCamera` (матрицы камеры), `SceneLighting` (параметры освещения кадра) и вызывает `HexSphereRenderer`.
 
@@ -303,7 +304,7 @@ core/main.cpp
   * уровень разбиения (subdivision level);
   * модель планеты (`HexSphereModel`);
   * параметры генерации рельефа и биомов;
-  * CPU-меши террейна, воды, контура выделения, пути;
+  * CPU-меш террейна, topology water proxy, береговые данные и контур выделения;
   * список выделенных ячеек.
 * Предоставляет методы:
 
@@ -329,7 +330,7 @@ core/main.cpp
 
   * интерфейс генераторов рельефа;
   * конкретные генераторы (плоский, синус, Перлин, климатический и др.);
-  * генераторы мешей террейна, воды, wire-каркаса, контура выделения.
+  * генераторы terrain mesh, topology water proxy, wire-каркаса и контура выделения.
 
 Это чистые структуры и функции C++, независимые от Qt и OpenGL.
 
@@ -356,30 +357,39 @@ core/main.cpp
 
 Упрощённо, путь от модели до рендера таков:
 
-1. `HexSphereSceneController` хранит `HexSphereModel` и параметры генерации.
-2. При изменении параметров (генератор, уровень разбиения, сглаживание) вызывается `rebuildModel()`.
-3. Внутри `rebuildModel()` используются функции из `generation/`:
-
-   * генераторы рельефа обновляют высоты и биомы ячеек в `HexSphereModel`;
-   * генераторы мешей строят CPU-меши террейна, воды, wire-каркаса, контура выделения.
-4. `InputController::uploadBuffers()` передаёт полученные массивы вершин и индексов в `HexSphereRenderer::uploadScene(...)`.
-5. `HexSphereRenderer` создаёт/обновляет VBO/IBO и далее использует их в `renderScene(...)`.
+1. Qt передаёт пользовательский intent в `InputController`.
+2. Параметры и команды генерации проходят через `EngineFacade` в выбранный terrain backend. Текущая конфигурация использует `DagTerrainBackend`.
+3. Backend строит канонический `TerrainSnapshot` через ProcessDAG и проецирует его обратно в сцену через `ITerrainSceneBridge`.
+4. `HexSphereSceneController` применяет snapshot и строит производные CPU-данные: terrain mesh, topology-зависимый water proxy и береговые данные.
+5. `DagSceneBackend` независимо строит и кэширует selection outline, tree placements и model placements из read-only snapshot сцены.
+6. `InputController::uploadBuffers()` передаёт render-facing данные в `HexSphereRenderer::uploadScene(...)`.
+7. `HexSphereRenderer` обновляет GPU-ресурсы и использует их в `renderScene(...)`.
 
 Это можно представить в виде краткой схемы:
 
 ```text
-HexSphereModel
-   ↓ (генераторы рельефа)
-обновлённые высоты/биомы
-   ↓ (MeshGenerators)
-TerrainMesh / WaterGeometry / Wire / Outline / Path
+UI intent
+   ↓
+EngineFacade → DagTerrainBackend → TerrainSnapshot
+   ↓ (ITerrainSceneBridge)
+HexSphereModel + производные данные сцены
+   ↓
+TerrainMesh / topology water proxy / hydrology atlas / Outline / Path
    ↓ (uploadScene)
 GPU-буферы (VBO/IBO)
    ↓ (renderScene)
 кадр на экране
 ```
 
-`model/` отвечает за топологию и параметры ячеек, `generation/` — за превращение этих данных в геометрию для рендера.
+`EngineFacade` является границей backend-команд генерации, пути и DAG-производных сцены. Камера, frame time, OpenGL state, water optics и вычисление анимации волн остаются render-facing состоянием и не записываются в terrain snapshot. Ручное редактирование высот и биомов пока остаётся частично мигрированным legacy-сценарием в `InputController`.
+
+Вода разделена по частоте изменений:
+
+* оптика меняет только uniforms;
+* wave spec пересчитывает аналитические bounds без генерации terrain;
+* `beachWidth` перестраивает береговую производную геометрию и hydrology atlas;
+* topology water proxy перестраивается только при смене subdivision/topology и загружается по revision;
+* `waterTime` меняется каждый кадр и не затрагивает backend или CPU-меши.
 
 #### 7.4. Рендеринг (визуализация)
 
@@ -742,7 +752,7 @@ layout(location = 2) in vec3 a_color;     // из TerrainMesh::col
 
 Шейдеры воды и оверлея используют схожую схему:
 
-* вода берёт позиции из `WaterGeometryData::positions` и флаги границ из `edgeFlags` (например, для подсветки береговой линии);
+* вода использует `WaterGeometryData::positions` только как conservative full-sphere proxy; реальная поверхность, берег и глубина вычисляются по аналитической волне, hydrology atlas и scene depth;
 * оверлей берёт линии контура выделения и путь как `vec3`-позиции, рисуя их отдельными примитивами поверх террейна;
 * шейдер сущностей читает атрибуты мешей, назначенных в ECS (`ecs::Mesh::meshId`) и преобразованных в GPU-буферы в `EntityRenderer`.
 
@@ -905,7 +915,7 @@ struct Cell {
 * `wireEdges()` всегда содержит неориентированные рёбра без дубликатов.
 * `pickTris()` покрывает всю поверхность планеты без самопересечений и используется только для пика и вспомогательной визуализации.
 
-`HexSphereSceneController` никогда не меняет внутреннюю топологию `HexSphereModel`, он только обновляет высоты/биомы и пересчитывает производные меши (terrain, water и т.п.).
+`HexSphereSceneController` меняет топологию `HexSphereModel` только в явном `rebuildTopology()` при смене subdivision. Обычная регенерация и применение snapshot обновляют данные ячеек и производные структуры, не меняя topology.
 
 ---
 
@@ -922,6 +932,7 @@ struct TerrainMesh {
     std::vector<float>    norm;  // nx, ny, nz, по 3 float на вершину
     std::vector<uint32_t> idx;   // индексы треугольников
     std::vector<int>      triOwner; // для каждого треугольника — id ячейки
+    std::vector<TriangleSurfaceRole> triSurfaceRole; // Top/Slope/Cliff/Skirt
 };
 ```
 
@@ -930,6 +941,7 @@ struct TerrainMesh {
 * `pos.size() % 3 == 0`, `col.size() % 3 == 0`, `norm.size() % 3 == 0` — каждые 3 числа образуют один вектор.
 * `idx.size() % 3 == 0` — индексы хранятся тройками (по одному треугольнику).
 * `triOwner.size() == idx.size() / 3` — для каждого треугольника есть ровно один владелец-ячейка.
+* `triSurfaceRole.size() == idx.size() / 3` — каждый треугольник явно классифицирован; terrain radius atlas принимает только `Top`.
 * Все координаты в `pos` заданы в мировых координатах и лежат на сфере радиуса `R + height * heightStep`.
 
 `TerrainMesh` строится в `TerrainTessellator::build(const HexSphereModel&)`, а сам тесселлятор вызывается через `TerrainMeshGenerator` из `HexSphereSceneController::updateTerrainMesh()`. После этого `InputController::uploadBuffers()` передаёт `terrainCPU_` в `HexSphereRenderer::uploadScene(...)`.
@@ -940,20 +952,26 @@ struct TerrainMesh {
 
 ```cpp
 struct WaterGeometryData {
-    std::vector<float>    positions; // xyz для вершин воды
-    std::vector<float>    edgeFlags; // 1.0 на границах, 0.0 внутри (для шейдера)
-    std::vector<uint32_t> indices;   // треугольники воды
+    std::vector<float>    positions; // unit directions full-sphere proxy
+    std::vector<uint32_t> indices;   // треугольники proxy
 };
 ```
 
 Инварианты:
 
 * `positions.size() % 3 == 0`.
-* `edgeFlags.size() == positions.size() / 3` — по одному флагу на вершину.
 * `indices.size() % 3 == 0`.
-* Все вершины лежат примерно на фиксированном радиусе «уровня моря» (например, 1.0).
+* Все позиции являются направлениями единичной сферы. Vertex shader умножает их на вычисленный внешний shell radius.
+* Proxy не кодирует Sea/Land и не является формой воды; он обеспечивает только conservative raster coverage.
 
-`WaterGeometryData` заполняется в `WaterMeshGenerator::buildWaterGeometry(const HexSphereModel&)` и попадает в рендер через `HexSphereRenderer::uploadWater(...)` и далее в `WaterRenderer`.
+`WaterGeometryData` заполняется в `WaterMeshGenerator::buildWaterGeometry(const HexSphereModel&)`, хранится сценой как topology-зависимый proxy и загружается `HexSphereRenderer` только при смене его revision.
+
+Источники истины для water pass:
+
+* `HexSphereModel::waterSurfaceRadius()` — спокойный уровень моря;
+* `ResolvedWaterWaveSpec` — аналитическая поверхность, shell bounds и frame state;
+* `PlanetSurfaceAtlasPass` — terrain top radius, semantic Sea/Land и signed shore distance;
+* scene depth texture — реальная окклюзия и толщина воды вдоль camera ray.
 
 ---
 
@@ -996,7 +1014,7 @@ struct RenderCamera {
 ```cpp
 struct SceneLighting {
     QVector3D direction;  // направление света в мировых координатах
-    float     waterTime;  // «время» для анимации воды
+    double    waterTime;  // устойчивое время для анимации воды
 };
 ```
 
@@ -1011,12 +1029,16 @@ struct RenderContext {
     const RenderCamera&   camera;
     const SceneLighting&  lighting;
     QMatrix4x4            mvp;       // projection * view
+    QMatrix4x4            invViewProjection;
     QVector3D             cameraPos; // позиция камеры в мировых координатах
+    QSize                 viewportSize;
 };
 ```
 
 * `mvp` вычисляется в `HexSphereRenderer::renderScene(...)` как `camera.projection * camera.view`.
+* `invViewProjection` используется water raymarch для восстановления world-space camera ray без зависимости от proxy-вершины.
 * `cameraPos` вычисляется через обратную матрицу вида.
+* `viewportSize` используется для screen-space error budget и scene depth.
 * `RenderContext` передаётся во все под-рендереры (terrain, water, entities, overlay), которые **только читают** данные и не меняют `graph`.
 
 Для наглядности контракт можно свести к таблице:
@@ -1024,7 +1046,7 @@ struct RenderContext {
 | Кому рендерер рисует                  | Что он ожидает получить от `RenderGraph` / сцены                          |
 | ------------------------------------- | ------------------------------------------------------------------------- |
 | TerrainRenderer (поверхность планеты) | `scene.terrain()` (`TerrainMesh`: `pos`, `norm`, `col`, `idx`)            |
-| WaterRenderer (вода)                  | `scene.buildWaterGeometry()` (`WaterGeometryData`) и `lighting.waterTime` |
+| WaterRenderer (вода)                  | `scene.waterGeometry()`, resolved wave state, hydrology atlases, scene depth и `lighting.waterTime` |
 | EntityRenderer (юниты, маркеры)       | ECS-сущности с компонентами `Transform` + `Mesh`                          |
 | OverlayRenderer (контуры, путь)       | вершины контура выделения и полилиний пути из `HexSphereSceneController`  |
 
@@ -1052,7 +1074,7 @@ struct RenderContext {
 * подъём точки над сферой на `height * heightStep`;
 * дополнительный bias (`outlineBias`, `stripInset` и т.п.) для визуального отделения линий и полос.
 
-Главное: **все структуры, которые передаются в рендерер (`TerrainMesh`, `WaterGeometryData`, пути, контуры)** уже находятся в единой мировой системе координат.
+Главное: `TerrainMesh`, пути и контуры передаются в единой мировой системе координат. `WaterGeometryData` является исключением: его позиции — единичные направления conservative proxy, а физический радиус задаётся water shell shader.
 
 ---
 

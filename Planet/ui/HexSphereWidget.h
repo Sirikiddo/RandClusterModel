@@ -11,6 +11,7 @@
 
 class CameraController;
 struct TerrainParams;
+struct WaterParams;
 
 class QMouseEvent;
 class QWheelEvent;
@@ -38,6 +39,7 @@ public slots:
     void resetView();
     void clearSelection();
     void setTerrainParams(const TerrainParams& p);
+    void setWaterParams(const WaterParams& p);
     void setGeneratorByIndex(int idx);
     void regenerateTerrain();
 
@@ -97,7 +99,5 @@ private:
     int placementPanelExpandedWidth_ = 0;
     int placementContentExpandedWidth_ = 0;
     bool placementPanelExpanded_ = true;
-    QTimer* waterTimer_ = nullptr;
-
     QTimer* animationTimer_ = nullptr;
 };

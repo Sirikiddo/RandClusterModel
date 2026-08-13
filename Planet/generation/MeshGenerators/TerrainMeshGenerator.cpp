@@ -3,8 +3,6 @@
 
 TerrainMesh TerrainMeshGenerator::buildTerrainMesh(const HexSphereModel& model, const TerrainMeshOptions& options) {
     TerrainTessellator tt;
-    tt.R = options.radius;
-    tt.heightStep = options.heightStep;
     tt.inset = options.inset;
     tt.smoothMaxDelta = options.smoothOneStep ? 1 : 0;
     tt.outerTrim = options.outerTrim;
@@ -12,6 +10,8 @@ TerrainMesh TerrainMeshGenerator::buildTerrainMesh(const HexSphereModel& model, 
     tt.doBlades = options.doBlades;
     tt.doCornerTris = options.doCornerTris;
     tt.doEdgeCliffs = options.doEdgeCliffs;
+    tt.coastalBand = options.coastalBand;
+    tt.waterParams = options.waterParams;
 
     return tt.build(model);
 }

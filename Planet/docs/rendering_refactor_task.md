@@ -1,5 +1,7 @@
 # Codex task: refactor the real-time rendering pipeline
 
+> Status: completed. This document is retained as historical implementation context; `README.md` describes the current renderer contract.
+
 This is the implementation brief for Codex to untangle the current rendering path. Keep changes inside the `Planet` folder and update Visual Studio project files if you add or move sources.
 
 ## Problem summary
@@ -11,7 +13,7 @@ This is the implementation brief for Codex to untangle the current rendering pat
 ## What to change (implementation map)
 1) **Unify surface placement**: create a shared helper (small header/inline ok) that returns a height-aware surface point for a cell. Replace the widget copy (`HexSphereWidget.cpp:getSurfacePoint`) and renderer copy (`HexSphereRenderer.cpp:getSurfacePoint`) with this helper so both call the same math. Keep heightStep/offset support.
 
-2) **Centralize uploads**: add a single entry point on `HexSphereRenderer` (e.g., `uploadScene(const HexSphereSceneController&, const UploadOptions&)`) that invokes existing upload functions (`uploadWire`, `uploadTerrain`, `uploadSelectionOutline`, `uploadPath`, `uploadWater`) in the right order and wraps `makeCurrent()/doneCurrent()`. Change `HexSphereWidget::uploadBuffers()` to delegate to this entry point instead of calling individual uploaders.
+2) **Centralize uploads**: add a single entry point on `HexSphereRenderer` (`uploadScene(const HexSphereSceneController&, const UploadOptions&)`) that uploads the scene in the right order and wraps `makeCurrent()/doneCurrent()`. The topology-dependent water proxy is owned by the scene and uploaded internally only when its revision changes; there is no public `uploadWater` path.
 
 3) **Own buffer usage configuration**: thread the buffer usage choice into the renderer (or let it own the decision) so the actual GL buffer creation respects the widget’s strategy. Remove or consolidate unused flags; ensure `useStaticBuffers_`, `terrainBufferUsage_`, and `wireBufferUsage_` no longer exist as dead state.
 

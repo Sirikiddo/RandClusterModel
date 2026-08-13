@@ -4,20 +4,20 @@
 #include <vector>
 #include <random>
 
-// Одна частица для кроны дерева
+// РћРґРЅР° С‡Р°СЃС‚РёС†Р° РґР»СЏ РєСЂРѕРЅС‹ РґРµСЂРµРІР°
 struct ContributorParticle {
     QVector3D restPosition{ 0, 0, 0 };
     QVector3D position{ 0, 0, 0 };
     QVector3D velocity{ 0, 0, 0 };
     QVector3D color{ 0.2f, 0.7f, 0.2f };
-    QVector3D normal{ 0, 1, 0 };  // <-- добавили
+    QVector3D normal{ 0, 1, 0 };
     float size = 0.05f;
     float windWeight = 1.0f;
     float phase = 0.0f;
     float rotation = 0.0f;
 };
 
-// Набор частиц для одного "облака" листвы
+// РќР°Р±РѕСЂ С‡Р°СЃС‚РёС† РґР»СЏ РѕРґРЅРѕРіРѕ "РѕР±Р»Р°РєР°" Р»РёСЃС‚РІС‹
 struct ContributorParticleBlob {
     QVector3D center{ 0, 0, 0 };
     float radius = 0.5f;
@@ -25,7 +25,7 @@ struct ContributorParticleBlob {
     QVector3D color{ 0.2f, 0.7f, 0.2f };
 };
 
-// Ветровое поле
+// Р’РµС‚СЂРѕРІРѕРµ РїРѕР»Рµ
 struct ContributorWindField {
     QVector3D direction = QVector3D(1.0f, 0.0f, 0.0f);
     float strength = 0.25f;
@@ -34,7 +34,6 @@ struct ContributorWindField {
     float turbulence = 0.15f;
 };
 
-// Объявления функций (без inline здесь)
 std::vector<ContributorParticle> generateParticleBlob(
     const ContributorParticleBlob& blob,
     std::mt19937& rng);

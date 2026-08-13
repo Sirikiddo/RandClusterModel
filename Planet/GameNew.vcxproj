@@ -16,6 +16,7 @@
     <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">10.0</WindowsTargetPlatformVersion>
     <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">10.0</WindowsTargetPlatformVersion>
     <QtMsBuild Condition="'$(QtMsBuild)'=='' OR !Exists('$(QtMsBuild)\qt.targets')">$(MSBuildProjectDirectory)\QtMsBuild</QtMsBuild>
+    <VcpkgXUseBuiltInApplocalDeps>true</VcpkgXUseBuiltInApplocalDeps>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
@@ -141,6 +142,7 @@
     <ClCompile Include="generation\MeshGenerators\WireMeshGenerator.cpp" />
     <ClCompile Include="generation\PerlinNoise.cpp" />
     <ClCompile Include="generation\TerrainGenerator.cpp" />
+    <ClCompile Include="generation\WaterWaveModel.cpp" />
     <ClCompile Include="model\CarModelHandler.cpp" />
     <ClCompile Include="model\FactoryModelHandler.cpp" />
     <ClCompile Include="model\HexSphereModel.cpp" />
@@ -153,6 +155,7 @@
     <ClCompile Include="renderers\TerrainRenderer.cpp" />
     <ClCompile Include="renderers\TerrainTessellator.cpp" />
     <ClCompile Include="renderers\WaterRenderer.cpp" />
+    <ClCompile Include="renderers\PlanetSurfaceAtlasPass.cpp" />
     <ClCompile Include="scene\Entity.cpp" />
     <ClCompile Include="scene\SceneGraph.cpp" />
     <ClCompile Include="third_party\ProcessDAG\boundary\Logger.cpp" />
@@ -167,6 +170,8 @@
     <ClCompile Include="ui\OverlayRenderer.cpp" />
     <ClCompile Include="ui\PerformanceStats.cpp" />
     <ClCompile Include="ui\PlanetSettingsPanel.cpp" />
+    <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp" />
+    <ClCompile Include="tests\WaterWaveModelTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="contributor\ContributorAsset.h" />
@@ -176,7 +181,7 @@
     <ClInclude Include="controllers\InputController.h" />
     <ClInclude Include="controllers\PathBuilder.h" />
     <ClInclude Include="core\AppViewConfig.h" />
-    <ClInclude Include="core\DebugOverlay.h" />
+    <ClInclude Include="dag\DebugOverlay.h" />
     <ClInclude Include="culling\TerrainCulling.h" />
     <ClInclude Include="dag\DagBackendBenchmark.h" />
     <ClInclude Include="dag\DagPathBackend.h" />
@@ -203,6 +208,7 @@
     <ClInclude Include="generation\MeshGenerators\WireMeshGenerator.h" />
     <ClInclude Include="generation\PerlinNoise.h" />
     <ClInclude Include="generation\TerrainGenerator.h" />
+    <ClInclude Include="generation\WaterWaveModel.h" />
     <ClInclude Include="model\CarModelHandler.h" />
     <ClInclude Include="model\DebugModel.h" />
     <ClInclude Include="model\FactoryModelHandler.h" />
@@ -219,7 +225,10 @@
     <ClInclude Include="renderers\TerrainRenderer.h" />
     <ClInclude Include="renderers\TerrainTessellator.h" />
     <ClInclude Include="renderers\WaterRenderer.h" />
+    <ClInclude Include="renderers\PlanetSurfaceAtlasPass.h" />
     <ClInclude Include="resources\HexSphereWidget_shaders.h" />
+    <ClInclude Include="tests\ClimateBiomeGeneratorTests.h" />
+    <ClInclude Include="tests\WaterWaveModelTests.h" />
     <ClInclude Include="scene\Entity.h" />
     <ClInclude Include="scene\Interaction.h" />
     <ClInclude Include="scene\SceneGraph.h" />
@@ -254,6 +263,14 @@
     <QtMoc Include="ui\PlanetSettingsPanel.h" />
     <QtMoc Include="ui\MainWindow.h" />
     <QtMoc Include="ui\HexSphereWidget.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="resources\water\water_common.glsl" />
+    <None Include="resources\water\water_intersection.glsl" />
+    <None Include="resources\water\water_shading.glsl" />
+    <None Include="resources\water\water_shell.frag" />
+    <None Include="resources\water\water_shell.vert" />
+    <None Include="resources\water\water_surface.glsl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

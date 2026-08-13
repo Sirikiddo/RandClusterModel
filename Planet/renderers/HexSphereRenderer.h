@@ -4,6 +4,7 @@
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLVertexArrayObject>
 #include <QVector3D>
+#include <QSize>
 #include <QOpenGLWidget>
 #include <QtOpenGL>
 #include <GL/gl.h>
@@ -30,6 +31,7 @@ class TerrainRenderer;
 class WaterRenderer;
 class EntityRenderer;
 class OverlayRenderer;
+class PlanetSurfaceAtlasPass;
 
 class HexSphereRenderer {
 public:
@@ -53,7 +55,7 @@ public:
 
     struct SceneLighting {
         QVector3D direction;
-        float waterTime = 0.0f;
+        double waterTime = 0.0;
     };
 
     struct RenderContext {
@@ -61,7 +63,9 @@ public:
         const RenderCamera& camera;
         const SceneLighting& lighting;
         QMatrix4x4 mvp;
+        QMatrix4x4 invViewProjection;
         QVector3D cameraPos;
+        QSize viewportSize;
     };
 
     struct UploadOptions {
@@ -80,8 +84,8 @@ public:
     void uploadTerrain(const TerrainMesh& mesh, GLenum usage);
     void uploadSelectionOutline(const std::vector<float>& vertices);
     void uploadPath(const std::vector<QVector3D>& points);
-    void uploadWater(const WaterGeometryData& data);
     void uploadScene(const HexSphereSceneController& scene, const UploadOptions& options);
+    void uploadTerrainHydrology(const HexSphereSceneController& scene, GLenum terrainUsage);
 
     void renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting);
 
@@ -105,8 +109,11 @@ public:
     }
 
 private:
-    GLuint makeProgram(const char* vs, const char* fs);
+    GLuint makeProgram(const QByteArray& vs, const QByteArray& fs);
     void generateEnvCubemap();
+    void ensureSceneDepthTexture(int width, int height);
+    void copySceneDepthToTexture(int width, int height);
+    void rebuildPlanetSurfaceAtlas(const TerrainMesh& mesh, const HexSphereModel& model);
     void initPyramidGeometry();
     void withContext(const std::function<void()>& task);
     void uploadWireInternal(const std::vector<float>& vertices, GLenum usage);
@@ -130,14 +137,17 @@ private:
     bool glReady_ = false;
 
     GLuint envCubemap_ = 0;
-    GLint uEnvMap_ = -1;
-
+    GLuint sceneDepthTexture_ = 0;
+    GLuint sceneDepthFbo_ = 0;
+    GLuint planetRadiusAtlas_ = 0;
+    GLuint planetSurfaceKindAtlas_ = 0;
+    GLuint planetShoreDistanceAtlas_ = 0;
+    QSize sceneDepthTextureSize_;
     GLuint progWire_ = 0, progTerrain_ = 0, progSel_ = 0;
     GLuint progWater_ = 0, progModel_ = 0, progFactory_ = 0, progSteam_ = 0;
     GLint uMVP_Wire_ = -1, uMVP_Terrain_ = -1, uMVP_Sel_ = -1;
     GLint uModel_ = -1, uLightDir_ = -1;
     GLint uNormalMatrix_ = -1;
-    GLint uMVP_Water_ = -1, uTime_Water_ = -1, uLightDir_Water_ = -1, uViewPos_Water_ = -1;
     GLint uMVP_Model_ = -1, uModel_Model_ = -1, uLightDir_Model_ = -1, uViewPos_Model_ = -1, uColor_Model_ = -1, uUseTexture_ = -1;
     GLint uMVP_Factory_ = -1, uModel_Factory_ = -1, uLightDir_Factory_ = -1, uViewPos_Factory_ = -1, uColor_Factory_ = -1, uUseTexture_Factory_ = -1;
     GLint uMVP_Steam_ = -1, uModel_Steam_ = -1, uTime_Steam_ = -1, uViewPos_Steam_ = -1;
@@ -148,7 +158,7 @@ private:
     GLuint vaoSel_ = 0, vboSel_ = 0;
     GLuint vaoPath_ = 0, vboPath_ = 0;
     GLuint vaoPyramid_ = 0, vboPyramid_ = 0;
-    GLuint vaoWater_ = 0, vboWaterPos_ = 0, iboWater_ = 0, vboWaterEdgeFlags_ = 0;
+    GLuint vaoWater_ = 0, vboWaterPos_ = 0, iboWater_ = 0;
 
     GLsizei lineVertexCount_ = 0;
     GLsizei terrainIndexCount_ = 0;
@@ -156,6 +166,7 @@ private:
     GLsizei pathVertexCount_ = 0;
     GLsizei pyramidVertexCount_ = 0;
     GLsizei waterIndexCount_ = 0;
+    uint64_t uploadedWaterProxyRevision_ = 0;
 
     std::shared_ptr<ModelHandler> treeModel_;
     std::shared_ptr<ModelHandler> firTreeModel_;
@@ -174,6 +185,7 @@ private:
     std::unique_ptr<WaterRenderer> waterRenderer_;
     std::unique_ptr<EntityRenderer> entityRenderer_;
     std::unique_ptr<OverlayRenderer> overlayRenderer_;
+    std::unique_ptr<PlanetSurfaceAtlasPass> surfaceAtlasPass_;
 
     GLuint treeColorTexture_ = 0;
     GLint uTreeTexture_ = -1;

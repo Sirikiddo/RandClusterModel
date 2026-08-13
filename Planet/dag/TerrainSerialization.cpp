@@ -4,7 +4,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-// Вспомогательные функции (остаются в анонимном namespace)
 namespace {
 
     QJsonArray serializeVec3(const QVector3D& value) {

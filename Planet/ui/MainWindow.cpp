@@ -26,7 +26,7 @@ MainWindow::MainWindow(const AppViewConfig& viewConfig, QWidget* parent) : QMain
     auto* tb = addToolBar("Controls");
     levelSpin_ = new QSpinBox(tb);
     levelSpin_->setRange(0, 7);
-    levelSpin_->setValue(2);
+    levelSpin_->setValue(kDefaultTerrainSubdivisionLevel);
     tb->addWidget(new QLabel(" Subdivision L: "));
     tb->addWidget(levelSpin_);
 
@@ -86,8 +86,6 @@ MainWindow::MainWindow(const AppViewConfig& viewConfig, QWidget* parent) : QMain
     statusBar()->addPermanentWidget(infoLbl_);
     connect(glw_, &HexSphereWidget::hudTextChanged, infoLbl_, &QLabel::setText);
 
-    glw_->setSubdivisionLevel(levelSpin_->value());
-
     auto* dock = new QDockWidget("Planet Settings", this);
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     auto* panel = new PlanetSettingsPanel(dock);
@@ -111,6 +109,9 @@ MainWindow::MainWindow(const AppViewConfig& viewConfig, QWidget* parent) : QMain
     connect(panel, &PlanetSettingsPanel::paramsChanged,
         glw_, &HexSphereWidget::setTerrainParams);
 
+    connect(panel, &PlanetSettingsPanel::waterParamsChanged,
+        glw_, &HexSphereWidget::setWaterParams);
+
     connect(panel, &PlanetSettingsPanel::visualizeChanged,
         this, [this](bool smooth, double inset, double outline) {
             glw_->setSmoothOneStep(smooth);
@@ -120,6 +121,7 @@ MainWindow::MainWindow(const AppViewConfig& viewConfig, QWidget* parent) : QMain
 
     connect(panel, &PlanetSettingsPanel::requestRegenerate,
         glw_, &HexSphereWidget::regenerateTerrain);
+
 }
 
 MainWindow::~MainWindow() = default;

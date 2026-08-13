@@ -377,14 +377,11 @@ InputController::Response InputController::executeCommand(SceneCommand command) 
         return response;
     case SceneCommand::ToggleOreVisualization:
         return toggleOreVisualization();
-    case SceneCommand::ToggleSmooth:
-        scene_.setSmoothOneStep(!scene_.smoothOneStep());
-        if (engine_) {
-            engine_->setPathSmoothMaxDelta(pathSmoothDelta(scene_));
-        }
-        rebuildDerivedGeometry(response);
+    case SceneCommand::ToggleSmooth: {
+        response = setSmoothOneStep(!scene_.smoothOneStep());
         response.hudMessage = QString("Smooth mode: ") + (scene_.smoothOneStep() ? "ON" : "OFF");
         return response;
+    }
     case SceneCommand::BuildPath:
         if (scene_.selectedCells().size() != 2) {
             if (renderer_) {
@@ -563,6 +560,19 @@ InputController::Response InputController::setTerrainParams(const TerrainParams&
     return response;
 }
 
+InputController::Response InputController::setWaterParams(const WaterParams& p) {
+    Response response;
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
+    const WaterUpdateKind updateKind = scene_.setWaterParams(p);
+    if (renderer_ && updateKind == WaterUpdateKind::CoastGeometry) {
+        renderer_->uploadTerrainHydrology(scene_, uploadOptions_.terrainUsage);
+    }
+    response.requestUpdate = updateKind != WaterUpdateKind::None;
+    return response;
+}
+
 InputController::Response InputController::setGeneratorByIndex(int idx) {
     Response response;
     if (isContributorMode()) {
@@ -608,7 +618,12 @@ InputController::Response InputController::setSmoothOneStep(bool on) {
     if (engine_) {
         engine_->setPathSmoothMaxDelta(pathSmoothDelta(scene_));
     }
-    rebuildDerivedGeometry(response);
+    scene_.rebuildTerrainPresentation();
+    if (renderer_) {
+        renderer_->uploadTerrainHydrology(scene_, uploadOptions_.terrainUsage);
+    }
+    uploadSelection();
+    response.requestUpdate = true;
     return response;
 }
 
@@ -618,7 +633,11 @@ InputController::Response InputController::setStripInset(float v) {
         return contributorModeResponse();
     }
     scene_.setStripInset(v);
-    rebuildDerivedGeometry(response);
+    scene_.rebuildTerrainPresentation();
+    if (renderer_) {
+        renderer_->uploadTerrainHydrology(scene_, uploadOptions_.terrainUsage);
+    }
+    response.requestUpdate = true;
     return response;
 }
 
@@ -628,7 +647,8 @@ InputController::Response InputController::setOutlineBias(float v) {
         return contributorModeResponse();
     }
     scene_.setOutlineBias(v);
-    rebuildDerivedGeometry(response);
+    uploadSelection();
+    response.requestUpdate = true;
     return response;
 }
 

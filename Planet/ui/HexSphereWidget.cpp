@@ -183,13 +183,6 @@ HexSphereWidget::HexSphereWidget(const AppViewConfig& viewConfig,
 
     updateOverlayLayout();
 
-    waterTimer_ = new QTimer(this);
-
-    connect(waterTimer_, &QTimer::timeout, this, [this]() {
-        applyResponse(inputController_.advanceWaterTime(0.016f));
-        inputController_.setOreAnimationTime(inputController_.getOreAnimationTime() + 0.016f * 0.1f);
-        update();
-        });
 }
 
 HexSphereWidget::~HexSphereWidget() = default;
@@ -210,6 +203,7 @@ void HexSphereWidget::initializeGL() {
         float dt = timer.restart() / 1000.0f;
         dt = std::min(dt, 0.033f);
 
+        applyResponse(inputController_.advanceWaterTime(dt));
         inputController_.updateAnimations(dt);
         update();
         });
@@ -321,6 +315,10 @@ void HexSphereWidget::clearSelection() {
 
 void HexSphereWidget::setTerrainParams(const TerrainParams& p) {
     applyResponse(inputController_.setTerrainParams(p));
+}
+
+void HexSphereWidget::setWaterParams(const WaterParams& p) {
+    applyResponse(inputController_.setWaterParams(p));
 }
 
 void HexSphereWidget::setGeneratorByIndex(int idx) {

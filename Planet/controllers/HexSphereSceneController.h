@@ -16,6 +16,7 @@
 #include "generation/MeshGenerators/TerrainMeshGenerator.h"
 #include "generation/MeshGenerators/WaterMeshGenerator.h"
 #include "generation/TerrainGenerator.h"
+#include "generation/WaterWaveModel.h"
 #include "model/HexSphereModel.h"
 
 struct CachedTriangle {
@@ -52,6 +53,7 @@ public:
 
     void setGeneratorByIndex(int idx);
     void setGenParams(const TerrainParams& params);
+    WaterUpdateKind setWaterParams(const WaterParams& params);
     void setSubdivisionLevel(int level);
     void stageSubdivisionLevel(int level);
     void rebuildTerrainFromInputs();
@@ -64,6 +66,7 @@ public:
     void rebuildModel();
     void regenerateTerrain();
     void rebuildDerivedGeometry();
+    void rebuildTerrainPresentation();
     void clearForShutdown();
 
     void clearSelection();
@@ -76,13 +79,18 @@ public:
     std::vector<float> buildWireVertices() const;
     std::vector<float> buildSelectionOutlineVertices() const;
     std::vector<float> buildOutlineVerticesForCells(const QSet<int>& cells) const;
-    WaterGeometryData buildWaterGeometry() const;
     TerrainSnapshot captureTerrainSnapshot() const;
     void applyTerrainSnapshot(const TerrainSnapshot& snapshot);
 
     const HexSphereModel& model() const { return model_; }
     HexSphereModel& modelMutable() { return model_; }
     const TerrainMesh& terrain() const { return terrainCPU_; }
+    const WaterGeometryData& waterGeometry() const { return waterCPU_; }
+    uint64_t waterProxyRevision() const { return waterProxyRevision_; }
+    const WaterParams& waterParams() const { return waterParams_; }
+    const WaterParams& resolvedWaterParamsValue() const { return resolvedWaterParams_; }
+    const CoastalBandData& coastalBand() const { return coastalBand_; }
+    const ResolvedWaterWaveSpec& resolvedWaterWaveSpec() const { return resolvedWaterWaveSpec_; }
     const QSet<int>& selectedCells() const { return selectedCells_; }
 
     int subdivisionLevel() const { return L_; }
@@ -191,7 +199,12 @@ public:
 private:
     float autoHeightStep() const;
     void rebuildTopology();
+    void rebuildWaterProxy();
     void updateTerrainMesh();
+    void buildTerrainMeshFromCurrentCoast();
+    void refreshResolvedWaterParams();
+    void refreshResolvedWaterState();
+    void rebuildCoastalBand();
     void rebuildContributorScene();
 
     void updateTreeOccupiedCells();
@@ -202,12 +215,18 @@ private:
     IcoMesh ico_;
     HexSphereModel model_;
     TerrainMesh terrainCPU_;
+    WaterGeometryData waterCPU_;
+    uint64_t waterProxyRevision_ = 0;
+    CoastalBandData coastalBand_;
+    WaterParams waterParams_ = waterParamsForPreset(WaterPreset::Temperate);
+    WaterParams resolvedWaterParams_ = waterParams_;
+    ResolvedWaterWaveSpec resolvedWaterWaveSpec_{};
 
+    TerrainParams genParams_ = defaultTerrainParams();
+    int generatorIndex_ = kDefaultTerrainGeneratorIndex;
     std::unique_ptr<ITerrainGenerator> generator_;
-    TerrainParams genParams_{};
-    int generatorIndex_ = 3;
 
-    int L_ = 2;
+    int L_ = kDefaultTerrainSubdivisionLevel;
     bool topologyDirty_ = false;
     float heightStep_ = 0.06f;
     bool smoothOneStep_ = true;

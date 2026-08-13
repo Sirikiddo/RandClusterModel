@@ -75,7 +75,7 @@ float ClimateBiomeGenerator::calculateOreDensity(const QVector3D& position, floa
     );
 
     // Увеличиваем вероятность руды в горах
-    if (elevation > 0.7f) {
+    if (elevation > 0.7f - kElevationDatum) {
         ore *= 1.5f;
     }
 
@@ -87,7 +87,7 @@ uint8_t ClimateBiomeGenerator::determineOreType(float oreDensity, float elevatio
     if (oreDensity < 0.3f) return 0; // Нет руды
 
     // Определяем тип руды на основе плотности и высоты
-    if (elevation > 0.8f) {
+    if (elevation > 0.8f - kElevationDatum) {
         return 1; // Горная руда (железо)
     }
     else if (oreDensity > 0.7f) {
@@ -117,7 +117,8 @@ float ClimateBiomeGenerator::calculateElevation(const QVector3D& position, const
     }
 
     elevation /= maxAmplitude;
-    return (elevation + 1.0f) * 0.5f; // Нормализуем к [0, 1]
+    const float normalizedElevation = (elevation + 1.0f) * 0.5f;
+    return normalizedElevation - kElevationDatum;
 }
 
 float ClimateBiomeGenerator::calculateTemperature(const QVector3D& position, float elevation, const ClimateParams& params, Perlin3D& tempNoise) {
@@ -164,7 +165,7 @@ Biome ClimateBiomeGenerator::determineBiome(float elevation, float temperature, 
     }
 
     // 2. Горы/Камни - очень высокие области
-    if (elevation > 0.85f) {
+    if (elevation > 0.85f - kElevationDatum) {
         return Biome::Rock;
     }
 

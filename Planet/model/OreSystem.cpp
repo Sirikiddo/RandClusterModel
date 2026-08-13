@@ -1,20 +1,20 @@
 #include "OreSystem.h"
+
 #include <algorithm>
-#include <numeric>
 #include <cmath>
+#include <numeric>
 
 OreSystem::OreSystem() : rng_(std::random_device{}()) {
-    oreColors_[1] = QVector3D(0.7f, 0.4f, 0.2f);  // Железо
-    oreColors_[2] = QVector3D(0.8f, 0.5f, 0.2f);  // Медь
-    oreColors_[3] = QVector3D(0.9f, 0.9f, 0.1f);  // Золото
-    oreColors_[4] = QVector3D(0.4f, 0.4f, 0.8f);  // Алмаз
+    oreColors_[1] = QVector3D(0.7f, 0.4f, 0.2f);  // Р–РµР»РµР·Рѕ
+    oreColors_[2] = QVector3D(0.8f, 0.5f, 0.2f);  // РњРµРґСЊ
+    oreColors_[3] = QVector3D(0.9f, 0.9f, 0.1f);  // Р—РѕР»РѕС‚Рѕ
+    oreColors_[4] = QVector3D(0.4f, 0.4f, 0.8f);  // РђР»РјР°Р·
 }
 
 void OreSystem::initialize(HexSphereModel& model) {
     model_ = &model;
     deposits_.clear();
 
-    // Автоматическое создание месторождений
     const auto& cells = model_->cells();
     for (const auto& cell : cells) {
         if (cell.oreType > 0 && cell.oreDensity > 0.1f) {
@@ -31,7 +31,6 @@ void OreSystem::update(float deltaTime) {
     timeAccumulator_ += deltaTime;
     hasChanges_ = false;
 
-    // Обновляем каждые 0.1 секунды
     if (timeAccumulator_ >= 0.1f) {
         for (auto& deposit : deposits_) {
             if (!deposit.active) continue;
@@ -47,12 +46,8 @@ void OreSystem::update(float deltaTime) {
             }
         }
 
-        // Диффузия между соседними месторождениями
         diffuseOreDensity();
-
-        // Обновляем визуальные параметры
         updateVisualParams();
-
         timeAccumulator_ = 0.0f;
     }
 }
@@ -97,7 +92,6 @@ float OreSystem::getAverageDensity() const {
     return sum / deposits_.size();
 }
 
-// Реализация diffuseOreDensity
 void OreSystem::diffuseOreDensity() {
     if (deposits_.size() < 2 || diffusionRate_ <= 0.0f) return;
 
@@ -127,8 +121,6 @@ void OreSystem::diffuseOreDensity() {
     }
 }
 
-// Реализация updateVisualParams
 void OreSystem::updateVisualParams() {
-    // Пустая реализация - можно добавить обновление визуальных параметров
-    // Например, обновление цвета руды в модели
+    // Р—Р°СЂРµР·РµСЂРІРёСЂРѕРІР°РЅРѕ РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ РІРёР·СѓР°Р»СЊРЅС‹С… РїР°СЂР°РјРµС‚СЂРѕРІ СЂСѓРґС‹ РІ РјРѕРґРµР»Рё.
 }

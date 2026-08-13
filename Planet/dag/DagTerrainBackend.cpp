@@ -10,7 +10,6 @@
 #include "model/HexSphereModel.h"
 #include "TerrainSerialization.h"
 
-//import Proc;
 #include <proc/ProcessDag.h>
 #include <proc/Schema.h>
 #include <proc/Logging.h>
@@ -24,7 +23,7 @@ TerrainSnapshot buildTerrainSnapshot(int generatorIndex, int subdivisionLevel, c
     model.rebuildFromIcosphere(builder.build(subdivisionLevel));
 
     auto generator = createTerrainGeneratorByIndex(generatorIndex);
-    generator->generate(model, params);
+    generateCanonicalTerrain(*generator, model, params);
 
     TerrainSnapshot snapshot;
     snapshot.generatorIndex = normalizeTerrainGeneratorIndex(generatorIndex);
@@ -60,9 +59,9 @@ struct DagTerrainBackend::Impl {
     }
 
     ITerrainSceneBridge* bridge = nullptr;
-    TerrainParams params{ 12345u, 3, 3.0f };
-    int generatorIndex = 3;
-    int subdivisionLevel = 2;
+    TerrainParams params = defaultTerrainParams();
+    int generatorIndex = kDefaultTerrainGeneratorIndex;
+    int subdivisionLevel = kDefaultTerrainSubdivisionLevel;
     std::optional<TerrainSnapshot> currentSnapshot;
 
     std::unique_ptr<proc::GraphSchema> schema;
@@ -158,13 +157,17 @@ struct DagTerrainBackend::Impl {
                 const proc::RuntimeOperationRegistry::ReadHandleFn& readHandle,
                 const proc::RuntimeOperationRegistry::FieldNameFn& fieldName,
                 const proc::RuntimeOperationRegistry::DebugStringFn&) -> proc::Commit {
+                const TerrainParams defaults = defaultTerrainParams();
                 TerrainParams params;
-                params.seed = static_cast<uint32_t>(Impl::readIntField(readHandle, fieldName, seedSlot, 0));
-                params.seaLevel = Impl::readIntField(readHandle, fieldName, seaLevelSlot, 0);
-                params.scale = Impl::readFloatField(readHandle, fieldName, scaleSlot, 1.0f);
+                params.seed = static_cast<uint32_t>(Impl::readIntField(
+                    readHandle, fieldName, seedSlot, static_cast<int>(defaults.seed)));
+                params.seaLevel = Impl::readIntField(readHandle, fieldName, seaLevelSlot, defaults.seaLevel);
+                params.scale = Impl::readFloatField(readHandle, fieldName, scaleSlot, defaults.scale);
 
-                const int generatorIndex = Impl::readIntField(readHandle, fieldName, generatorSlot, 3);
-                const int subdivisionLevel = Impl::readIntField(readHandle, fieldName, subdivisionSlot, 2);
+                const int generatorIndex = Impl::readIntField(
+                    readHandle, fieldName, generatorSlot, kDefaultTerrainGeneratorIndex);
+                const int subdivisionLevel = Impl::readIntField(
+                    readHandle, fieldName, subdivisionSlot, kDefaultTerrainSubdivisionLevel);
 
                 const auto snapshot = buildTerrainSnapshot(generatorIndex, subdivisionLevel, params);
 

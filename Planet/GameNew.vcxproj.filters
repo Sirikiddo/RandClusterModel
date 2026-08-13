@@ -90,6 +90,9 @@
     <ClCompile Include="generation\TerrainGenerator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="generation\WaterWaveModel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="generation\MeshGenerators\SelectionOutlineGenerator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -136,6 +139,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="renderers\WaterRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\PlanetSurfaceAtlasPass.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\WaterWaveModelTests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="scene\Entity.cpp">
@@ -209,7 +221,7 @@
     <ClInclude Include="core\AppViewConfig.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="core\DebugOverlay.h">
+    <ClInclude Include="dag\DebugOverlay.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="culling\TerrainCulling.h">
@@ -272,6 +284,9 @@
     <ClInclude Include="generation\TerrainGenerator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="generation\WaterWaveModel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="generation\MeshGenerators\SelectionOutlineGenerator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -330,6 +345,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="renderers\WaterRenderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\PlanetSurfaceAtlasPass.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\ClimateBiomeGeneratorTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\WaterWaveModelTests.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="scene\Entity.h">
@@ -434,6 +458,26 @@
     <ClInclude Include="dag\TerrainSerialization.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="resources\water\water_common.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\water\water_intersection.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\water\water_shading.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\water\water_shell.frag">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\water\water_shell.vert">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\water\water_surface.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="ui\HexSphereWidget.h">

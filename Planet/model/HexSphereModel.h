@@ -135,6 +135,9 @@ struct PickTri { // geometry for ray picking
 
 class HexSphereModel {
 public:
+    static constexpr float kDefaultBaseRadius = 1.0f;
+    static constexpr float kDefaultWaterSurfaceLevel = -0.5f;
+
     void rebuildFromIcosphere(const IcoMesh& ico);
 
     const std::vector<QVector3D>& dualVerts() const { return dualVerts_; }
@@ -147,6 +150,21 @@ public:
     int subdivisions() const { return L_; }
     int pentagonCount() const { return pentCount_; }
     int cellCount() const { return static_cast<int>(cells_.size()); }
+
+    void setBaseRadius(float radius) { baseRadius_ = radius; }
+    float baseRadius() const { return baseRadius_; }
+
+    void setHeightStep(float step) { heightStep_ = step; }
+    float heightStep() const { return heightStep_; }
+
+    void setWaterSurfaceLevel(float level) { waterSurfaceLevel_ = level; }
+    float waterSurfaceLevel() const { return waterSurfaceLevel_; }
+
+    float radiusForHeight(float height) const;
+    float radiusDeltaForHeightOffset(float deltaHeight) const;
+    float waterSurfaceRadius() const;
+    QVector3D positionOnSurface(const QVector3D& unitDir, float height, float bias = 0.0f) const;
+    QVector3D cellSurfacePosition(int cellId, float bias = 0.0f) const;
 
     // Удобные сеттеры
     void setHeight(int cellId, int h);
@@ -178,6 +196,9 @@ public:
 private:
     int L_ = 0;
     int pentCount_ = 0;
+    float baseRadius_ = kDefaultBaseRadius;
+    float heightStep_ = 0.05f;
+    float waterSurfaceLevel_ = kDefaultWaterSurfaceLevel;
     std::vector<QVector3D> dualVerts_;                  // size == ico.F.size(); vertex per primal triangle
     std::vector<Cell> cells_;
     std::vector<std::pair<int, int>> wireEdges_;         // unique undirected pairs of dual vertex indices

@@ -4,7 +4,6 @@
 #include "model/HexSphereModel.h"
 
 struct TerrainMeshOptions {
-    float radius = 1.0f;
     float heightStep = 0.05f;
     float inset = 0.25f;
     bool smoothOneStep = true;
@@ -13,6 +12,8 @@ struct TerrainMeshOptions {
     bool doBlades = true;
     bool doCornerTris = true;
     bool doEdgeCliffs = true;
+    const CoastalBandData* coastalBand = nullptr;
+    const WaterParams* waterParams = nullptr;
 };
 
 class TerrainMeshGenerator {

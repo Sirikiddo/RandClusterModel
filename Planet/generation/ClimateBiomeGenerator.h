@@ -4,11 +4,16 @@
 
 class ClimateBiomeGenerator {
 public:
+    // The procedural elevation field used to be exposed in [0, 1], making a
+    // user-facing sea level of zero incapable of producing any water. Keep
+    // the established 0.40 shoreline as the planet's zero-height datum.
+    static constexpr float kElevationDatum = 0.40f;
+
     struct ClimateParams {
         float elevationScale = 3.0f;
         float temperatureScale = 2.0f;
         float humidityScale = 2.5f;
-        float seaLevel = 0.3f;
+        float seaLevel = 0.0f;
         uint32_t seed = 12345;
         float pressureScale = 1.8f;
         float oreScale = 4.0f;

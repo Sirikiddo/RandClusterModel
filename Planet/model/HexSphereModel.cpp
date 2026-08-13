@@ -76,6 +76,35 @@ static inline QVector3D triCenter(const QVector3D& a, const QVector3D& b, const 
     QVector3D m = (a + b + c) / 3.0f; m.normalize(); return m;
 }
 
+float HexSphereModel::radiusForHeight(float height) const {
+    return baseRadius_ + radiusDeltaForHeightOffset(height);
+}
+
+float HexSphereModel::radiusDeltaForHeightOffset(float deltaHeight) const {
+    return deltaHeight * heightStep_;
+}
+
+float HexSphereModel::waterSurfaceRadius() const {
+    return radiusForHeight(waterSurfaceLevel_);
+}
+
+QVector3D HexSphereModel::positionOnSurface(const QVector3D& unitDir, float height, float bias) const {
+    QVector3D dir = unitDir;
+    if (dir.isNull()) {
+        return QVector3D(0.0f, 0.0f, radiusForHeight(height) + bias);
+    }
+    dir.normalize();
+    return dir * (radiusForHeight(height) + bias);
+}
+
+QVector3D HexSphereModel::cellSurfacePosition(int cellId, float bias) const {
+    if (cellId < 0 || cellId >= static_cast<int>(cells_.size())) {
+        return QVector3D(0.0f, 0.0f, baseRadius_ + bias);
+    }
+    const Cell& cell = cells_[static_cast<size_t>(cellId)];
+    return positionOnSurface(cell.centroid, static_cast<float>(cell.height), bias);
+}
+
 void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
     L_ = 0; // we don't store level; optional
     // 1) Dual vertices: one per primal triangle (center on sphere)

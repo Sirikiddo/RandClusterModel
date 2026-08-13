@@ -1,6 +1,7 @@
 #pragma once
 
 #include "controllers/HexSphereSceneController.h"
+
 #include <random>
 
 inline QVector3D computeSurfacePoint(const HexSphereSceneController& scene, int cellId, float heightStep,
@@ -11,14 +12,9 @@ inline QVector3D computeSurfacePoint(const HexSphereSceneController& scene, int 
     }
 
     const Cell& cell = cells[static_cast<size_t>(cellId)];
-
-    // Радиус = базовый радиус (1.0) + высота ячейки * шаг высоты + смещение
     const float surfaceHeight = 1.0f + cell.height * heightStep;
-
-    // Возвращаем нормализованное направление центроида, умноженное на радиус
     return cell.centroid.normalized() * (surfaceHeight + objectOffset);
 }
-
 
 inline QVector3D computeSurfacePoint(const HexSphereSceneController& scene, int cellId) {
     return computeSurfacePoint(scene, cellId, scene.heightStep());

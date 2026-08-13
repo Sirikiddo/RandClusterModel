@@ -14,12 +14,40 @@
 
 namespace {
     constexpr float kContributorTreeScale = 0.5f;
+
+    bool waveInputsEqual(const WaterParams& lhs, const WaterParams& rhs) {
+        return lhs.preset == rhs.preset
+            && lhs.waveStrength == rhs.waveStrength
+            && lhs.shellWaveAmplitude == rhs.shellWaveAmplitude
+            && lhs.shellWaveFrequency == rhs.shellWaveFrequency
+            && lhs.shellWaveSpeed == rhs.shellWaveSpeed
+            && lhs.octaveDetail == rhs.octaveDetail;
+    }
+
+    bool waterParamsEqual(const WaterParams& lhs, const WaterParams& rhs) {
+        return waveInputsEqual(lhs, rhs)
+            && lhs.beachWidth == rhs.beachWidth
+            && lhs.fresnelStrength == rhs.fresnelStrength
+            && lhs.specularIntensity == rhs.specularIntensity
+            && lhs.glintIntensity == rhs.glintIntensity
+            && lhs.glintThreshold == rhs.glintThreshold
+            && lhs.glintSharpness == rhs.glintSharpness
+            && lhs.foamIntensity == rhs.foamIntensity
+            && lhs.roughness == rhs.roughness
+            && lhs.reflectionStrength == rhs.reflectionStrength
+            && lhs.opacity == rhs.opacity
+            && lhs.depthOpticalDensity == rhs.depthOpticalDensity
+            && lhs.depthAlphaDensity == rhs.depthAlphaDensity
+            && lhs.shallowColor == rhs.shallowColor
+            && lhs.deepColor == rhs.deepColor
+            && lhs.wetSandColor == rhs.wetSandColor
+            && lhs.drySandColor == rhs.drySandColor;
+    }
 }
 
 HexSphereSceneController::HexSphereSceneController(SceneViewMode viewMode)
     : viewMode_(viewMode)
-    , generator_(createTerrainGeneratorByIndex(generatorIndex_)) {
-    genParams_ = TerrainParams{ /*seed=*/12345u, /*seaLevel=*/3, /*scale=*/3.0f };
+    , generator_(createTerrainGeneratorByIndex(kDefaultTerrainGeneratorIndex)) {
     rebuildModel();
 }
 
@@ -32,7 +60,29 @@ void HexSphereSceneController::setGenParams(const TerrainParams& params) {
     genParams_ = params;
 }
 
+WaterUpdateKind HexSphereSceneController::setWaterParams(const WaterParams& params) {
+    if (waterParamsEqual(waterParams_, params)) {
+        return WaterUpdateKind::None;
+    }
+    const bool coastChanged = waterParams_.beachWidth != params.beachWidth;
+    const bool waveChanged = !waveInputsEqual(waterParams_, params);
+    waterParams_ = params;
+    if (coastChanged) {
+        updateTerrainMesh();
+        return WaterUpdateKind::CoastGeometry;
+    }
+    if (waveChanged) {
+        refreshResolvedWaterState();
+        return WaterUpdateKind::WaveSpec;
+    }
+    refreshResolvedWaterParams();
+    return WaterUpdateKind::OpticsOnly;
+}
+
 void HexSphereSceneController::setSubdivisionLevel(int level) {
+    if (L_ == level) {
+        return;
+    }
     stageSubdivisionLevel(level);
     rebuildTerrainFromInputs();
 }
@@ -71,6 +121,15 @@ void HexSphereSceneController::setOutlineBias(float value) {
 void HexSphereSceneController::rebuildTopology() {
     ico_ = icoBuilder_.build(L_);
     model_.rebuildFromIcosphere(ico_);
+    model_.setBaseRadius(HexSphereModel::kDefaultBaseRadius);
+    model_.setHeightStep(autoHeightStep());
+    model_.setWaterSurfaceLevel(HexSphereModel::kDefaultWaterSurfaceLevel);
+    rebuildWaterProxy();
+}
+
+void HexSphereSceneController::rebuildWaterProxy() {
+    waterCPU_ = WaterMeshGenerator::buildWaterGeometry(model_);
+    ++waterProxyRevision_;
 }
 
 void HexSphereSceneController::rebuildModel() {
@@ -92,7 +151,7 @@ void HexSphereSceneController::regenerateTerrain() {
     }
 
     if (generator_) {
-        generator_->generate(model_, genParams_);
+        generateCanonicalTerrain(*generator_, model_, genParams_);
     }
     updateTerrainMesh();
     generateTreePlacements();
@@ -120,6 +179,8 @@ void HexSphereSceneController::clearForShutdown() {
     cameraPos_ = QVector3D();
     lastCameraPos_ = QVector3D();
     terrainCPU_ = TerrainMesh{};
+    waterCPU_ = WaterGeometryData{};
+    coastalBand_ = CoastalBandData{};
     model_ = HexSphereModel{};
     ico_ = IcoMesh{};
     generator_.reset();
@@ -192,13 +253,6 @@ std::vector<float> HexSphereSceneController::buildOutlineVerticesForCells(const 
         model_, cells, heightStep_, outlineBias_, smoothOneStep_);
 }
 
-WaterGeometryData HexSphereSceneController::buildWaterGeometry() const {
-    if (isContributorMode()) {
-        return {};
-    }
-    return WaterMeshGenerator::buildWaterGeometry(model_);
-}
-
 TerrainSnapshot HexSphereSceneController::captureTerrainSnapshot() const {
     TerrainSnapshot snapshot;
     snapshot.subdivisionLevel = L_;
@@ -268,12 +322,21 @@ float HexSphereSceneController::autoHeightStep() const {
 void HexSphereSceneController::updateTerrainMesh() {
     if (isContributorMode()) {
         terrainCPU_ = TerrainMesh{};
+        waterCPU_ = WaterGeometryData{};
+        coastalBand_ = CoastalBandData{};
         cacheValid_ = false;
         triangleCache_.clear();
         return;
     }
 
     heightStep_ = autoHeightStep();
+    model_.setHeightStep(heightStep_);
+    rebuildCoastalBand();
+    buildTerrainMeshFromCurrentCoast();
+    refreshResolvedWaterState();
+}
+
+void HexSphereSceneController::buildTerrainMeshFromCurrentCoast() {
     TerrainMeshOptions options;
     options.heightStep = heightStep_;
     options.inset = stripInset_;
@@ -283,11 +346,35 @@ void HexSphereSceneController::updateTerrainMesh() {
     options.doBlades = true;
     options.doCornerTris = true;
     options.doEdgeCliffs = true;
+    options.coastalBand = &coastalBand_;
+    options.waterParams = &waterParams_;
 
     terrainCPU_ = TerrainMeshGenerator::buildTerrainMesh(model_, options);
     cacheValid_ = false;
     triangleCache_.clear();
     selectionOutlineDirty_ = true;
+}
+
+void HexSphereSceneController::rebuildTerrainPresentation() {
+    if (isContributorMode()) {
+        rebuildContributorScene();
+        return;
+    }
+    buildTerrainMeshFromCurrentCoast();
+}
+
+void HexSphereSceneController::refreshResolvedWaterState() {
+    refreshResolvedWaterParams();
+    const WaterWaveSpec requested = makeWaterWaveSpec(resolvedWaterParams_, model_);
+    resolvedWaterWaveSpec_ = resolveWaterWaveSpec(requested, resolvedWaterParams_, model_);
+}
+
+void HexSphereSceneController::refreshResolvedWaterParams() {
+    resolvedWaterParams_ = ::resolvedWaterParams(waterParams_, &model_);
+}
+
+void HexSphereSceneController::rebuildCoastalBand() {
+    coastalBand_ = buildCoastalBandData(model_, waterParams_);
 }
 
 float HexSphereSceneController::cellSize() const {

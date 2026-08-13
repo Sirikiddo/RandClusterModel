@@ -5,8 +5,8 @@
 
 #include "TerrainBackendTypes.h"
 
-/// Сериализация TerrainSnapshot в JSON-строку
+/// РЎРµСЂРёР°Р»РёР·Р°С†РёСЏ TerrainSnapshot РІ JSON-СЃС‚СЂРѕРєСѓ.
 QString serializeTerrainSnapshot(const TerrainSnapshot& snapshot);
 
-/// Десериализация TerrainSnapshot из JSON-строки
+/// Р”РµСЃРµСЂРёР°Р»РёР·Р°С†РёСЏ TerrainSnapshot РёР· JSON-СЃС‚СЂРѕРєРё.
 std::optional<TerrainSnapshot> deserializeTerrainSnapshot(const QString& encoded);

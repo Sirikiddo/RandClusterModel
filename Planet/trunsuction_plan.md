@@ -1,10 +1,24 @@
-# План встраивания ProcessDAG в Planet
+# Статус и план встраивания ProcessDAG в Planet
+
+## Актуальный статус
+
+Первые три milestone выполнены:
+
+- `ProcessDAG` встроен в `third_party/ProcessDAG`, подключён через `ProcessDag.Embedded.props` и используется через публичные заголовки `proc`;
+- `EngineFacade` является активной границей для terrain regeneration, pathfinding и производных данных сцены;
+- `DagTerrainBackend` строит `TerrainSnapshot`, а `ITerrainSceneBridge` проецирует его в `HexSphereSceneController`;
+- `DagSceneBackend` рассчитывает и кэширует selection outline, tree placements и model placements;
+- `DagPathBackend` получает актуальный terrain snapshot и параметры сглаживания пути.
+
+За пределами DAG намеренно остаются Qt events, камера, OpenGL upload/state, frame time, water optics и аналитическая анимация волн. Water coast/hydrology являются render-facing производными текущего `HexSphereModel` и пересобираются после применения terrain snapshot.
+
+Оставшаяся миграция касается прежде всего прямого редактирования высот/биомов и high-level команд сущностей в `InputController`. Разделы ниже сохранены как план оставшихся этапов, а не как описание текущего состояния.
 
 ## Контекст
 
 - Цель: встроить `C:\Users\User\source\repos\ProcessDAG\ProcessDag` в `Planet` как backend/runtime слой, чтобы убрать часть ручной orchestration-логики и получить более формализованный pipeline состояния.
-- Текущий статус `Planet`: backend-граница выражена слабо. `EngineFacade` пока почти пустой, а основная логика состояния живет внутри `InputController` и `HexSphereSceneController`.
-- Текущий статус `ProcessDAG`: проект уже подготовлен к embedded-подключению через `ProcessDAG.vcxproj` и публичный модуль `import Proc;`.
+- Текущий статус `Planet`: backend-граница работает через `EngineFacade`, но часть ручных world mutations всё ещё живёт в `InputController` и `HexSphereSceneController`.
+- Текущий статус `ProcessDAG`: terrain, path и часть derived scene pipeline уже используют embedded runtime.
 
 ## Оценка сложности
 
@@ -21,24 +35,17 @@
 - Размытая граница backend/frontend в `Planet`.
 - Сильная связность `InputController` с `HexSphereSceneController`, ECS и renderer upload path.
 - Потенциальное дублирование состояния: часть мира в `ProcessDAG`, часть в старых контроллерах.
-- C++ modules в `Planet` настроены не полностью симметрично с consumer-требованиями `ProcessDAG`.
-- Сборка Qt + modules + project reference может потребовать аккуратной правки `.vcxproj` для обоих конфигураций.
+- Embedded ProcessDAG увеличивает связность project metadata: изменения состава runtime требуют синхронной проверки Debug/Release и обоих `.vcxproj`.
 
 ## Что уже видно по коду
 
 - В `Planet` около 80 исходных файлов вне build-артефактов.
 - В `ProcessDAG` около 67 исходных файлов вне build-артефактов.
-- `ProcessDAG` ожидает consumer path через:
-  - project reference на `ProcessDAG.vcxproj`;
-  - `EnableModules=true`;
-  - `BuildStlModules=true`;
-  - `ScanSourceForModuleDependencies=true`;
-  - `TranslateIncludes=false`;
-  - `import Proc;`.
-- В `Planet` это пока совпадает не полностью:
-  - `Debug|x64` уже включает `EnableModules=true`;
-  - `BuildStlModules` и `TranslateIncludes=false` не выставлены;
-  - `Release|x64` не приведен к той же module-конфигурации.
+- `Planet.vcxproj` использует embedded integration:
+  - исходники и публичные заголовки находятся в `third_party/ProcessDAG`;
+  - импортируется `ProcessDag.Embedded.props`;
+  - `EnableModules`, `BuildStlModules`, `ScanSourceForModuleDependencies` и `TranslateIncludes=false` согласованы для Debug и Release;
+  - backend-код подключает стабильные публичные заголовки `<proc/...>`.
 
 ## Рекомендуемая стратегия миграции
 
@@ -49,27 +56,26 @@
 
 ## Поэтапный план
 
-### Этап 1. Подготовка сборки
+### Этап 1. Подготовка сборки — выполнен
 
-- Добавить `ProcessDAG.vcxproj` в solution `Planet`.
-- Добавить `ProjectReference` из `Planet.vcxproj` на `ProcessDAG.vcxproj`.
-- Привести module settings `Planet` к consumer-требованиям `ProcessDAG` в `Debug|x64` и `Release|x64`.
-- Проверить, что минимальный consumer-файл внутри `Planet` собирается с `import Proc;`.
+- ProcessDAG встроен локально через `third_party/ProcessDAG/ProcessDag.Embedded.props`.
+- Module settings согласованы в Debug и Release.
+- Backend использует публичные заголовки `<proc/...>`; локальная копия не требует внешнего project reference.
 
-### Этап 2. Выделение backend seam в Planet
+### Этап 2. Выделение backend seam в Planet — частично выполнен
 
-- Усилить `EngineFacade`, чтобы он стал единственной точкой доступа UI к backend-операциям.
+- `EngineFacade` уже является точкой доступа к terrain regeneration, pathfinding и derived scene DAG.
 - Перенести из `InputController` команды уровня backend:
-  - rebuild terrain;
+  - rebuild terrain — выполнено;
   - mutate cell state;
-  - set generator params;
+  - set generator params — выполнено;
   - high-level entity move command;
-  - selection/path requests, если их решено вести через runtime.
+  - selection/path requests — path и selection outline выполнены, selection state пока хранится сценой.
 - Зафиксировать контракт:
   - вход: команды/интенты;
   - выход: snapshot/read-model для renderer и UI overlay.
 
-### Этап 3. Описание данных Planet в терминах ProcessDAG
+### Этап 3. Описание данных Planet в терминах ProcessDAG — частично выполнен
 
 - Сопоставить текущие структуры `Planet` со schema/runtime-моделью `ProcessDAG`.
 - Определить минимальный набор узлов:
@@ -85,16 +91,16 @@
   - camera math;
   - низкоуровневый renderer state.
 
-### Этап 4. Первый вертикальный срез
+### Этап 4. Первый вертикальный срез — выполнен
 
-- Сделать один end-to-end сценарий через `ProcessDAG`, не трогая остальной UI:
+- Реализован end-to-end сценарий через `ProcessDAG`:
   - изменение `TerrainParams`;
   - rebuild terrain;
   - получение snapshot;
   - адаптация snapshot обратно в `HexSphereSceneController` или новый render-facing state.
-- Это даст реальную оценку стоимости адаптеров и покажет, насколько DAG хорошо ложится на текущую модель мира.
+- Сценарий является основным путём terrain regeneration в текущем приложении.
 
-### Этап 5. Миграция мутаций мира
+### Этап 5. Миграция мутаций мира — следующий этап
 
 - Перевести операции редактирования клеток:
   - высота;
@@ -103,7 +109,7 @@
 - Убрать прямые мутации модели из `InputController`.
 - Оставить в `InputController` только orchestration ввода и вызовы facade/runtime.
 
-### Этап 6. Миграция сущностей и команд
+### Этап 6. Миграция сущностей и команд — не начат
 
 - Перевести high-level команды сущностей в backend runtime.
 - Отдельно решить, анимация движения живет:
@@ -113,7 +119,7 @@
   - DAG отвечает за решение и целевое состояние;
   - текущая ECS-анимация остается визуальным слоем.
 
-### Этап 7. Консолидация и зачистка legacy path
+### Этап 7. Консолидация и зачистка legacy path — выполняется постепенно
 
 - После нескольких migrated use-case'ов удалить дублирующее состояние.
 - Свести `HexSphereSceneController` к read-model/service для renderer либо разрезать его на:
@@ -122,11 +128,11 @@
   - render snapshot builder.
 - Упростить `InputController`, чтобы он перестал быть местом хранения domain-логики.
 
-## Практический первый milestone
+## Выполненные первые milestone
 
-- Milestone A: `Planet` собирается с `ProcessDAG` как project reference и импортирует `Proc`.
-- Milestone B: `EngineFacade` получает backend-команду `rebuild terrain` через `ProcessDAG`.
-- Milestone C: один пользовательский сценарий полностью проходит через новый backend path.
+- [x] Milestone A: `Planet` собирается с embedded ProcessDAG и использует публичный API `proc`.
+- [x] Milestone B: `EngineFacade` выполняет `rebuild terrain` через `DagTerrainBackend`.
+- [x] Milestone C: изменение terrain parameters → DAG regeneration → snapshot projection проходит через новый backend path.
 
 ## Ориентир по трудоемкости
 
@@ -144,4 +150,4 @@
 
 ## Следующий практический шаг
 
-- Начать не с полной миграции, а с подготовки build + первого vertical slice через `EngineFacade`.
+- Перенести ручные мутации высоты/биома и high-level entity intents за `EngineFacade`, сохраняя визуальную анимацию, water frame state и OpenGL вне DAG.

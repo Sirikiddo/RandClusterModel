@@ -17,6 +17,7 @@
     <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">10.0</WindowsTargetPlatformVersion>
     <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">10.0</WindowsTargetPlatformVersion>
     <QtMsBuild Condition="'$(QtMsBuild)'=='' OR !Exists('$(QtMsBuild)\qt.targets')">$(MSBuildProjectDirectory)\QtMsBuild</QtMsBuild>
+    <VcpkgXUseBuiltInApplocalDeps>true</VcpkgXUseBuiltInApplocalDeps>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
@@ -137,6 +138,7 @@
   <ItemGroup>
     <ClInclude Include="core\AppViewConfig.h" />
     <ClInclude Include="contributor\ContributorAsset.h" />
+    <ClInclude Include="contributor\ContributorParticles.h" />
     <ClInclude Include="controllers\CameraController.h" />
     <ClInclude Include="third_party\ProcessDAG\include\proc\ProcessDag.h" />
     <ClInclude Include="third_party\ProcessDAG\include\proc\Schema.h" />
@@ -166,20 +168,27 @@
     <ClInclude Include="controllers\InputController.h" />
     <ClInclude Include="controllers\PathBuilder.h" />
     <ClInclude Include="dag\DagTerrainBackend.h" />
+    <ClInclude Include="dag\DagBackendBenchmark.h" />
+    <ClInclude Include="dag\DagPathBackend.h" />
+    <ClInclude Include="dag\DagSceneBackend.h" />
     <ClInclude Include="dag\DebugOverlay.h" />
     <ClInclude Include="dag\EngineFacade.h" />
     <ClInclude Include="dag\LegacyTerrainBackend.h" />
     <ClInclude Include="dag\TerrainBackendContract.h" />
     <ClInclude Include="dag\TerrainBackendSelector.h" />
     <ClInclude Include="dag\TerrainBackendTypes.h" />
+    <ClInclude Include="dag\TerrainSerialization.h" />
     <ClInclude Include="generation\ClimateBiomeGenerator.h" />
     <ClInclude Include="generation\PerlinNoise.h" />
     <ClInclude Include="generation\TerrainGenerator.h" />
+    <ClInclude Include="generation\WaterWaveModel.h" />
     <ClInclude Include="generation\MeshGenerators\SelectionOutlineGenerator.h" />
     <ClInclude Include="generation\MeshGenerators\TerrainMeshGenerator.h" />
     <ClInclude Include="generation\MeshGenerators\WaterMeshGenerator.h" />
     <ClInclude Include="generation\MeshGenerators\WireMeshGenerator.h" />
     <ClInclude Include="model\CarModelHandler.h" />
+    <ClInclude Include="model\FactoryModelHandler.h" />
+    <ClInclude Include="model\MineModelHandler.h" />
     <ClInclude Include="model\DebugModel.h" />
     <ClInclude Include="model\HexSphereModel.h" />
     <ClInclude Include="model\ModelHandler.h" />
@@ -188,15 +197,19 @@
     <ClInclude Include="model\simple3d_parser.hpp" />
     <ClInclude Include="model\OreSystem.h" />
     <ClInclude Include="renderers\EntityRenderer.h" />
+    <ClInclude Include="renderers\ParticleRenderer.h" />
     <ClInclude Include="renderers\HexSphereRenderer.h" />
     <ClInclude Include="renderers\TerrainRenderer.h" />
     <ClInclude Include="renderers\TerrainTessellator.h" />
+    <ClInclude Include="renderers\PlanetSurfaceAtlasPass.h" />
     <ClInclude Include="renderers\WaterRenderer.h" />
     <ClInclude Include="ui\HexSphereWidget.h" />
     <ClInclude Include="ui\MainWindow.h" />
     <ClInclude Include="ui\OverlayRenderer.h" />
     <ClInclude Include="ui\PerformanceStats.h" />
     <ClInclude Include="ui\PlanetSettingsPanel.h" />
+    <ClInclude Include="tests\WaterWaveModelTests.h" />
+    <ClInclude Include="tests\ClimateBiomeGeneratorTests.h" />
     <ClInclude Include="ECS\Collider.h" />
     <ClInclude Include="ECS\ComponentStorage.h" />
     <ClInclude Include="ECS\Entity.h" />
@@ -213,6 +226,7 @@
   <ItemGroup>
     <ClCompile Include="controllers\CameraController.cpp" />
     <ClCompile Include="contributor\ContributorAsset.cpp" />
+    <ClCompile Include="contributor\ContributorParticles.cpp" />
     <ClCompile Include="third_party\ProcessDAG\proc\Proc.ixx" />
     <ClCompile Include="third_party\ProcessDAG\proc\Proc.Core.ixx" />
     <ClCompile Include="third_party\ProcessDAG\proc\Proc.Schema.ixx" />
@@ -226,34 +240,45 @@
     <ClCompile Include="third_party\ProcessDAG\proc\Proc.Scenario.ixx" Condition="'$(ProcessDagIncludeScenario)'=='1'" />
     <ClCompile Include="third_party\ProcessDAG\boundary\ScenarioReader.cpp" Condition="'$(ProcessDagIncludeScenario)'=='1'" />
     <ClCompile Include="dag\DagTerrainBackend.cpp" />
+    <ClCompile Include="dag\DagBackendBenchmark.cpp" />
+    <ClCompile Include="dag\DagPathBackend.cpp" />
+    <ClCompile Include="dag\DagSceneBackend.cpp" />
     <ClCompile Include="dag\ProcessDagSmoke.cpp" />
     <ClCompile Include="controllers\HexSphereSceneController.cpp" />
     <ClCompile Include="controllers\InputController.cpp" />
     <ClCompile Include="controllers\PathBuilder.cpp" />
     <ClCompile Include="dag\EngineFacade.cpp" />
     <ClCompile Include="dag\LegacyTerrainBackend.cpp" />
+    <ClCompile Include="dag\TerrainSerialization.cpp" />
     <ClCompile Include="core\main.cpp" />
     <ClCompile Include="generation\ClimateBiomeGenerator.cpp" />
     <ClCompile Include="generation\PerlinNoise.cpp" />
     <ClCompile Include="generation\TerrainGenerator.cpp" />
+    <ClCompile Include="generation\WaterWaveModel.cpp" />
     <ClCompile Include="generation\MeshGenerators\SelectionOutlineGenerator.cpp" />
     <ClCompile Include="generation\MeshGenerators\TerrainMeshGenerator.cpp" />
     <ClCompile Include="generation\MeshGenerators\WaterMeshGenerator.cpp" />
     <ClCompile Include="generation\MeshGenerators\WireMeshGenerator.cpp" />
     <ClCompile Include="model\CarModelHandler.cpp" />
+    <ClCompile Include="model\FactoryModelHandler.cpp" />
+    <ClCompile Include="model\MineModelHandler.cpp" />
     <ClCompile Include="model\HexSphereModel.cpp" />
     <ClCompile Include="model\ModelHandler.cpp" />
     <ClCompile Include="model\OreSystem.cpp" />
     <ClCompile Include="renderers\EntityRenderer.cpp" />
+    <ClCompile Include="renderers\ParticleRenderer.cpp" />
     <ClCompile Include="renderers\HexSphereRenderer.cpp" />
     <ClCompile Include="renderers\TerrainRenderer.cpp" />
     <ClCompile Include="renderers\TerrainTessellator.cpp" />
+    <ClCompile Include="renderers\PlanetSurfaceAtlasPass.cpp" />
     <ClCompile Include="renderers\WaterRenderer.cpp" />
     <ClCompile Include="ui\HexSphereWidget.cpp" />
     <ClCompile Include="ui\MainWindow.cpp" />
     <ClCompile Include="ui\OverlayRenderer.cpp" />
     <ClCompile Include="ui\PerformanceStats.cpp" />
     <ClCompile Include="ui\PlanetSettingsPanel.cpp" />
+    <ClCompile Include="tests\WaterWaveModelTests.cpp" />
+    <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp" />
     <ClCompile Include="ECS\ComponentStorage.cpp" />
     <ClCompile Include="scene\Entity.cpp" />
     <ClCompile Include="scene\SceneGraph.cpp" />
@@ -265,6 +290,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="resources\HexSphereWidget_shaders.h" />
+    <None Include="resources\water\water_common.glsl" />
+    <None Include="resources\water\water_intersection.glsl" />
+    <None Include="resources\water\water_shading.glsl" />
+    <None Include="resources\water\water_shell.frag" />
+    <None Include="resources\water\water_shell.vert" />
+    <None Include="resources\water\water_surface.glsl" />
     <None Include="docs\rendering_refactor_task.md" />
     <None Include="third_party\ProcessDAG\ProcessDag.Embedded.props" />
     <None Include="trunsuction_plan.md" />

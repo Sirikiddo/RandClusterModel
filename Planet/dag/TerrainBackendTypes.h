@@ -19,9 +19,9 @@ struct TerrainCellSnapshot {
 };
 
 struct TerrainSnapshot {
-    int subdivisionLevel = 2;
-    int generatorIndex = 3;
-    TerrainParams params{};
+    int subdivisionLevel = kDefaultTerrainSubdivisionLevel;
+    int generatorIndex = kDefaultTerrainGeneratorIndex;
+    TerrainParams params = defaultTerrainParams();
     std::vector<TerrainCellSnapshot> cells;
 
     bool empty() const noexcept {

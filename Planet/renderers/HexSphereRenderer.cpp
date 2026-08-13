@@ -2,6 +2,11 @@
 
 #include <QOpenGLWidget>
 #include <QtDebug>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QSet>
+#include <QTextStream>
 
 #include <QOpenGLVertexArrayObject> 
 #include <algorithm>
@@ -14,11 +19,55 @@
 #include "resources/HexSphereWidget_shaders.h"
 #include "model/SurfacePlacement.h"
 #include "renderers/EntityRenderer.h"
+#include "renderers/PlanetSurfaceAtlasPass.h"
 #include "ui/OverlayRenderer.h"
 #include "renderers/TerrainRenderer.h"
 #include "renderers/WaterRenderer.h"
 
 namespace {
+    QString shaderIncludePath(const QString& line) {
+        const QString trimmed = line.trimmed();
+        if (!trimmed.startsWith("#include \"")) return {};
+        const int first = trimmed.indexOf('"');
+        const int second = trimmed.indexOf('"', first + 1);
+        return first >= 0 && second > first ? trimmed.mid(first + 1, second - first - 1) : QString{};
+    }
+
+    QByteArray loadShaderSourceRecursive(const QString& path, QSet<QString>& stack) {
+        const QString filePath = QFileInfo(path).filePath();
+        if (stack.contains(filePath)) {
+            qWarning() << "Recursive shader include:" << filePath;
+            return {};
+        }
+        QFile file(filePath);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qWarning() << "Failed to open shader source:" << filePath;
+            return {};
+        }
+        stack.insert(filePath);
+        QByteArray source;
+        QTextStream stream(&file);
+        const QString baseDir = QFileInfo(filePath).path();
+        while (!stream.atEnd()) {
+            const QString line = stream.readLine();
+            const QString includePath = shaderIncludePath(line);
+            if (!includePath.isEmpty()) {
+                source += loadShaderSourceRecursive(QDir(baseDir).filePath(includePath), stack);
+            }
+            else {
+                source += line.toUtf8();
+                source += '\n';
+            }
+        }
+        stack.remove(filePath);
+        return source;
+    }
+
+    QByteArray loadShaderSource(const QString& path) {
+        QSet<QString> stack;
+        return loadShaderSourceRecursive(path, stack);
+    }
+
     QMatrix4x4 surfaceBasisFromForward(const QVector3D& unitUp, QVector3D forwardTangent) {
         forwardTangent = forwardTangent - QVector3D::dotProduct(forwardTangent, unitUp) * unitUp;
         if (forwardTangent.length() < 1e-4f) {
@@ -82,6 +131,10 @@ HexSphereRenderer::~HexSphereRenderer() {
     entityRenderer_.reset();
     overlayRenderer_.reset();
     particleRenderer_.reset();
+    if (surfaceAtlasPass_) {
+        surfaceAtlasPass_->release();
+        surfaceAtlasPass_.reset();
+    }
 
     if (treeModel_.use_count() == 1 && treeModel_) {
         treeModel_->clearGPUResources();
@@ -140,7 +193,9 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (vboPyramid_)     gl_->glDeleteBuffers(1, &vboPyramid_);
     if (vboWaterPos_)    gl_->glDeleteBuffers(1, &vboWaterPos_);
     if (iboWater_)       gl_->glDeleteBuffers(1, &iboWater_);
-    if (vboWaterEdgeFlags_) gl_->glDeleteBuffers(1, &vboWaterEdgeFlags_);
+    if (envCubemap_) gl_->glDeleteTextures(1, &envCubemap_);
+    if (sceneDepthTexture_) gl_->glDeleteTextures(1, &sceneDepthTexture_);
+    if (sceneDepthFbo_) gl_->glDeleteFramebuffers(1, &sceneDepthFbo_);
 
     if (QOpenGLContext::currentContext()) {
         owner_->doneCurrent();
@@ -149,28 +204,35 @@ HexSphereRenderer::~HexSphereRenderer() {
     glReady_ = false;
 }
 
-GLuint HexSphereRenderer::makeProgram(const char* vs, const char* fs) {
-    GLuint v = gl_->glCreateShader(GL_VERTEX_SHADER);
-    gl_->glShaderSource(v, 1, &vs, nullptr);
-    gl_->glCompileShader(v);
+GLuint HexSphereRenderer::makeProgram(const QByteArray& vertexSource, const QByteArray& fragmentSource) {
+    auto compile = [&](GLenum stage, const QByteArray& source) -> GLuint {
+        if (source.isEmpty()) {
+            qCritical() << "Cannot compile empty shader source for stage" << stage;
+            return 0;
+        }
+        const char* text = source.constData();
+        const GLuint shader = gl_->glCreateShader(stage);
+        gl_->glShaderSource(shader, 1, &text, nullptr);
+        gl_->glCompileShader(shader);
+        GLint success = GL_FALSE;
+        gl_->glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+        if (success == GL_TRUE) return shader;
 
-    GLint success;
-    gl_->glGetShaderiv(v, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        char infoLog[512];
-        gl_->glGetShaderInfoLog(v, 512, nullptr, infoLog);
-        qDebug() << "Vertex shader compilation failed:" << infoLog;
-    }
+        GLint logLength = 0;
+        gl_->glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
+        QByteArray log(std::max(logLength, 1), '\0');
+        gl_->glGetShaderInfoLog(shader, log.size(), nullptr, log.data());
+        qCritical().noquote() << "Shader compilation failed:" << log;
+        gl_->glDeleteShader(shader);
+        return 0;
+    };
 
-    GLuint f = gl_->glCreateShader(GL_FRAGMENT_SHADER);
-    gl_->glShaderSource(f, 1, &fs, nullptr);
-    gl_->glCompileShader(f);
-
-    gl_->glGetShaderiv(f, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        char infoLog[512];
-        gl_->glGetShaderInfoLog(f, 512, nullptr, infoLog);
-        qDebug() << "Fragment shader compilation failed:" << infoLog;
+    const GLuint v = compile(GL_VERTEX_SHADER, vertexSource);
+    const GLuint f = compile(GL_FRAGMENT_SHADER, fragmentSource);
+    if (v == 0 || f == 0) {
+        if (v != 0) gl_->glDeleteShader(v);
+        if (f != 0) gl_->glDeleteShader(f);
+        return 0;
     }
 
     GLuint p = gl_->glCreateProgram();
@@ -178,15 +240,20 @@ GLuint HexSphereRenderer::makeProgram(const char* vs, const char* fs) {
     gl_->glAttachShader(p, f);
     gl_->glLinkProgram(p);
 
+    GLint success = GL_FALSE;
     gl_->glGetProgramiv(p, GL_LINK_STATUS, &success);
-    if (!success) {
-        char infoLog[512];
-        gl_->glGetProgramInfoLog(p, 512, nullptr, infoLog);
-        qDebug() << "Shader program linking failed:" << infoLog;
-    }
 
     gl_->glDeleteShader(v);
     gl_->glDeleteShader(f);
+    if (success != GL_TRUE) {
+        GLint logLength = 0;
+        gl_->glGetProgramiv(p, GL_INFO_LOG_LENGTH, &logLength);
+        QByteArray log(std::max(logLength, 1), '\0');
+        gl_->glGetProgramInfoLog(p, log.size(), nullptr, log.data());
+        qCritical().noquote() << "Shader program linking failed:" << log;
+        gl_->glDeleteProgram(p);
+        return 0;
+    }
     return p;
 }
 
@@ -204,10 +271,24 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     progWire_ = makeProgram(VS_WIRE, FS_WIRE);
     progTerrain_ = makeProgram(VS_TERRAIN, FS_TERRAIN);
     progSel_ = makeProgram(VS_WIRE, FS_SEL);
-    progWater_ = makeProgram(VS_WATER, FS_WATER);
+    progWater_ = makeProgram(
+        loadShaderSource(":/Planet/resources/water/water_shell.vert"),
+        loadShaderSource(":/Planet/resources/water/water_shell.frag"));
     progModel_ = makeProgram(VS_MODEL, FS_MODEL);
     progFactory_ = makeProgram(VS_FACTORY, FS_FACTORY);
     progSteam_ = makeProgram(VS_STEAM, FS_STEAM);
+    if (progWire_ == 0 || progTerrain_ == 0 || progSel_ == 0 || progWater_ == 0
+        || progModel_ == 0 || progFactory_ == 0 || progSteam_ == 0) {
+        qCritical() << "HexSphereRenderer initialization stopped because a shader program is invalid";
+        for (GLuint* program : {
+                &progWire_, &progTerrain_, &progSel_, &progWater_,
+                &progModel_, &progFactory_, &progSteam_ }) {
+            if (*program != 0) gl_->glDeleteProgram(*program);
+            *program = 0;
+        }
+        glReady_ = false;
+        return;
+    }
 
     gl_->glUseProgram(progWire_);
     uMVP_Wire_ = gl_->glGetUniformLocation(progWire_, "uMVP");
@@ -221,13 +302,30 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     gl_->glUseProgram(progSel_);
     uMVP_Sel_ = gl_->glGetUniformLocation(progSel_, "uMVP");
 
-    gl_->glUseProgram(progWater_);
-    uMVP_Water_ = gl_->glGetUniformLocation(progWater_, "uMVP");
-    uTime_Water_ = gl_->glGetUniformLocation(progWater_, "uTime");
-    uLightDir_Water_ = gl_->glGetUniformLocation(progWater_, "uLightDir");
-    uViewPos_Water_ = gl_->glGetUniformLocation(progWater_, "uViewPos");
-    uEnvMap_ = gl_->glGetUniformLocation(progWater_, "uEnvMap");
     generateEnvCubemap();
+
+    surfaceAtlasPass_ = std::make_unique<PlanetSurfaceAtlasPass>();
+    surfaceAtlasPass_->initialize(gl_);
+    if (!surfaceAtlasPass_->ready()) {
+        qCritical() << "HexSphereRenderer initialization stopped because the planet surface atlas is unavailable";
+        surfaceAtlasPass_->release();
+        surfaceAtlasPass_.reset();
+        if (envCubemap_ != 0) {
+            gl_->glDeleteTextures(1, &envCubemap_);
+            envCubemap_ = 0;
+        }
+        for (GLuint* program : {
+                &progWire_, &progTerrain_, &progSel_, &progWater_,
+                &progModel_, &progFactory_, &progSteam_ }) {
+            if (*program != 0) gl_->glDeleteProgram(*program);
+            *program = 0;
+        }
+        glReady_ = false;
+        return;
+    }
+    planetRadiusAtlas_ = surfaceAtlasPass_->radiusTexture();
+    planetSurfaceKindAtlas_ = surfaceAtlasPass_->kindTexture();
+    planetShoreDistanceAtlas_ = surfaceAtlasPass_->shoreDistanceTexture();
 
     gl_->glUseProgram(progModel_);
     uMVP_Model_ = gl_->glGetUniformLocation(progModel_, "uMVP");
@@ -265,7 +363,6 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     gl_->glGenBuffers(1, &vboPath_);
     gl_->glGenBuffers(1, &vboWaterPos_);
     gl_->glGenBuffers(1, &iboWater_);
-    gl_->glGenBuffers(1, &vboWaterEdgeFlags_);
     gl_->glGenVertexArrays(1, &vaoWater_);
 
     gl_->glBindVertexArray(vaoWire_);
@@ -290,9 +387,6 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboWaterPos_);
     gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(0);
-    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboWaterEdgeFlags_);
-    gl_->glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
-    gl_->glEnableVertexAttribArray(1);
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboWater_);
     gl_->glBindVertexArray(0);
 
@@ -394,8 +488,6 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         qDebug() << "Mine model loaded successfully";
     }
 
-    owner_->doneCurrent();  // РњРѕР¶РЅРѕ СЃРЅСЏС‚СЊ РєРѕРЅС‚РµРєСЃС‚, РµСЃР»Рё РЅСѓР¶РЅРѕ
-
     // РЎРћР—Р”РђРЃРњ Р Р•РќР”Р•Р Р•Р Р« РџРћРЎР›Р• Р’РЎР•РҐ РРќРР¦РРђР›РР—РђР¦РР™
     terrainRenderer_ = std::make_unique<TerrainRenderer>(
         gl_,
@@ -407,7 +499,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         vaoTerrain_.objectId()  // в†ђ objectId() РІРѕР·РІСЂР°С‰Р°РµС‚ GLuint
     );
 
-    waterRenderer_ = std::make_unique<WaterRenderer>(gl_, progWater_, uMVP_Water_, uTime_Water_, uLightDir_Water_, uViewPos_Water_, uEnvMap_, envCubemap_, vaoWater_, waterIndexCount_);
+    waterRenderer_ = std::make_unique<WaterRenderer>(gl_, progWater_);
     entityRenderer_ = std::make_unique<EntityRenderer>(
         gl_, progWire_, progSel_, progModel_, progFactory_, progSteam_,
         uMVP_Wire_, uMVP_Sel_, uMVP_Model_, uModel_Model_,
@@ -416,6 +508,10 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         uMVP_Steam_, uModel_Steam_, uTime_Steam_, uViewPos_Steam_,
         vaoPyramid_, pyramidVertexCount_, treeModel_, firTreeModel_, carModel_, factoryModel_, mineModel_);
     overlayRenderer_ = std::make_unique<OverlayRenderer>(gl_, progWire_, progSel_, uMVP_Wire_, uMVP_Sel_, vaoWire_, vaoSel_, vaoPath_, lineVertexCount_, selLineVertexCount_, pathVertexCount_);
+
+    // Renderer constructors query their uniforms, so the GL context must stay
+    // current until every renderer has been initialized.
+    owner_->doneCurrent();
 
     glReady_ = true;
 }
@@ -692,9 +788,6 @@ void HexSphereRenderer::uploadWaterInternal(const WaterGeometryData& data) {
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboWaterPos_);
     gl_->glBufferData(GL_ARRAY_BUFFER, data.positions.size() * sizeof(float), data.positions.empty() ? nullptr : data.positions.data(), GL_STATIC_DRAW);
 
-    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboWaterEdgeFlags_);
-    gl_->glBufferData(GL_ARRAY_BUFFER, data.edgeFlags.size() * sizeof(float), data.edgeFlags.empty() ? nullptr : data.edgeFlags.data(), GL_STATIC_DRAW);
-
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboWater_);
     gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER, data.indices.size() * sizeof(uint32_t), data.indices.empty() ? nullptr : data.indices.data(), GL_STATIC_DRAW);
 
@@ -703,13 +796,20 @@ void HexSphereRenderer::uploadWaterInternal(const WaterGeometryData& data) {
     gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(0);
 
-    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboWaterEdgeFlags_);
-    gl_->glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
-    gl_->glEnableVertexAttribArray(1);
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboWater_);
     gl_->glBindVertexArray(0);
 
     waterIndexCount_ = static_cast<GLsizei>(data.indices.size());
+}
+
+void HexSphereRenderer::rebuildPlanetSurfaceAtlas(
+    const TerrainMesh& mesh,
+    const HexSphereModel& model) {
+    if (!surfaceAtlasPass_) return;
+    surfaceAtlasPass_->updateMesh(mesh, model);
+    planetRadiusAtlas_ = surfaceAtlasPass_->radiusTexture();
+    planetSurfaceKindAtlas_ = surfaceAtlasPass_->kindTexture();
+    planetShoreDistanceAtlas_ = surfaceAtlasPass_->shoreDistanceTexture();
 }
 
 void HexSphereRenderer::uploadWire(const std::vector<float>& vertices, GLenum usage) {
@@ -726,10 +826,6 @@ void HexSphereRenderer::uploadSelectionOutline(const std::vector<float>& vertice
 
 void HexSphereRenderer::uploadPath(const std::vector<QVector3D>& points) {
     withContext([&]() { uploadPathInternal(points); });
-}
-
-void HexSphereRenderer::uploadWater(const WaterGeometryData& data) {
-    withContext([&]() { uploadWaterInternal(data); });
 }
 
 void HexSphereRenderer::renderContributorModel(const RenderContext& ctx) {
@@ -827,9 +923,13 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
     withContext([&]() {
         uploadWireInternal(scene.buildWireVertices(), options.wireUsage);
         uploadTerrainInternal(scene.terrain(), options.terrainUsage);
+        rebuildPlanetSurfaceAtlas(scene.terrain(), scene.model());
         uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
         uploadPathInternal({});
-        uploadWaterInternal(scene.buildWaterGeometry());
+        if (uploadedWaterProxyRevision_ != scene.waterProxyRevision()) {
+            uploadWaterInternal(scene.waterGeometry());
+            uploadedWaterProxyRevision_ = scene.waterProxyRevision();
+        }
         });
     qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
         << "(terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
@@ -850,7 +950,9 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     updateVisibility(cameraPos);
 
     const float dpr = owner_->devicePixelRatioF();
-    gl_->glViewport(0, 0, int(owner_->width() * dpr), int(owner_->height() * dpr));
+    const int viewportWidth = int(owner_->width() * dpr);
+    const int viewportHeight = int(owner_->height() * dpr);
+    gl_->glViewport(0, 0, viewportWidth, viewportHeight);
     gl_->glClearColor(0.05f, 0.06f, 0.08f, 1.0f);
     gl_->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -871,10 +973,20 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     if (stats_) stats_->startGPUTimer();
 
 
-    RenderContext ctx{ graph, camera, lighting, camera.projection * camera.view, cameraPos };
+    const QMatrix4x4 viewProjection = camera.projection * camera.view;
+    RenderContext ctx{
+        graph, camera, lighting, viewProjection, viewProjection.inverted(),
+        cameraPos, QSize(viewportWidth, viewportHeight) };
 
+    if (surfaceAtlasPass_) surfaceAtlasPass_->renderIfDirty();
+    gl_->glViewport(0, 0, viewportWidth, viewportHeight);
     terrainRenderer_->render(ctx, terrainIndexCount_);
-    waterRenderer_->render(ctx);
+    copySceneDepthToTexture(viewportWidth, viewportHeight);
+    const WaterRenderer::Resources waterResources{
+        envCubemap_, sceneDepthTexture_, planetRadiusAtlas_,
+        planetSurfaceKindAtlas_, planetShoreDistanceAtlas_,
+        vaoWater_, waterIndexCount_ };
+    waterRenderer_->render(ctx, waterResources);
     entityRenderer_->renderEntities(ctx);
     overlayRenderer_->render(ctx);
 
@@ -1025,6 +1137,57 @@ void HexSphereRenderer::generateEnvCubemap() {
     gl_->glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     gl_->glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     gl_->glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+}
+
+void HexSphereRenderer::uploadTerrainHydrology(
+    const HexSphereSceneController& scene,
+    GLenum terrainUsage) {
+    withContext([&]() {
+        uploadTerrainInternal(scene.terrain(), terrainUsage);
+        rebuildPlanetSurfaceAtlas(scene.terrain(), scene.model());
+    });
+}
+
+void HexSphereRenderer::ensureSceneDepthTexture(int width, int height) {
+    if (width <= 0 || height <= 0) return;
+    if (sceneDepthTexture_ == 0) gl_->glGenTextures(1, &sceneDepthTexture_);
+    if (sceneDepthFbo_ == 0) gl_->glGenFramebuffers(1, &sceneDepthFbo_);
+    if (sceneDepthTextureSize_ == QSize(width, height)) return;
+
+    gl_->glBindTexture(GL_TEXTURE_2D, sceneDepthTexture_);
+    gl_->glTexImage2D(
+        GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0,
+        GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    gl_->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    gl_->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    gl_->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    gl_->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    gl_->glBindFramebuffer(GL_FRAMEBUFFER, sceneDepthFbo_);
+    gl_->glFramebufferTexture2D(
+        GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, sceneDepthTexture_, 0);
+    gl_->glDrawBuffer(GL_NONE);
+    gl_->glReadBuffer(GL_NONE);
+    const GLenum status = gl_->glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        qWarning() << "Scene depth framebuffer is incomplete:" << status;
+    }
+    gl_->glBindFramebuffer(GL_FRAMEBUFFER, owner_ ? owner_->defaultFramebufferObject() : 0);
+    gl_->glBindTexture(GL_TEXTURE_2D, 0);
+    sceneDepthTextureSize_ = QSize(width, height);
+}
+
+void HexSphereRenderer::copySceneDepthToTexture(int width, int height) {
+    ensureSceneDepthTexture(width, height);
+    if (!sceneDepthTexture_ || !sceneDepthFbo_) return;
+    const GLuint defaultFbo = owner_ ? owner_->defaultFramebufferObject() : 0;
+    gl_->glBindFramebuffer(GL_READ_FRAMEBUFFER, defaultFbo);
+    gl_->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, sceneDepthFbo_);
+    gl_->glBlitFramebuffer(
+        0, 0, width, height, 0, 0, width, height,
+        GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    gl_->glBindFramebuffer(GL_READ_FRAMEBUFFER, defaultFbo);
+    gl_->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, defaultFbo);
 }
 
 void HexSphereRenderer::initPyramidGeometry() {
