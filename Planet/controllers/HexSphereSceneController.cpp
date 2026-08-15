@@ -12,6 +12,7 @@
 #include "generation/MeshGenerators/SelectionOutlineGenerator.h"
 #include <QVector3D>
 #include <QElapsedTimer>
+#include <QtDebug>
 
 namespace {
     constexpr float kContributorTreeScale = 0.5f;
@@ -120,17 +121,41 @@ void HexSphereSceneController::setOutlineBias(float value) {
 }
 
 void HexSphereSceneController::rebuildTopology() {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    QElapsedTimer stageTimer;
+    stageTimer.start();
     ico_ = icoBuilder_.build(L_);
+    const double icosphereMs = stageTimer.nsecsElapsed() / 1000000.0;
+    stageTimer.restart();
     model_.rebuildFromIcosphere(ico_);
+    const double modelMs = stageTimer.nsecsElapsed() / 1000000.0;
     model_.setBaseRadius(HexSphereModel::kDefaultBaseRadius);
     model_.setHeightStep(autoHeightStep());
     model_.setWaterSurfaceLevel(HexSphereModel::kDefaultWaterSurfaceLevel);
+    stageTimer.restart();
     rebuildWaterProxy();
+    const double waterMs = stageTimer.nsecsElapsed() / 1000000.0;
+    qInfo().nospace()
+        << "[Perf][Generation] stage=rebuild_topology level=" << L_
+        << " cells=" << model_.cells().size()
+        << " faces=" << ico_.F.size()
+        << " icosphere_ms=" << icosphereMs
+        << " model_ms=" << modelMs
+        << " water_proxy_ms=" << waterMs
+        << " total_ms=" << totalTimer.nsecsElapsed() / 1000000.0;
 }
 
 void HexSphereSceneController::rebuildWaterProxy() {
+    QElapsedTimer timer;
+    timer.start();
     waterCPU_ = WaterMeshGenerator::buildWaterGeometry(model_);
     ++waterProxyRevision_;
+    qInfo().nospace()
+        << "[Perf][Generation] stage=water_proxy level=" << L_
+        << " vertices=" << waterCPU_.positions.size() / 3u
+        << " triangles=" << waterCPU_.indices.size() / 3u
+        << " ms=" << timer.nsecsElapsed() / 1000000.0;
 }
 
 void HexSphereSceneController::rebuildModel() {
@@ -293,8 +318,14 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
     L_ = snapshot.subdivisionLevel;
     topologyDirty_ = false;
 
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    QElapsedTimer stageTimer;
+    stageTimer.start();
     rebuildTopology();
+    const double topologyMs = stageTimer.nsecsElapsed() / 1000000.0;
 
+    stageTimer.restart();
     auto& cells = model_.cells();
     const size_t count = std::min(cells.size(), snapshot.cells.size());
     for (size_t i = 0; i < count; ++i) {
@@ -308,12 +339,25 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
         target.oreDensity = source.oreDensity;
         target.oreType = source.oreType;
     }
+    const double cellProjectionMs = stageTimer.nsecsElapsed() / 1000000.0;
 
     selectedCells_.clear();
     selectionOutlineVertices_.clear();
     selectionOutlineDirty_ = true;
+    stageTimer.restart();
     updateTerrainMesh();
+    const double terrainMeshMs = stageTimer.nsecsElapsed() / 1000000.0;
+    stageTimer.restart();
     generateTreePlacements();
+    const double treesMs = stageTimer.nsecsElapsed() / 1000000.0;
+    qInfo().nospace()
+        << "[Perf][Generation] stage=scene_projection level=" << L_
+        << " cells=" << cells.size()
+        << " topology_ms=" << topologyMs
+        << " cell_copy_ms=" << cellProjectionMs
+        << " terrain_mesh_ms=" << terrainMeshMs
+        << " trees_ms=" << treesMs
+        << " total_ms=" << totalTimer.nsecsElapsed() / 1000000.0;
 }
 
 float HexSphereSceneController::autoHeightStep() const {
@@ -334,9 +378,27 @@ void HexSphereSceneController::updateTerrainMesh() {
 
     heightStep_ = autoHeightStep();
     model_.setHeightStep(heightStep_);
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    QElapsedTimer stageTimer;
+    stageTimer.start();
     rebuildCoastalBand();
+    const double coastMs = stageTimer.nsecsElapsed() / 1000000.0;
+    stageTimer.restart();
     buildTerrainMeshFromCurrentCoast();
+    const double tessellationMs = stageTimer.nsecsElapsed() / 1000000.0;
+    stageTimer.restart();
     refreshResolvedWaterState();
+    const double waterStateMs = stageTimer.nsecsElapsed() / 1000000.0;
+    qInfo().nospace()
+        << "[Perf][Generation] stage=terrain_mesh level=" << L_
+        << " cells=" << model_.cells().size()
+        << " vertices=" << terrainCPU_.pos.size() / 3u
+        << " triangles=" << terrainCPU_.idx.size() / 3u
+        << " coast_ms=" << coastMs
+        << " tessellation_ms=" << tessellationMs
+        << " water_state_ms=" << waterStateMs
+        << " total_ms=" << totalTimer.nsecsElapsed() / 1000000.0;
 }
 
 void HexSphereSceneController::buildTerrainMeshFromCurrentCoast() {

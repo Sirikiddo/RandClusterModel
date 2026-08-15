@@ -41,6 +41,7 @@ public:
     const PathResult& lastPathResult() const;
 
     // ===== ПРОИЗВОДНЫЕ ДАННЫЕ СЦЕНЫ =====
+    SelectionDagResult rebuildSelectionOutline(const SelectionOutlineInput& input);
     SceneDagResult rebuildSceneDerived(const SceneDagRequest& request);
     const DagDebugStats& lastSceneDagStats() const;
 

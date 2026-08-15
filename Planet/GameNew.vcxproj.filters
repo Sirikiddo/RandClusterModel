@@ -141,7 +141,16 @@
     <ClCompile Include="renderers\PlanetSurfaceAtlasPass.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="renderers\SurfaceAtlasMeshBuilder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SelectionOutlineTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SurfaceAtlasDistanceTests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="tests\WaterWaveModelTests.cpp">
@@ -344,7 +353,16 @@
     <ClInclude Include="renderers\PlanetSurfaceAtlasPass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="renderers\SurfaceAtlasMeshBuilder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="tests\ClimateBiomeGeneratorTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\SelectionOutlineTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\SurfaceAtlasDistanceTests.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="tests\WaterWaveModelTests.h">

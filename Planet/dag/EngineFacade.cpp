@@ -89,6 +89,10 @@ const PathResult& EngineFacade::lastPathResult() const {
 
 // ===== ПРОИЗВОДНЫЕ ДАННЫЕ СЦЕНЫ =====
 
+SelectionDagResult EngineFacade::rebuildSelectionOutline(const SelectionOutlineInput& input) {
+    return impl_->sceneBackend.rebuildSelectionOutline(input);
+}
+
 SceneDagResult EngineFacade::rebuildSceneDerived(const SceneDagRequest& request) {
     return impl_->sceneBackend.rebuild(request);
 }

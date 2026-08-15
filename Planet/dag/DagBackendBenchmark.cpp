@@ -62,14 +62,10 @@ struct TerrainScenario {
 
 struct SceneDerivedOperation {
     QString name;
-    std::vector<int> selectedCells;
-    float outlineBias = 0.004f;
-    bool smoothOneStep = true;
     bool mutateTerrain = false;
 };
 
 struct LegacySceneDerivedResult {
-    std::vector<float> selectionOutline;
     int treeCount = 0;
 };
 
@@ -281,16 +277,9 @@ LegacySceneDerivedResult runLegacySceneDerived(
     }
 
     scene.applyTerrainSnapshot(workingSnapshot);
-    scene.setSmoothOneStep(operation.smoothOneStep);
-    scene.setOutlineBias(operation.outlineBias);
-    scene.clearSelection();
-    for (int cellId : operation.selectedCells) {
-        scene.toggleCellSelection(cellId);
-    }
     scene.generateTreePlacements();
 
     LegacySceneDerivedResult result;
-    result.selectionOutline = scene.buildSelectionOutlineVertices();
     result.treeCount = static_cast<int>(scene.getTreePlacements().size());
     return result;
 }
@@ -304,9 +293,6 @@ SceneDagRequest buildSceneDagRequest(
         request.terrain.cells.front().height += 1;
     }
     request.heightStep = 0.05f;
-    request.outlineBias = operation.outlineBias;
-    request.smoothOneStep = operation.smoothOneStep;
-    request.selectedCells = operation.selectedCells;
     request.modelRequests.push_back(ModelPlacementRequest{ 0, "pyramid", 0, true, 0.0f });
     return request;
 }
@@ -362,6 +348,95 @@ void appendTerrainRows(
     }
 }
 
+bool outlinesCompatible(const std::vector<float>& lhs, const std::vector<float>& rhs) {
+    if (lhs.size() != rhs.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < lhs.size(); ++i) {
+        if (std::abs(lhs[i] - rhs[i]) > 1.0e-5f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void appendSelectionDerivedRows(DagBenchmarkReport& report, int subdivisionLevel) {
+    IcosphereBuilder builder;
+    HexSphereModel model;
+    model.rebuildFromIcosphere(builder.build(subdivisionLevel));
+
+    int pentagonId = -1;
+    int hexagonId = -1;
+    for (size_t i = 0; i < model.cells().size(); ++i) {
+        const size_t degree = model.cells()[i].poly.size();
+        if (degree == 5 && pentagonId < 0) pentagonId = static_cast<int>(i);
+        if (degree == 6 && hexagonId < 0) hexagonId = static_cast<int>(i);
+    }
+    if (pentagonId < 0 || hexagonId < 0) {
+        report.ok = false;
+        return;
+    }
+
+    const auto makeInput = [&](std::initializer_list<int> ids, float bias, bool smooth) {
+        QSet<int> selected;
+        for (int id : ids) selected.insert(id);
+        return SelectionOutlineGenerator::buildSelectionOutlineInput(
+            model, selected, 0.05f, bias, smooth);
+    };
+
+    const SelectionOutlineInput empty = makeInput({}, 0.004f, true);
+    const SelectionOutlineInput pentagon = makeInput({ pentagonId }, 0.004f, true);
+    const SelectionOutlineInput hexagon = makeInput({ hexagonId }, 0.004f, true);
+    const SelectionOutlineInput twoCells = makeInput({ pentagonId, hexagonId }, 0.004f, true);
+    SelectionOutlineInput heightChange = twoCells;
+    if (!heightChange.edges.empty()) heightChange.edges.front().cellHeight += 1;
+
+    const std::vector<std::pair<QString, SelectionOutlineInput>> operations = {
+        { "empty", empty },
+        { "pentagon", pentagon },
+        { "hexagon", hexagon },
+        { "two_cells", twoCells },
+        { "repeat", twoCells },
+        { "selection_change", pentagon },
+        { "selection_revert", twoCells },
+        { "bias_change", makeInput({ pentagonId, hexagonId }, 0.010f, true) },
+        { "smooth_change", makeInput({ pentagonId, hexagonId }, 0.004f, false) },
+        { "height_change", heightChange },
+    };
+
+    DagSceneBackend backend;
+    for (int i = 0; i < static_cast<int>(operations.size()); ++i) {
+        const auto& operation = operations[size_t(i)];
+        QElapsedTimer timer;
+        timer.start();
+        const SelectionDagResult dagResult = backend.rebuildSelectionOutline(operation.second);
+        const double dagMs = static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
+        const std::vector<float> direct = SelectionOutlineGenerator::buildSelectionOutlineVertices(operation.second);
+        const bool compatible = dagResult.success && outlinesCompatible(dagResult.vertices, direct);
+        const DagDebugStats stats = backend.lastStats();
+
+        DagBenchmarkRow row;
+        row.category = "selection-derived";
+        row.scenario = QString("L%1").arg(subdivisionLevel);
+        row.operation = operation.first;
+        row.backend = "DAG selection";
+        row.iteration = i;
+        row.elapsedMs = dagMs;
+        row.cellCount = static_cast<int>(model.cells().size());
+        row.compatible = compatible;
+        row.selectionCount = static_cast<int>(dagResult.vertices.size() / 6);
+        row.executedNodes = stats.executedNodes;
+        row.skippedGuardNodes = stats.skippedGuardNodes;
+        row.cacheHits = stats.cacheHits;
+        row.cacheMisses = stats.cacheMisses;
+        row.planCacheHits = stats.planCacheHits;
+        row.planCacheMisses = stats.planCacheMisses;
+        row.inputBytes = dagResult.inputBytes;
+        report.rows.push_back(row);
+        report.ok = report.ok && compatible;
+    }
+}
+
 void appendSceneDerivedRows(
     DagBenchmarkReport& report,
     const TerrainScenario& scenario) {
@@ -378,14 +453,10 @@ void appendSceneDerivedRows(
     }
 
     const std::vector<SceneDerivedOperation> operations = {
-        { "baseline", { 0, 1 }, 0.004f, true, false },
-        { "repeat_same", { 0, 1 }, 0.004f, true, false },
-        { "selection_change", { 2, 3 }, 0.004f, true, false },
-        { "selection_revert", { 0, 1 }, 0.004f, true, false },
-        { "visual_change", { 0, 1 }, 0.010f, false, false },
-        { "visual_revert", { 0, 1 }, 0.004f, true, false },
-        { "terrain_edit", { 0, 1 }, 0.004f, true, true },
-        { "terrain_revert", { 0, 1 }, 0.004f, true, false },
+        { "baseline", false },
+        { "repeat_same", false },
+        { "terrain_edit", true },
+        { "terrain_revert", false },
     };
 
     DagSceneBackend sceneBackend;
@@ -419,7 +490,6 @@ void appendSceneDerivedRows(
         dagRow.elapsedMs = dagMs;
         dagRow.cellCount = static_cast<int>(request.terrain.cells.size());
         dagRow.compatible = compatible;
-        dagRow.selectionCount = static_cast<int>(dagResult.selectionOutline.vertices.size() / 6);
         dagRow.treeCount = static_cast<int>(dagResult.treePlacements.size());
         dagRow.modelCount = static_cast<int>(dagResult.modelPlacements.size());
         dagRow.executedNodes = dagStats.executedNodes;
@@ -428,6 +498,7 @@ void appendSceneDerivedRows(
         dagRow.cacheMisses = dagStats.cacheMisses;
         dagRow.planCacheHits = dagStats.planCacheHits;
         dagRow.planCacheMisses = dagStats.planCacheMisses;
+        dagRow.inputBytes = dagStats.inputBytes;
         report.rows.push_back(dagRow);
 
         DagBenchmarkRow legacyRow;
@@ -439,7 +510,6 @@ void appendSceneDerivedRows(
         legacyRow.elapsedMs = legacyMs;
         legacyRow.cellCount = static_cast<int>(request.terrain.cells.size());
         legacyRow.compatible = compatible;
-        legacyRow.selectionCount = static_cast<int>(legacyResult.selectionOutline.size() / 6);
         legacyRow.treeCount = legacyResult.treeCount;
         report.rows.push_back(legacyRow);
 
@@ -454,7 +524,7 @@ bool writeCsv(const QString& csvPath, const std::vector<DagBenchmarkRow>& rows) 
     }
 
     QTextStream out(&file);
-    out << "category,scenario,operation,backend,iteration,elapsed_ms,cell_count,compatible,selection_count,tree_count,model_count,executed_nodes,skipped_guard_nodes,cache_hits,cache_misses,plan_cache_hits,plan_cache_misses\n";
+    out << "category,scenario,operation,backend,iteration,elapsed_ms,cell_count,compatible,selection_count,tree_count,model_count,executed_nodes,skipped_guard_nodes,cache_hits,cache_misses,plan_cache_hits,plan_cache_misses,input_bytes\n";
     for (const auto& row : rows) {
         out << '"' << row.category << '"' << ','
             << '"' << row.scenario << '"' << ','
@@ -472,7 +542,8 @@ bool writeCsv(const QString& csvPath, const std::vector<DagBenchmarkRow>& rows) 
             << row.cacheHits << ','
             << row.cacheMisses << ','
             << row.planCacheHits << ','
-            << row.planCacheMisses << '\n';
+            << row.planCacheMisses << ','
+            << row.inputBytes << '\n';
     }
     return true;
 }
@@ -501,6 +572,8 @@ DagBenchmarkReport runDagBackendBenchmark(const QString& csvPath, int iterations
     };
 
     const int safeIterations = std::max(1, iterations);
+    appendSelectionDerivedRows(report, 2);
+    appendSelectionDerivedRows(report, 4);
     for (const auto& scenario : scenarios) {
         appendTerrainRows(report, scenario, safeIterations);
         appendSceneDerivedRows(report, scenario);

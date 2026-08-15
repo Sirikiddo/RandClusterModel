@@ -1,17 +1,24 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include <QString>
 #include <QVector3D>
 
 #include "TerrainBackendTypes.h"
+#include "generation/MeshGenerators/SelectionOutlineGenerator.h"
 #include "model/HexSphereModel.h"
 
-struct SelectionOutlineSnapshot {
+struct SelectionDagResult {
     std::vector<float> vertices;
+    bool success = false;
+    int inputBytes = 0;
 };
+
+QString serializeSelectionOutlineInput(const SelectionOutlineInput& input);
+std::optional<SelectionOutlineInput> deserializeSelectionOutlineInput(const QString& encoded);
 
 struct ModelPlacementRequest {
     int entityId = -1;
@@ -33,15 +40,11 @@ struct ModelPlacement {
 
 struct SceneDagRequest {
     TerrainSnapshot terrain;
-    std::vector<int> selectedCells;
     float heightStep = 0.0f;
-    float outlineBias = 0.0f;
-    bool smoothOneStep = true;
     std::vector<ModelPlacementRequest> modelRequests;
 };
 
 struct SceneDagResult {
-    SelectionOutlineSnapshot selectionOutline;
     std::vector<TreePlacement> treePlacements;
     std::vector<ModelPlacement> modelPlacements;
 };
@@ -53,6 +56,7 @@ struct DagDebugStats {
     int cacheMisses = 0;
     int planCacheHits = 0;
     int planCacheMisses = 0;
+    int inputBytes = 0;
 };
 
 class DagSceneBackend {
@@ -65,6 +69,7 @@ public:
     DagSceneBackend(const DagSceneBackend&) = delete;
     DagSceneBackend& operator=(const DagSceneBackend&) = delete;
 
+    SelectionDagResult rebuildSelectionOutline(const SelectionOutlineInput& input);
     SceneDagResult rebuild(const SceneDagRequest& request);
     const DagDebugStats& lastStats() const;
 

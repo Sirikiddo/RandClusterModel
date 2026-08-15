@@ -21,6 +21,8 @@ Qt event handlers `HexSphereWidget` ничего не вычисляют: пер
 
 `pickCellAt` по старым normalized `model.pickTris()` существует отдельно, но основной `pickSceneAt` его не использует.
 
+Сложность активного terrain picking линейна по числу triangles. На L6 только базовый terrain содержит не менее 1,2288 млн triangles, к которым добавляются slopes/cliffs. Пространственной acceleration structure и предварительного narrowing сейчас нет.
+
 ## Picking entities
 
 Для каждой пары `Collider + Transform` выполняется ray/sphere intersection. `pickSceneAt` сравнивает ближайший entity hit и terrain hit. Collider — приближённая сфера, не triangle mesh модели.
@@ -46,12 +48,18 @@ flowchart TD
 
 `selectedCells_` — `QSet<int>`. Toggle меняет set и dirty flag. `uploadSelection()`:
 
-1. формирует `SceneDagRequest` со snapshot, sorted selection, visual params и ECS model requests;
-2. получает DAG outline/trees;
-3. сохраняет outline cache в scene;
-4. загружает GL_LINES VBO.
+1. сортирует selected IDs и извлекает из живого `HexSphereModel` только рёбра выбранных клеток;
+2. формирует компактный `SelectionOutlineInput` с edge vectors, высотами и visual params;
+3. вызывает отдельный `EngineFacade::rebuildSelectionOutline()`;
+4. ProcessDAG планирует только `BuildSelectionOutline` и возвращает persistent output;
+5. сохраняет outline cache в scene;
+6. загружает GL_LINES VBO.
 
-Если active building mode, визуализируется не selection set, а `buildPreviewCells_`. DAG всё равно пересчитывается по обычному selection, после чего preview outline строится прямым legacy generator.
+Пустой selection является успешным запросом и очищает VBO. При ошибке DAG используется прямой `SelectionOutlineGenerator`, поэтому stale outline не остаётся. Недействительные cell IDs безопасно отбрасываются при извлечении рёбер.
+
+Если active building mode, визуализируется не selection set, а `buildPreviewCells_`. Preview строится прямым локальным generator, не вызывает selection DAG и не меняет cache обычного outline.
+
+Стоимость outline теперь O(число рёбер выбранных клеток) и не зависит от subdivision level. Клик не вызывает `refreshSceneDagOutputs()`, `captureTerrainSnapshot()`, terrain JSON, topology reconstruction и tree/model decoding.
 
 ## Команды над клетками
 

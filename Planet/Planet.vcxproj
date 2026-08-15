@@ -39,14 +39,14 @@
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
     <QtInstall>6.8.0_msvc2022_64</QtInstall>
-    <QtModules>core;gui;widgets;opengl;openglwidgets</QtModules>
+    <QtModules>core;gui;widgets;opengl;openglwidgets;concurrent</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
     <QtHeaderSearchPath>include</QtHeaderSearchPath>
     <QtLibrarySearchPath>lib</QtLibrarySearchPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
     <QtInstall>6.8.0_msvc2022_64</QtInstall>
-    <QtModules>core;gui;widgets</QtModules>
+    <QtModules>core;gui;widgets;concurrent</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
   </PropertyGroup>
   <Target Name="QtMsBuildNotFound" BeforeTargets="CustomBuild;ClCompile" Condition="!Exists('$(QtMsBuild)\qt.targets') or !Exists('$(QtMsBuild)\qt.props')">
@@ -202,6 +202,7 @@
     <ClInclude Include="renderers\TerrainRenderer.h" />
     <ClInclude Include="renderers\TerrainTessellator.h" />
     <ClInclude Include="renderers\PlanetSurfaceAtlasPass.h" />
+    <ClInclude Include="renderers\SurfaceAtlasMeshBuilder.h" />
     <ClInclude Include="renderers\WaterRenderer.h" />
     <ClInclude Include="ui\HexSphereWidget.h" />
     <ClInclude Include="ui\MainWindow.h" />
@@ -210,6 +211,8 @@
     <ClInclude Include="ui\PlanetSettingsPanel.h" />
     <ClInclude Include="tests\WaterWaveModelTests.h" />
     <ClInclude Include="tests\ClimateBiomeGeneratorTests.h" />
+    <ClInclude Include="tests\SelectionOutlineTests.h" />
+    <ClInclude Include="tests\SurfaceAtlasDistanceTests.h" />
     <ClInclude Include="ECS\Collider.h" />
     <ClInclude Include="ECS\ComponentStorage.h" />
     <ClInclude Include="ECS\Entity.h" />
@@ -271,6 +274,7 @@
     <ClCompile Include="renderers\TerrainRenderer.cpp" />
     <ClCompile Include="renderers\TerrainTessellator.cpp" />
     <ClCompile Include="renderers\PlanetSurfaceAtlasPass.cpp" />
+    <ClCompile Include="renderers\SurfaceAtlasMeshBuilder.cpp" />
     <ClCompile Include="renderers\WaterRenderer.cpp" />
     <ClCompile Include="ui\HexSphereWidget.cpp" />
     <ClCompile Include="ui\MainWindow.cpp" />
@@ -279,6 +283,8 @@
     <ClCompile Include="ui\PlanetSettingsPanel.cpp" />
     <ClCompile Include="tests\WaterWaveModelTests.cpp" />
     <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp" />
+    <ClCompile Include="tests\SelectionOutlineTests.cpp" />
+    <ClCompile Include="tests\SurfaceAtlasDistanceTests.cpp" />
     <ClCompile Include="ECS\ComponentStorage.cpp" />
     <ClCompile Include="scene\Entity.cpp" />
     <ClCompile Include="scene\SceneGraph.cpp" />

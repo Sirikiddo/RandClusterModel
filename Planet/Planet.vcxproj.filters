@@ -216,6 +216,9 @@
     <ClCompile Include="renderers\PlanetSurfaceAtlasPass.cpp">
       <Filter>renderers</Filter>
     </ClCompile>
+    <ClCompile Include="renderers\SurfaceAtlasMeshBuilder.cpp">
+      <Filter>renderers</Filter>
+    </ClCompile>
     <ClCompile Include="renderers\WaterRenderer.cpp">
       <Filter>renderers</Filter>
     </ClCompile>
@@ -238,6 +241,12 @@
       <Filter>tests</Filter>
     </ClCompile>
     <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SelectionOutlineTests.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\SurfaceAtlasDistanceTests.cpp">
       <Filter>tests</Filter>
     </ClCompile>
     <ClCompile Include="ECS\ComponentStorage.cpp">
@@ -371,6 +380,9 @@
     <ClInclude Include="renderers\PlanetSurfaceAtlasPass.h">
       <Filter>renderers</Filter>
     </ClInclude>
+    <ClInclude Include="renderers\SurfaceAtlasMeshBuilder.h">
+      <Filter>renderers</Filter>
+    </ClInclude>
     <ClInclude Include="renderers\WaterRenderer.h">
       <Filter>renderers</Filter>
     </ClInclude>
@@ -393,6 +405,12 @@
       <Filter>tests</Filter>
     </ClInclude>
     <ClInclude Include="tests\ClimateBiomeGeneratorTests.h">
+      <Filter>tests</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\SelectionOutlineTests.h">
+      <Filter>tests</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\SurfaceAtlasDistanceTests.h">
       <Filter>tests</Filter>
     </ClInclude>
     <ClInclude Include="ECS\Collider.h">

@@ -1,5 +1,6 @@
 ﻿#include "DagTerrainBackend.h"
 
+#include <QElapsedTimer>
 #include <QtDebug>
 
 #include <optional>
@@ -341,14 +342,27 @@ TerrainRegenerationResult DagTerrainBackend::regenerateTerrain() {
         return TerrainRegenerationResult::failure("Terrain bridge is not attached");
     }
 
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    QElapsedTimer stageTimer;
+    stageTimer.start();
     auto snapshot = impl_->regenerateViaDag();
+    const double dagMs = stageTimer.nsecsElapsed() / 1000000.0;
     if (!snapshot) {
         qWarning() << "DagTerrainBackend terrain regeneration failed";
         return TerrainRegenerationResult::failure("DAG terrain regeneration failed");
     }
 
     impl_->syncFromSnapshot(*snapshot);
+    stageTimer.restart();
     impl_->bridge->projectTerrainSnapshot(*snapshot);
+    const double projectionMs = stageTimer.nsecsElapsed() / 1000000.0;
+    qInfo().nospace()
+        << "[Perf][Generation] stage=terrain_backend_total level=" << snapshot->subdivisionLevel
+        << " cells=" << snapshot->cells.size()
+        << " dag_ms=" << dagMs
+        << " projection_ms=" << projectionMs
+        << " total_ms=" << totalTimer.nsecsElapsed() / 1000000.0;
     return TerrainRegenerationResult::success();
 }
 

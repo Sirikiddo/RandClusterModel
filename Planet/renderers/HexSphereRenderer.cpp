@@ -1,6 +1,7 @@
 ﻿#include "renderers/HexSphereRenderer.h"
 
 #include <QOpenGLWidget>
+#include <QElapsedTimer>
 #include <QtDebug>
 #include <QDir>
 #include <QFile>
@@ -930,17 +931,45 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
     qDebug() << "uploadScene called, setting lastScene_";
     lastScene_ = const_cast<HexSphereSceneController*>(&scene);
 
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    double wireMs = 0.0;
+    double terrainMs = 0.0;
+    double atlasMs = 0.0;
+    double overlaysMs = 0.0;
+    double waterMs = 0.0;
     withContext([&]() {
+        QElapsedTimer stageTimer;
+        stageTimer.start();
         uploadWireInternal(scene.buildWireVertices(), options.wireUsage);
+        wireMs = stageTimer.nsecsElapsed() / 1000000.0;
+        stageTimer.restart();
         uploadTerrainInternal(scene.terrain(), options.terrainUsage);
+        terrainMs = stageTimer.nsecsElapsed() / 1000000.0;
+        stageTimer.restart();
         rebuildPlanetSurfaceAtlas(scene.terrain(), scene.model());
+        atlasMs = stageTimer.nsecsElapsed() / 1000000.0;
+        stageTimer.restart();
         uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
         uploadPathInternal({});
+        overlaysMs = stageTimer.nsecsElapsed() / 1000000.0;
         if (uploadedWaterProxyRevision_ != scene.waterProxyRevision()) {
+            stageTimer.restart();
             uploadWaterInternal(scene.waterGeometry());
+            waterMs = stageTimer.nsecsElapsed() / 1000000.0;
             uploadedWaterProxyRevision_ = scene.waterProxyRevision();
         }
         });
+    qInfo().nospace()
+        << "[Perf][Generation] stage=renderer_upload_scene level=" << scene.subdivisionLevel()
+        << " terrain_triangles=" << scene.terrain().idx.size() / 3u
+        << " water_triangles=" << scene.waterGeometry().indices.size() / 3u
+        << " wire_ms=" << wireMs
+        << " terrain_gpu_upload_ms=" << terrainMs
+        << " atlas_update_ms=" << atlasMs
+        << " overlays_ms=" << overlaysMs
+        << " water_gpu_upload_ms=" << waterMs
+        << " total_ms=" << totalTimer.nsecsElapsed() / 1000000.0;
     qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
         << "(terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
 }

@@ -1,6 +1,7 @@
 ﻿#include "controllers/InputController.h"
 
 #include <QKeyEvent>
+#include <QElapsedTimer>
 #include <QMouseEvent>
 #include <QOpenGLContext>
 #include <QOpenGLVersionFunctionsFactory>
@@ -17,6 +18,7 @@
 #include "controllers/PathBuilder.h"
 #include "dag/EngineFacade.h"
 #include "ECS/Transform.h"
+#include "generation/MeshGenerators/SelectionOutlineGenerator.h"
 #include "model/SurfacePlacement.h"
 
 namespace {
@@ -544,6 +546,8 @@ InputController::Response InputController::setSubdivisionLevel(int L) {
         return contributorModeResponse();
     }
     if (scene_.subdivisionLevel() != L) {
+        QElapsedTimer totalTimer;
+        totalTimer.start();
         stats_.setSubdivisionLevel(L);
         updateBufferUsageStrategy(L);
         if (engine_) {
@@ -560,6 +564,10 @@ InputController::Response InputController::setSubdivisionLevel(int L) {
         refreshEntityTransformsForTerrain();
         refreshBuildPreview();
         uploadBuffers();
+        qInfo().nospace()
+            << "[Perf][Generation] stage=set_subdivision_total level=" << L
+            << " cells=" << scene_.model().cells().size()
+            << " total_ms=" << totalTimer.nsecsElapsed() / 1000000.0;
         response.requestUpdate = true;
     }
     return response;
@@ -629,6 +637,8 @@ InputController::Response InputController::regenerateTerrain() {
     if (isContributorMode()) {
         return contributorModeResponse();
     }
+    QElapsedTimer totalTimer;
+    totalTimer.start();
     if (engine_) {
         const auto result = engine_->regenerateTerrain();
         if (!result) {
@@ -642,6 +652,10 @@ InputController::Response InputController::regenerateTerrain() {
     refreshEntityTransformsForTerrain();
     refreshBuildPreview();
     uploadBuffers();
+    qInfo().nospace()
+        << "[Perf][Generation] stage=regenerate_total level=" << scene_.subdivisionLevel()
+        << " cells=" << scene_.model().cells().size()
+        << " total_ms=" << totalTimer.nsecsElapsed() / 1000000.0;
     response.requestUpdate = true;
     return response;
 }
@@ -702,6 +716,7 @@ void InputController::rebuildModel(Response& response) {
     syncPathBackendFromScene();
     uploadBuffers();
     refreshBuildPreview();
+    uploadSelection();
     response.requestUpdate = true;
 }
 
@@ -715,20 +730,63 @@ void InputController::rebuildDerivedGeometry(Response& response) {
 }
 
 void InputController::uploadSelection() {
-    refreshSceneDagOutputs();
+    if (isBuildingPlacementMode()) {
+        if (renderer_) {
+            renderer_->uploadSelectionOutline(scene_.buildOutlineVerticesForCells(buildPreviewCells_));
+        }
+        return;
+    }
+
+    const SelectionOutlineInput input = SelectionOutlineGenerator::buildSelectionOutlineInput(
+        scene_.model(),
+        scene_.selectedCells(),
+        scene_.heightStep(),
+        scene_.outlineBias(),
+        scene_.smoothOneStep());
+
+    std::vector<float> vertices;
+    if (engine_ && !isContributorMode()) {
+        SelectionDagResult result = engine_->rebuildSelectionOutline(input);
+        if (result.success) {
+            vertices = std::move(result.vertices);
+        }
+        else {
+            qWarning() << "Selection DAG failed; using the direct outline generator";
+            vertices = SelectionOutlineGenerator::buildSelectionOutlineVertices(input);
+        }
+    }
+    else {
+        vertices = SelectionOutlineGenerator::buildSelectionOutlineVertices(input);
+    }
+
+    scene_.setSelectionOutlineVertices(std::move(vertices));
     if (renderer_) {
-        const auto vertices = isBuildingPlacementMode()
-            ? scene_.buildOutlineVerticesForCells(buildPreviewCells_)
-            : scene_.buildSelectionOutlineVertices();
-        renderer_->uploadSelectionOutline(vertices);
+        renderer_->uploadSelectionOutline(scene_.buildSelectionOutlineVertices());
     }
 }
 
 void InputController::uploadBuffers() {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    QElapsedTimer stageTimer;
+    stageTimer.start();
     refreshSceneDagOutputs();
+    const double sceneDagMs = stageTimer.nsecsElapsed() / 1000000.0;
+    stageTimer.restart();
     if (renderer_) {
         renderer_->uploadScene(scene_, uploadOptions_);
     }
+    const double rendererUploadMs = stageTimer.nsecsElapsed() / 1000000.0;
+    const DagDebugStats stats = engine_ ? engine_->lastSceneDagStats() : DagDebugStats{};
+    qInfo().nospace()
+        << "[Perf][Generation] stage=upload_buffers level=" << scene_.subdivisionLevel()
+        << " cells=" << scene_.model().cells().size()
+        << " terrain_triangles=" << scene_.terrain().idx.size() / 3u
+        << " scene_dag_ms=" << sceneDagMs
+        << " scene_dag_input_bytes=" << stats.inputBytes
+        << " scene_dag_executed=" << stats.executedNodes
+        << " renderer_upload_ms=" << rendererUploadMs
+        << " total_ms=" << totalTimer.nsecsElapsed() / 1000000.0;
 }
 
 void InputController::refreshSceneDagOutputs() {
@@ -739,13 +797,6 @@ void InputController::refreshSceneDagOutputs() {
     SceneDagRequest request;
     request.terrain = scene_.captureTerrainSnapshot();
     request.heightStep = scene_.heightStep();
-    request.outlineBias = scene_.outlineBias();
-    request.smoothOneStep = scene_.smoothOneStep();
-    request.selectedCells.reserve(static_cast<size_t>(scene_.selectedCells().size()));
-    for (int cellId : scene_.selectedCells()) {
-        request.selectedCells.push_back(cellId);
-    }
-    std::sort(request.selectedCells.begin(), request.selectedCells.end());
 
     ecs_.each<ecs::Mesh, ecs::Transform>([&](const ecs::Entity& entity, const ecs::Mesh& mesh, const ecs::Transform&) {
         ModelPlacementRequest placement;
@@ -758,12 +809,6 @@ void InputController::refreshSceneDagOutputs() {
         });
 
     SceneDagResult result = engine_->rebuildSceneDerived(request);
-
-    // Keep the legacy selection outline path as a fallback so the UI does not
-    // lose cell highlighting if the scene DAG skips or returns an empty result.
-    if (request.selectedCells.empty() || !result.selectionOutline.vertices.empty()) {
-        scene_.setSelectionOutlineVertices(std::move(result.selectionOutline.vertices));
-    }
     if (!result.treePlacements.empty() || scene_.getTreePlacements().empty()) {
         scene_.setTreePlacements(std::move(result.treePlacements));
     }

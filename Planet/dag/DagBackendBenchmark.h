@@ -22,6 +22,7 @@ struct DagBenchmarkRow {
     int cacheMisses = 0;
     int planCacheHits = 0;
     int planCacheMisses = 0;
+    int inputBytes = 0;
 };
 
 struct DagBenchmarkReport {

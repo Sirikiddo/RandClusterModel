@@ -38,15 +38,17 @@
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
     <QtInstall>680</QtInstall>
-    <QtModules>core;gui;widgets;opengl;openglwidgets</QtModules>
+    <QtModules>core;gui;widgets;opengl;openglwidgets;concurrent</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
     <QtHeaderSearchPath>include</QtHeaderSearchPath>
     <QtLibrarySearchPath>lib</QtLibrarySearchPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
-    <QtInstall>msvc2022_64</QtInstall>
-    <QtModules>core;gui;widgets</QtModules>
+    <QtInstall>680</QtInstall>
+    <QtModules>core;gui;widgets;opengl;openglwidgets;concurrent</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
+    <QtHeaderSearchPath>include</QtHeaderSearchPath>
+    <QtLibrarySearchPath>lib</QtLibrarySearchPath>
   </PropertyGroup>
   <Target Name="QtMsBuildNotFound" BeforeTargets="CustomBuild;ClCompile" Condition="!Exists('$(QtMsBuild)\qt.targets') or !Exists('$(QtMsBuild)\qt.props')">
     <Message Importance="High" Text="QtMsBuild: could not locate qt.targets, qt.props; project may not build correctly." />
@@ -69,6 +71,20 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir)glm;$(ProjectDir)include;$(ProjectDir)third_party\ProcessDAG\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalModuleDependencies>$(ProjectDir)third_party\ProcessDAG\proc\Proc.ixx;$(ProjectDir)third_party\ProcessDAG\proc\Proc.Core.ixx;$(ProjectDir)third_party\ProcessDAG\proc\Proc.Schema.ixx;%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
+      <BuildStlModules>false</BuildStlModules>
+      <EnableModules>false</EnableModules>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>glew32.lib;glfw3dll.lib;opengl32.lib;freetype.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <AdditionalIncludeDirectories>$(ProjectDir)glm;$(ProjectDir)include;$(ProjectDir)third_party\ProcessDAG\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -156,6 +172,7 @@
     <ClCompile Include="renderers\TerrainTessellator.cpp" />
     <ClCompile Include="renderers\WaterRenderer.cpp" />
     <ClCompile Include="renderers\PlanetSurfaceAtlasPass.cpp" />
+    <ClCompile Include="renderers\SurfaceAtlasMeshBuilder.cpp" />
     <ClCompile Include="scene\Entity.cpp" />
     <ClCompile Include="scene\SceneGraph.cpp" />
     <ClCompile Include="third_party\ProcessDAG\boundary\Logger.cpp" />
@@ -171,6 +188,8 @@
     <ClCompile Include="ui\PerformanceStats.cpp" />
     <ClCompile Include="ui\PlanetSettingsPanel.cpp" />
     <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp" />
+    <ClCompile Include="tests\SelectionOutlineTests.cpp" />
+    <ClCompile Include="tests\SurfaceAtlasDistanceTests.cpp" />
     <ClCompile Include="tests\WaterWaveModelTests.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -226,8 +245,11 @@
     <ClInclude Include="renderers\TerrainTessellator.h" />
     <ClInclude Include="renderers\WaterRenderer.h" />
     <ClInclude Include="renderers\PlanetSurfaceAtlasPass.h" />
+    <ClInclude Include="renderers\SurfaceAtlasMeshBuilder.h" />
     <ClInclude Include="resources\HexSphereWidget_shaders.h" />
     <ClInclude Include="tests\ClimateBiomeGeneratorTests.h" />
+    <ClInclude Include="tests\SelectionOutlineTests.h" />
+    <ClInclude Include="tests\SurfaceAtlasDistanceTests.h" />
     <ClInclude Include="tests\WaterWaveModelTests.h" />
     <ClInclude Include="scene\Entity.h" />
     <ClInclude Include="scene\Interaction.h" />

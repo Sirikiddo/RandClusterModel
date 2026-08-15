@@ -8,17 +8,13 @@
 #include <vector>
 
 #include "renderers/TerrainTessellator.h"
+#include "renderers/SurfaceAtlasMeshBuilder.h"
 
 class HexSphereModel;
 
 class PlanetSurfaceAtlasPass {
 public:
-    struct BuildStats {
-        int keptTriangles = 0;
-        int culledTriangles = 0;
-        int shorelineArcCount = 0;
-        float maximumSeaDepth = 0.0f;
-    };
+    using BuildStats = SurfaceAtlasBuildStats;
 
     PlanetSurfaceAtlasPass() = default;
     ~PlanetSurfaceAtlasPass() = default;

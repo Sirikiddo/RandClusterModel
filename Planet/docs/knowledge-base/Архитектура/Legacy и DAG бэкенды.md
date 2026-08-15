@@ -73,14 +73,18 @@ Backend создаёт `DefaultDagEngine` на regeneration, `init` inputs → `
 
 | Node | Зависимости | Output |
 |---|---|---|
-| `BuildSelectionOutline` | terrain + selected + visual | float array линий |
+| `BuildSelectionOutline` | `selectionInput` + `selectionDirty` | float array линий + success |
 | `BuildTreePlacements` | terrain | placements деревьев |
 | `BuildModelPlacements` | terrain + visual + ECS requests | позиция/up сущностей |
 
-Dirty определяется сравнением строковых ключей с предыдущим запросом. Внутри каждого executor есть `unordered_map` cache по полному ключу. Дополнительно ProcessDAG ведёт plan cache. Статистика попадает в нижний overlay.
+Selection и scene-derived имеют отдельные API и отдельные requested outputs при `flush_prepare`. `rebuildSelectionOutline()` не передаёт terrain и не планирует tree/model nodes. `rebuild()` для trees/models, наоборот, не запрашивает и не декодирует selection output.
+
+Selection dirty определяется сравнением компактной сериализации текущих edge inputs с `lastSelectionKey`. Неограниченный `selectionCache` удалён: при совпадении guard пропускает node, а ProcessDAG возвращает persistent предыдущий output. Tree/model caches и их полные terrain keys пока сохранены и остаются отдельным техдолгом.
 
 > [!warning] Неполная интеграция
-> `InputController::refreshSceneDagOutputs()` применяет selection outline и tree placements, но игнорирует `result.modelPlacements`. Позиции ECS всё ещё рассчитываются напрямую через `computeSurfacePoint`.
+> `InputController::refreshSceneDagOutputs()` применяется только из полного `uploadBuffers()` и обновляет tree placements, но игнорирует `result.modelPlacements`. Позиции ECS всё ещё рассчитываются напрямую через `computeSurfacePoint`.
+
+Влияние этих boundaries на L4+ и план перехода к topology handles, revisions и typed payload описаны в [[Эксплуатация/Аудит производительности высоких subdivision]].
 
 ## Что означает «legacy backend» в проекте
 
