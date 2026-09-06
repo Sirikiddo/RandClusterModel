@@ -43,9 +43,14 @@ namespace {
 
     bool isWheelSubMesh(const QString& objectName, const QString& materialName) {
         const QString combined = (objectName + " " + materialName).toLower();
+        if (objectName.contains("trims", Qt::CaseInsensitive)) {
+            return false;
+        }
+
         if (combined.contains("calip")) {
             return false;
         }
+
         return hasWheelTag(objectName) || hasWheelTag(materialName);
     }
 
@@ -528,12 +533,34 @@ bool CarModelHandler::loadFromFile(const QString& path) {
     }
 
     finalizePlacementFromWheelLayout();
+    // ===== ЛОГИРОВАНИЕ САБМЕШЕЙ =====
+    qDebug() << "=== CAR MODEL SUBMESHES ===";
+    qDebug() << "Total submeshes:" << meshes_.size();
+
+    for (size_t i = 0; i < meshes_.size(); ++i) {
+        const auto& sub = meshes_[i];
+        qDebug() << "Submesh" << i << ":";
+        qDebug() << "  Object name:" << sub.objectName;
+        qDebug() << "  Material name:" << sub.materialName;
+        qDebug() << "  isWheel:" << (sub.isWheel ? "YES" : "NO");
+        qDebug() << "  Vertices:" << sub.positions.size() / 3;
+        qDebug() << "  Indices:" << sub.indices.size() / 3;
+        if (sub.isWheel) {
+            qDebug() << "  Local center:" << sub.localCenter;
+            qDebug() << "  Local spin axis:" << sub.localSpinAxis;
+            qDebug() << "  Wheel radius:" << sub.localWheelRadius;
+        }
+        qDebug() << "---";
+    }
+    qDebug() << "=== END CAR MODEL SUBMESHES ===";
+
+
     path_ = normalized;
     loadMaterials(normalized);
     return true;
 }
 
-// �������� ����� loadMaterials �� ����:
+//                loadMaterials        :
 void CarModelHandler::loadMaterials(const QString& objPath) {
     QFileInfo objInfo(objPath);
     QString mtlPath = materialLibraryPath_.isEmpty()
@@ -740,7 +767,7 @@ void CarModelHandler::draw(GLuint shader,
 
     const QMatrix4x4 viewProjection = mvp * modelMatrix.inverted();
 
-    // ������������� uColor per-submesh �� Kd (���� �������� ��� � ����� ��������� ���� MTL).
+    //               uColor per-submesh    Kd (                                         MTL).
 
     for (auto& sub : meshes_) {
         if (sub.indexCount == 0) continue;
@@ -757,11 +784,11 @@ void CarModelHandler::draw(GLuint shader,
         if (uModel >= 0) glUniformMatrix4fv(uModel, 1, GL_FALSE, subModel.constData());
 
         // Lazy texture load:
-        // � ��������� ��������� �������� ����� �� ������ ������������ � uploadToGPU().
-        // �����, ����� ��������� �������� ����� �������, ��������� ��� �������������.
+        //                                                               uploadToGPU().
+        //      ,                                       ,                            .
         if (sub.textureId == 0 && !sub.texturePath.isEmpty()) {
-            // Note: loadTexture ���������� QOpenGLContext::currentContext().
-            // ���� ��������� ��� � �������� 0, � shader ������ fallback.
+            // Note: loadTexture            QOpenGLContext::currentContext().
+            //                               0,   shader        fallback.
             sub.textureId = loadTexture(sub.texturePath);
         }
 
@@ -781,11 +808,11 @@ void CarModelHandler::draw(GLuint shader,
 
         if (uUseTexture >= 0) {
             // Используем текстуры, если они есть
-            // �����: �������� ������ �������� ��� UV.
-            // ���� vboUV �� ������ (��� texcoords), vUV � ��������� ������� ����� �����������������,
-            // � ����� �������� ����� ��������� ��� "���������".
-            // ������������� �� ������� texcoords � �������� ���������.
-            // ��� �������, ��� ��������� vboUV (�� ������� �� ����, ����� �� ����������� �����).
+            //      :                              UV.
+            //      vboUV           (    texcoords), vUV                                            ,
+            //                                      "         ".
+            //                          texcoords                     .
+            //            ,               vboUV (                  ,                           ).
             int useTex = (sub.textureId != 0 && sub.hasTexcoords) ? 1 : 0;
             glUniform1i(uUseTexture, useTex);
 

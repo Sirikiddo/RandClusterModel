@@ -1032,6 +1032,8 @@ void HexSphereRenderer::renderPlanetTreeParticles(const RenderContext& ctx) {
         return;
     }
 
+    const float modelScale = ctx.graph.scene.getModelScaleFactor();
+
     constexpr size_t kMaxTreesWithParticles = 96;
     constexpr size_t kMaxParticlesTotal = 30000;
     const size_t treeCount = std::min(placements.size(), kMaxTreesWithParticles);
@@ -1040,7 +1042,7 @@ void HexSphereRenderer::renderPlanetTreeParticles(const RenderContext& ctx) {
     auto hashCombine = [&placementHash](uint64_t value) {
         placementHash ^= value;
         placementHash *= 1099511628211ull;
-    };
+        };
 
     hashCombine(static_cast<uint64_t>(treeCount));
     for (size_t i = 0; i < treeCount; ++i) {

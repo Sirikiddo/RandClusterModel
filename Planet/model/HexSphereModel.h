@@ -102,6 +102,10 @@ struct TreePlacement {
     float worldScale = 1.0f;
 
     QVector3D getPosition(const HexSphereModel& model) const;
+    // Метод для применения масштаба подразбиения
+    void applyGlobalScale(float globalScale) {
+        scale *= globalScale;
+    }
 };
 
 // Dual (hex/pent) sphere data

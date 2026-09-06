@@ -174,6 +174,8 @@ void EntityRenderer::renderEntities(const HexSphereRenderer::RenderContext& ctx)
 void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, const ecs::Entity& entity) const {
     if (!carModel_ || !carModel_->isReady()) return;
 
+    const float modelScale = ctx.graph.scene.getModelScaleFactor(); // Для изменения масштаба
+
     QVector3D surfacePos;
     if (entity.currentCell >= 0) {
         surfacePos = computeSurfacePoint(ctx.graph.scene, entity.currentCell, ctx.graph.heightStep, 0.0f);
@@ -217,7 +219,7 @@ void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, cons
     model = model * basisFromHorizontalForward(up, forwardTangent);
     model = model * carModel_->localAlignment();
 
-    const float carScale = 0.035f;
+    const float carScale = 0.035f * modelScale;  // Умножаем базовый масштаб на коэффициент
     model.scale(carScale);
 
     if (entity.selected) {
@@ -284,6 +286,8 @@ void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, cons
 
 void EntityRenderer::renderFactory(const HexSphereRenderer::RenderContext& ctx, const ecs::Entity& entity) const {
     if (!factoryModel_ || !factoryModel_->isReady() || progFactory_ == 0) return;
+
+    const float modelScale = ctx.graph.scene.getModelScaleFactor();
     if (steamVao_ == 0) {
         const_cast<EntityRenderer*>(this)->initializeSteamResources();
     }
@@ -298,7 +302,7 @@ void EntityRenderer::renderFactory(const HexSphereRenderer::RenderContext& ctx, 
         else return;
     }
 
-    const float heightOffset = -0.04f;
+    const float heightOffset = -0.04f * modelScale;
     QVector3D elevatedPos = surfacePos.normalized() * (surfacePos.length() + heightOffset);
 
     const GLboolean depthTestWasEnabled = gl_->glIsEnabled(GL_DEPTH_TEST);
@@ -322,7 +326,9 @@ void EntityRenderer::renderFactory(const HexSphereRenderer::RenderContext& ctx, 
     }
 
     model = model * basisFromHorizontalForward(elevatedPos.normalized(), forwardTangent);
-    model.scale(0.008f);
+
+    const float factoryScale = 0.008f * modelScale;
+    model.scale(factoryScale);
     model = model * factoryModel_->localPlacement();
 
     if (entity.selected) {
@@ -381,6 +387,8 @@ void EntityRenderer::renderFactory(const HexSphereRenderer::RenderContext& ctx, 
 void EntityRenderer::renderMine(const HexSphereRenderer::RenderContext& ctx, const ecs::Entity& entity) const {
     if (!mineModel_ || !mineModel_->isReady() || progFactory_ == 0) return;
 
+    const float modelScale = ctx.graph.scene.getModelScaleFactor();
+
     QVector3D surfacePos;
     if (entity.currentCell >= 0) {
         surfacePos = computeSurfacePoint(ctx.graph.scene, entity.currentCell, ctx.graph.heightStep, 0.0f);
@@ -415,7 +423,9 @@ void EntityRenderer::renderMine(const HexSphereRenderer::RenderContext& ctx, con
     }
 
     model = model * basisFromHorizontalForward(elevatedPos.normalized(), forwardTangent);
-    model.scale(0.008f);
+    
+    const float mineScale = 0.008f * modelScale;
+    model.scale(mineScale);
     model = model * mineModel_->localPlacement();
 
     if (entity.selected) {

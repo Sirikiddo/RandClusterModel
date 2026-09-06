@@ -389,6 +389,21 @@ float HexSphereSceneController::cellSize() const {
     else return baseForL2 * std::pow(factor, L_ - 2);
 }
 
+float HexSphereSceneController::getModelScaleFactor() const {
+    // Базовый размер ячейки относительно L=2
+    const float baseCellSize = cellSize();
+
+    // Используем степенную функцию для более сильного масштабирования
+    const float powerScale = std::pow(baseCellSize, 1.4f);
+
+    // Ограничения, чтобы модели не исчезали и не выходили за пределы
+    constexpr float kMinScale = 0.15f;
+    constexpr float kMaxScale = 3.5f;
+    const float clampedScale = std::clamp(powerScale, kMinScale, kMaxScale);
+
+    return clampedScale;
+}
+
 bool HexSphereSceneController::isCellOccupiedByTree(int cellId) const {
     return std::any_of(treePlacements_.begin(), treePlacements_.end(),
         [cellId](const TreePlacement& p) { return p.cellId == cellId; });
@@ -420,6 +435,7 @@ void HexSphereSceneController::generateTreePlacements() {
     }
 
     const auto& cells = model_.cells();
+    const float modelScale = getModelScaleFactor();
 
     const uint32_t deterministicSeed =
         genParams_.seed ^
@@ -501,6 +517,7 @@ void HexSphereSceneController::generateTreePlacements() {
         TreePlacement placement;
         placement.cellId = static_cast<int>(i);
         placement.treeType = treeTypeToPlace;
+        placement.scale *= modelScale;
 
         if (!cell.poly.empty()) {
             std::uniform_int_distribution<int> distTri(0, static_cast<int>(cell.poly.size()) - 1);

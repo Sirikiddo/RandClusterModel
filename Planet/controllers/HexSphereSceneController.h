@@ -102,6 +102,7 @@ public:
     float pathBias() const { return pathBias_; }
 
     float cellSize() const;
+    float getModelScaleFactor() const;
     bool isCellOccupiedByTree(int cellId) const;
     const std::vector<TreePlacement>& getTreePlacements() const { return treePlacements_; }
     void generateTreePlacements();
