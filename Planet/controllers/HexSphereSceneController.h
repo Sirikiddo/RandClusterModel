@@ -75,6 +75,7 @@ public:
     void setTreePlacements(std::vector<TreePlacement> placements);
 
     std::vector<QVector3D> buildPathPolyline(const std::vector<int>& path) const;
+    std::vector<float> buildRoadMesh(const std::vector<int>& path) const;
 
     std::vector<float> buildWireVertices() const;
     std::vector<float> buildSelectionOutlineVertices() const;
@@ -196,6 +197,8 @@ public:
     }
     void setVisibilityConfig(const VisibilityConfig& config) { visibilityConfig_ = config; }
     const VisibilityConfig& getVisibilityConfig() const { return visibilityConfig_; }
+    void rebuildPickTris();
+    int findCellByPosition(const QVector3D& position) const;
 
 private:
     float autoHeightStep() const;

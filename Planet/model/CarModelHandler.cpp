@@ -533,27 +533,6 @@ bool CarModelHandler::loadFromFile(const QString& path) {
     }
 
     finalizePlacementFromWheelLayout();
-    // ===== ЛОГИРОВАНИЕ САБМЕШЕЙ =====
-    qDebug() << "=== CAR MODEL SUBMESHES ===";
-    qDebug() << "Total submeshes:" << meshes_.size();
-
-    for (size_t i = 0; i < meshes_.size(); ++i) {
-        const auto& sub = meshes_[i];
-        qDebug() << "Submesh" << i << ":";
-        qDebug() << "  Object name:" << sub.objectName;
-        qDebug() << "  Material name:" << sub.materialName;
-        qDebug() << "  isWheel:" << (sub.isWheel ? "YES" : "NO");
-        qDebug() << "  Vertices:" << sub.positions.size() / 3;
-        qDebug() << "  Indices:" << sub.indices.size() / 3;
-        if (sub.isWheel) {
-            qDebug() << "  Local center:" << sub.localCenter;
-            qDebug() << "  Local spin axis:" << sub.localSpinAxis;
-            qDebug() << "  Wheel radius:" << sub.localWheelRadius;
-        }
-        qDebug() << "---";
-    }
-    qDebug() << "=== END CAR MODEL SUBMESHES ===";
-
 
     path_ = normalized;
     loadMaterials(normalized);

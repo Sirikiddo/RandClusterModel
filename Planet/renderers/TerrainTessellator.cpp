@@ -589,3 +589,36 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
     surfaceModel_ = nullptr;
     return M;
 }
+
+void TerrainTessellator::updateOreData(TerrainMesh& mesh, const HexSphereModel& model) {
+    const auto& cells = model.cells();
+
+    // Проходим по всем треугольникам
+    for (size_t tri = 0; tri < mesh.triOwner.size(); ++tri) {
+        int ownerId = mesh.triOwner[tri];
+        if (ownerId < 0 || ownerId >= static_cast<int>(cells.size())) {
+            continue;
+        }
+
+        const Cell& cell = cells[static_cast<size_t>(ownerId)];
+
+        float oreDensity = 0.0f;
+        float oreType = 0.0f;
+
+        if (cell.biome == Biome::Rock && cell.oreType != OreType::None && cell.oreDensity > 0.0f) {
+            oreDensity = std::clamp(cell.oreDensity, 0.0f, 1.0f);
+            oreType = static_cast<float>(cell.oreType);
+        }
+
+        // Обновляем ore-данные для 3 вершин треугольника
+        size_t baseIndex = tri * 6;  // 2 float'а на вершину * 3 вершины
+        if (baseIndex + 5 < mesh.ore.size()) {
+            mesh.ore[baseIndex + 0] = oreDensity;
+            mesh.ore[baseIndex + 1] = oreType;
+            mesh.ore[baseIndex + 2] = oreDensity;
+            mesh.ore[baseIndex + 3] = oreType;
+            mesh.ore[baseIndex + 4] = oreDensity;
+            mesh.ore[baseIndex + 5] = oreType;
+        }
+    }
+}

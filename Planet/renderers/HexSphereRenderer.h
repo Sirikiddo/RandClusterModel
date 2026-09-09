@@ -83,6 +83,7 @@ public:
     void uploadTerrain(const TerrainMesh& mesh, GLenum usage);
     void uploadSelectionOutline(const std::vector<float>& vertices);
     void uploadPath(const std::vector<QVector3D>& points);
+    void uploadRoad(const std::vector<float>& vertices);
     void uploadScene(const HexSphereSceneController& scene, const UploadOptions& options);
     void uploadTerrainHydrology(const HexSphereSceneController& scene, GLenum terrainUsage);
 
@@ -106,6 +107,8 @@ public:
         std::swap(currentBuffer_, nextBuffer_);
         buffers_[nextBuffer_].ready = false;
     }
+
+    void updateTerrainOreData(const TerrainMesh& mesh);
 
 private:
     GLuint makeProgram(const QByteArray& vs, const QByteArray& fs);
@@ -166,6 +169,12 @@ private:
     GLsizei pyramidVertexCount_ = 0;
     GLsizei waterIndexCount_ = 0;
     uint64_t uploadedWaterProxyRevision_ = 0;
+
+    GLuint vaoRoad_ = 0;
+    GLuint vboRoad_ = 0;
+    GLsizei roadVertexCount_ = 0;
+    GLint uRoadColor_ = -1;
+    GLint uIsRoad_ = -1;
 
     std::shared_ptr<ModelHandler> treeModel_;
     std::shared_ptr<ModelHandler> firTreeModel_;

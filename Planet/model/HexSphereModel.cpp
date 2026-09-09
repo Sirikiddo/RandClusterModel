@@ -328,3 +328,31 @@ QVector3D HexSphereModel::biomeColor(Biome b, float temperature) {
 
     return baseColor + tempAdjust;
 }
+
+
+void HexSphereModel::rebuildPickTris() {
+    pickTris_.clear();
+    pickTris_.reserve(cells_.size() * 6);
+
+    for (const auto& cell : cells_) {
+        if (cell.poly.size() < 3) continue;
+
+        QVector3D center(0, 0, 0);
+        for (int f : cell.poly) {
+            center += dualVerts_[static_cast<size_t>(f)];
+        }
+        center /= float(cell.poly.size());
+        if (!center.isNull()) center.normalize();
+
+        for (size_t i = 0; i < cell.poly.size(); ++i) {
+            int i0 = cell.poly[i];
+            int i1 = cell.poly[(i + 1) % cell.poly.size()];
+            PickTri pt;
+            pt.cellId = cell.id;
+            pt.v0 = center;
+            pt.v1 = dualVerts_[static_cast<size_t>(i0)];
+            pt.v2 = dualVerts_[static_cast<size_t>(i1)];
+            pickTris_.push_back(pt);
+        }
+    }
+}

@@ -18,6 +18,7 @@
 #include "dag/EngineFacade.h"
 #include "ECS/Transform.h"
 #include "model/SurfacePlacement.h"
+#include "core/PlayerResources.h"
 
 namespace {
 
@@ -216,7 +217,11 @@ void InputController::initialize(QOpenGLWidget* owner) {
         ecs::Transform& transform = ecs_.emplace<ecs::Transform>(explorer.id);
         const QVector3D surfacePosition = computeSurfacePoint(scene_, startCell, scene_.heightStep(), kEntitySurfaceOffset);
         transform.position = ecs::localToWorldPoint(transform, ecs::CoordinateFrame{}, surfacePosition);
-        ecs_.emplace<ecs::Collider>(explorer.id).radius = 0.20f;
+
+        // ===== ИСПРАВЛЕНИЕ: радиус коллайдера с учётом масштаба =====
+        const float modelScale = scene_.getModelScaleFactor();
+        ecs_.emplace<ecs::Collider>(explorer.id).radius = 0.20f * modelScale;
+        qDebug() << "Explorer collider radius:" << 0.20f * modelScale;
         qDebug() << "Explorer car initialized on visible cell" << startCell << "at" << surfacePosition;
     }
 
@@ -271,7 +276,35 @@ InputController::Response InputController::mousePress(QMouseEvent* e) {
             return placeBuildingOnCell(hit->cellId);
         }
 
+        // ===== ИЗМЕНЕНИЕ: если кликнули на рудник - выделяем ячейку =====
         if (hit->isEntity) {
+            // Проверяем, является ли сущность рудником
+            const auto* mesh = ecs_.get<ecs::Mesh>(hit->entityId);
+            if (mesh && mesh->meshId == "mine") {
+                // Для рудника выделяем ячейку, а не сущность
+                const auto* entity = ecs_.getEntity(hit->entityId);
+                if (entity && entity->currentCell >= 0) {
+                    // Очищаем предыдущее выделение сущности
+                    if (selectedEntityId_ != -1) {
+                        ecs_.setSelected(selectedEntityId_, false);
+                        selectedEntityId_ = -1;
+                    }
+
+                    // Выделяем ячейку
+                    scene_.clearSelection();
+                    scene_.toggleCellSelection(entity->currentCell);
+                    uploadSelection();
+
+                    const auto& cells = scene_.model().cells();
+                    if (entity->currentCell < static_cast<int>(cells.size())) {
+                        response.hudMessage = cellOreHudText(cells[static_cast<size_t>(entity->currentCell)]);
+                    }
+                    response.requestUpdate = true;
+                    return response;
+                }
+            }
+
+            // Для остальных сущностей - стандартное выделение
             selectEntity(hit->entityId, response);
         }
         else if (hit->cellId >= 0) {
@@ -378,7 +411,7 @@ InputController::Response InputController::executeCommand(SceneCommand command) 
     auto selectedEntity = [&]() -> ecs::Entity* {
         auto selected = ecs_.selectedEntity();
         return selected ? &selected->get() : nullptr;
-    };
+        };
 
     auto requireSelectedCells = [&]() -> bool {
         if (!scene_.selectedCells().empty()) {
@@ -387,13 +420,13 @@ InputController::Response InputController::executeCommand(SceneCommand command) 
         response.hudMessage = QString("Select one or more cells first");
         response.requestUpdate = true;
         return false;
-    };
+        };
 
     auto applyToSelectedCells = [&](auto fn) {
         for (int cid : scene_.selectedCells()) {
             fn(cid);
         }
-    };
+        };
 
     auto setSelectedBiome = [&](Biome biome, const QString& name) {
         if (!requireSelectedCells()) {
@@ -402,20 +435,36 @@ InputController::Response InputController::executeCommand(SceneCommand command) 
         applyToSelectedCells([&](int cid) { scene_.modelMutable().setBiome(cid, biome); });
         rebuildDerivedGeometry(response);
         response.hudMessage = QString("Biome: %1").arg(name);
-    };
+        };
 
     switch (command) {
+
     case SceneCommand::ClearPath:
         clearPath(response);
         response.hudMessage = QString("Path cleared");
         return response;
+
+    case SceneCommand::MineOre: {
+        if (scene_.selectedCells().size() != 1) {
+            response.hudMessage = QString("Select one cell with a mine to mine ore");
+            response.requestUpdate = true;
+            return response;
+        }
+        int cellId = *scene_.selectedCells().begin();
+        return mineOreAtCell(cellId);
+    }
+
     case SceneCommand::ToggleOreVisualization:
         return toggleOreVisualization();
+
     case SceneCommand::ToggleSmooth: {
         response = setSmoothOneStep(!scene_.smoothOneStep());
         response.hudMessage = QString("Smooth mode: ") + (scene_.smoothOneStep() ? "ON" : "OFF");
+        // ===== НОВОЕ: обновляем дорогу после смены режима сглаживания =====
+        refreshRoadIfExists();
         return response;
     }
+
     case SceneCommand::BuildPath:
         if (scene_.selectedCells().size() != 2) {
             if (renderer_) {
@@ -427,8 +476,8 @@ InputController::Response InputController::executeCommand(SceneCommand command) 
         }
         buildAndShowSelectedPath(response);
         return response;
-    case SceneCommand::MoveSelectedEntity:
-    {
+
+    case SceneCommand::MoveSelectedEntity: {
         ecs::Entity* entity = selectedEntity();
         if (!entity) {
             response.hudMessage = QString("Select Explorer first");
@@ -481,10 +530,12 @@ InputController::Response InputController::executeCommand(SceneCommand command) 
         response.requestUpdate = true;
         return response;
     }
+
     case SceneCommand::DeselectEntity:
         deselectEntity();
         response.requestUpdate = true;
         return response;
+
     case SceneCommand::DeleteSelectedEntity:
         if (selectedEntityId_ != -1) {
             ecs_.destroyEntity(selectedEntityId_);
@@ -493,45 +544,68 @@ InputController::Response InputController::executeCommand(SceneCommand command) 
             response.hudMessage = QString("Selected entity deleted");
         }
         return response;
+
     case SceneCommand::IncreaseHeight:
         if (!requireSelectedCells()) {
             return response;
         }
         applyToSelectedCells([&](int cid) { scene_.modelMutable().addHeight(cid, +1); });
         rebuildDerivedGeometry(response);
+        // ===== НОВОЕ: обновляем дорогу после изменения высоты =====
+        refreshRoadIfExists();
         response.hudMessage = QString("Height +1");
         return response;
+
     case SceneCommand::DecreaseHeight:
         if (!requireSelectedCells()) {
             return response;
         }
         applyToSelectedCells([&](int cid) { scene_.modelMutable().addHeight(cid, -1); });
         rebuildDerivedGeometry(response);
+        // ===== НОВОЕ: обновляем дорогу после изменения высоты =====
+        refreshRoadIfExists();
         response.hudMessage = QString("Height -1");
         return response;
+
+        // ===== БИОМЫ С ОБНОВЛЕНИЕМ ДОРОГИ =====
     case SceneCommand::SetBiomeSea:
         setSelectedBiome(Biome::Sea, "Sea");
+        refreshRoadIfExists();
         return response;
+
     case SceneCommand::SetBiomeGrass:
         setSelectedBiome(Biome::Grass, "Grass");
+        refreshRoadIfExists();
         return response;
+
     case SceneCommand::SetBiomeRock:
         setSelectedBiome(Biome::Rock, "Rock");
+        refreshRoadIfExists();
         return response;
+
     case SceneCommand::SetBiomeSnow:
         setSelectedBiome(Biome::Snow, "Snow");
+        refreshRoadIfExists();
         return response;
+
     case SceneCommand::SetBiomeTundra:
         setSelectedBiome(Biome::Tundra, "Tundra");
+        refreshRoadIfExists();
         return response;
+
     case SceneCommand::SetBiomeDesert:
         setSelectedBiome(Biome::Desert, "Desert");
+        refreshRoadIfExists();
         return response;
+
     case SceneCommand::SetBiomeSavanna:
         setSelectedBiome(Biome::Savanna, "Savanna");
+        refreshRoadIfExists();
         return response;
+
     case SceneCommand::SetBiomeJungle:
         setSelectedBiome(Biome::Jungle, "Jungle");
+        refreshRoadIfExists();
         return response;
     }
 
@@ -546,6 +620,13 @@ InputController::Response InputController::setSubdivisionLevel(int L) {
     if (scene_.subdivisionLevel() != L) {
         stats_.setSubdivisionLevel(L);
         updateBufferUsageStrategy(L);
+
+        // Сохраняем позиции сущностей до изменения
+        std::unordered_map<ecs::EntityId, QVector3D> entityPositions;
+        ecs_.each<ecs::Transform>([&](const ecs::Entity& entity, const ecs::Transform& transform) {
+            entityPositions[entity.id] = transform.position;
+            });
+
         if (engine_) {
             engine_->setSubdivisionLevel(L);
             const auto result = engine_->regenerateTerrain();
@@ -553,17 +634,33 @@ InputController::Response InputController::setSubdivisionLevel(int L) {
                 response.hudMessage = QString::fromStdString(result.message);
                 return response;
             }
+            scene_.rebuildPickTris();
         }
         else {
             scene_.setSubdivisionLevel(L);
         }
-        refreshEntityTransformsForTerrain();
+
+        // Восстанавливаем позиции сущностей и обновляем их ячейки
+        for (const auto& [id, pos] : entityPositions) {
+            auto* entity = ecs_.getEntity(id);
+            auto* transform = ecs_.get<ecs::Transform>(id);
+            if (entity && transform) {
+                // Временно сохраняем позицию
+                transform->position = pos;
+            }
+        }
+
+        refreshAllEntitiesPosition();
         refreshBuildPreview();
         uploadBuffers();
+        refreshRoadIfExists();
         response.requestUpdate = true;
     }
     return response;
 }
+
+
+
 
 InputController::Response InputController::resetView() {
     Response response;
@@ -629,22 +726,42 @@ InputController::Response InputController::regenerateTerrain() {
     if (isContributorMode()) {
         return contributorModeResponse();
     }
+
+    // Сохраняем позиции сущностей до изменения
+    std::unordered_map<ecs::EntityId, QVector3D> entityPositions;
+    ecs_.each<ecs::Transform>([&](const ecs::Entity& entity, const ecs::Transform& transform) {
+        entityPositions[entity.id] = transform.position;
+        });
+
     if (engine_) {
         const auto result = engine_->regenerateTerrain();
         if (!result) {
             response.hudMessage = QString::fromStdString(result.message);
             return response;
         }
+        scene_.rebuildPickTris();
     }
     else {
         scene_.regenerateTerrain();
     }
-    refreshEntityTransformsForTerrain();
+
+    // Восстанавливаем позиции сущностей и обновляем их ячейки
+    for (const auto& [id, pos] : entityPositions) {
+        auto* entity = ecs_.getEntity(id);
+        auto* transform = ecs_.get<ecs::Transform>(id);
+        if (entity && transform) {
+            transform->position = pos;
+        }
+    }
+
+    refreshAllEntitiesPosition();
     refreshBuildPreview();
     uploadBuffers();
+    refreshRoadIfExists();
     response.requestUpdate = true;
     return response;
 }
+
 
 InputController::Response InputController::setSmoothOneStep(bool on) {
     Response response;
@@ -711,6 +828,10 @@ void InputController::rebuildDerivedGeometry(Response& response) {
     syncPathBackendFromScene();
     uploadBuffers();
     refreshBuildPreview();
+
+    // ===== НОВОЕ: обновляем дорогу =====
+    refreshRoadIfExists();
+
     response.requestUpdate = true;
 }
 
@@ -822,7 +943,10 @@ void InputController::projectTerrainSnapshot(const TerrainSnapshot& snapshot) {
         return;
     }
     scene_.applyTerrainSnapshot(snapshot);
-    refreshEntityTransformsForTerrain();
+
+    // ===== НОВОЕ: обновляем позиции всех сущностей =====
+    refreshAllEntitiesPosition();
+
     refreshBuildPreview();
     syncPathBackendFromScene();
 }
@@ -833,7 +957,7 @@ void InputController::buildAndShowSelectedPath(Response& response) {
             const PathResult result = engine_
                 ? engine_->findPath(endpoints->first, endpoints->second)
                 : PathResult{};
-            renderer_->uploadPath(scene_.buildPathPolyline(result.cellIds));
+            renderer_->uploadRoad(scene_.buildRoadMesh(result.cellIds));
         }
         else {
             renderer_->uploadPath({});
@@ -851,14 +975,14 @@ void InputController::buildAndShowPathBetween(int startCell, int targetCell, Res
 
 void InputController::showPathForCells(const std::vector<int>& cellIds, Response& response) {
     if (renderer_) {
-        renderer_->uploadPath(scene_.buildPathPolyline(cellIds));
+        renderer_->uploadRoad(scene_.buildRoadMesh(cellIds));
     }
     response.requestUpdate = true;
 }
 
 void InputController::clearPath(Response& response) {
     if (renderer_) {
-        renderer_->uploadPath({});
+        renderer_->uploadRoad({});
     }
     response.requestUpdate = true;
 }
@@ -1423,7 +1547,55 @@ bool InputController::isBuildingPlacementMode() const {
 }
 
 bool InputController::canBuildOnCell(int cellId) const {
-    return buildPreviewCells_.contains(cellId);
+    // Если это не режим размещения рудника — используем старую логику
+    if (placementModel_ != PlacementModel::Mine) {
+        return buildPreviewCells_.contains(cellId);
+    }
+
+    // Для рудника: проверяем, есть ли руда на ячейке
+    const auto& cells = scene_.model().cells();
+    if (cellId < 0 || cellId >= static_cast<int>(cells.size())) {
+        return false;
+    }
+
+    const Cell& cell = cells[static_cast<size_t>(cellId)];
+
+    // Рудник можно поставить только на Rock с рудой
+    if (cell.biome != Biome::Rock || cell.oreType == OreType::None) {
+        return false;
+    }
+
+    // Проверяем, что ячейка не занята
+    if (isCellOccupied(cellId)) {
+        return false;
+    }
+
+    // ===== НОВАЯ ПРОВЕРКА: ячейка должна быть рядом с Explorer =====
+    // Находим Explorer
+    int explorerCell = -1;
+    for (const auto& entityRef : ecs_.entities()) {
+        const ecs::Entity& entity = entityRef.get();
+        const auto* mesh = ecs_.get<ecs::Mesh>(entity.id);
+        if (mesh && (mesh->meshId == "car" || mesh->meshId == "pyramid")) {
+            explorerCell = entity.currentCell;
+            break;
+        }
+    }
+
+    // Если Explorer не найден или не на валидной ячейке - запрещаем
+    if (explorerCell < 0 || explorerCell >= static_cast<int>(cells.size())) {
+        return false;
+    }
+
+    // Проверяем, является ли cellId соседом Explorer
+    const Cell& explorerCellData = cells[static_cast<size_t>(explorerCell)];
+    for (int neighbor : explorerCellData.neighbors) {
+        if (neighbor == cellId) {
+            return true;  // Ячейка рядом с Explorer
+        }
+    }
+
+    return false;  // Ячейка не рядом с Explorer
 }
 
 void InputController::refreshBuildPreview() {
@@ -1434,14 +1606,28 @@ void InputController::refreshBuildPreview() {
     QSet<int> nextPreviewCells;
     if (shouldShowPreview && anchorCell >= 0 && anchorCell < scene_.model().cellCount()) {
         const auto& cells = scene_.model().cells();
-        const auto& origin = cells[static_cast<size_t>(anchorCell)];
+
+        const Cell& origin = cells[static_cast<size_t>(anchorCell)];
+
         for (int neighbor : origin.neighbors) {
             if (neighbor < 0) {
                 continue;
             }
-            if (!isCellOccupied(neighbor)) {
-                nextPreviewCells.insert(neighbor);
+
+            // Для рудника проверяем наличие руды
+            if (placementModel_ == PlacementModel::Mine) {
+                const Cell& neighborCell = cells[static_cast<size_t>(neighbor)];
+                if (neighborCell.biome != Biome::Rock ||
+                    neighborCell.oreType == OreType::None ||
+                    isCellOccupied(neighbor)) {
+                    continue;
+                }
             }
+            else if (isCellOccupied(neighbor)) {
+                continue;
+            }
+
+            nextPreviewCells.insert(neighbor);
         }
     }
 
@@ -1458,3 +1644,189 @@ void InputController::refreshBuildPreview() {
 }
 
 
+InputController::Response InputController::mineOreAtCell(int cellId) {
+    Response response;
+
+    if (isContributorMode()) {
+        return contributorModeResponse();
+    }
+
+    const auto& cells = scene_.model().cells();
+    if (cellId < 0 || cellId >= static_cast<int>(cells.size())) {
+        response.hudMessage = QString("Invalid cell ID");
+        response.requestUpdate = true;
+        return response;
+    }
+
+    const Cell& cell = cells[static_cast<size_t>(cellId)];
+
+    // Проверяем, есть ли на ячейке рудник
+    int mineEntityId = -1;
+    ecs_.each<ecs::Mesh, ecs::Transform>([&](const ecs::Entity& entity, const ecs::Mesh& mesh, const ecs::Transform&) {
+        if (mesh.meshId == "mine" && entity.currentCell == cellId) {
+            mineEntityId = entity.id;
+        }
+        });
+
+    if (mineEntityId == -1) {
+        response.hudMessage = QString("No mine on this cell");
+        response.requestUpdate = true;
+        return response;
+    }
+
+    // Проверяем, есть ли руда на ячейке
+    if (cell.oreType == OreType::None || cell.oreDensity <= 0.0f) {
+        response.hudMessage = QString("No ore on this cell!");
+        response.requestUpdate = true;
+        return response;
+    }
+
+    // Проверяем, осталась ли руда
+    if (cell.oreDensity < 0.01f) {
+        response.hudMessage = QString("Ore depleted on this cell!");
+        response.requestUpdate = true;
+        return response;
+    }
+
+    // ===== ДОБЫЧА РУДЫ =====
+    int amount = static_cast<int>(cell.oreDensity * 5.0f) + 1;
+    amount = std::max(1, std::min(amount, 10));
+
+    const ResourceType resourceType = oreTypeToResourceType(cell.oreType);
+    playerResources_.addResource(resourceType, amount);
+
+    float newDensity = std::max(0.0f, cell.oreDensity - 0.1f);
+    scene_.modelMutable().setOreDensity(cellId, newDensity);
+
+    // ===== БЫСТРОЕ ОБНОВЛЕНИЕ: только ore-данные =====
+    // Получаем текущий меш
+    TerrainMesh mesh = scene_.terrain();
+
+    // Обновляем ore-данные в меше
+    TerrainTessellator::updateOreData(mesh, scene_.model());
+
+    // Обновляем только ore-буфер на GPU
+    if (renderer_) {
+        renderer_->updateTerrainOreData(mesh);
+    }
+
+    // Обновляем атлас для воды (если нужно)
+    // Вода не зависит от руды, поэтому пропускаем
+
+    response.hudMessage = QString("Mined %1 %2! Remaining: %3%")
+        .arg(amount)
+        .arg(resourceTypeName(resourceType))
+        .arg(static_cast<int>(newDensity * 100));
+    response.requestUpdate = true;
+
+    qDebug() << "Mined ore from cell" << cellId;
+    qDebug() << "Type:" << resourceTypeName(resourceType);
+    qDebug() << "Amount:" << amount;
+    qDebug() << "Remaining density:" << newDensity;
+
+    return response;
+}
+
+
+
+bool InputController::isMineEntity(int entityId) const {
+    const auto* mesh = ecs_.get<ecs::Mesh>(entityId);
+    return mesh && mesh->meshId == "mine";
+}
+
+void InputController::refreshRoadIfExists() {
+    // Проверяем, есть ли сейчас построенный путь (выделены 2 ячейки)
+    if (scene_.selectedCells().size() == 2) {
+        Response response;
+        buildAndShowSelectedPath(response);
+        if (response.requestUpdate) {
+            // Принудительно обновляем виджет
+            if (owner_) {
+                owner_->update();
+            }
+        }
+    }
+    else {
+        // Если путь не построен, очищаем дорогу
+        if (renderer_) {
+            renderer_->uploadRoad({});
+        }
+    }
+}
+
+void InputController::refreshAllEntitiesPosition() {
+    if (isContributorMode()) return;
+
+    const int cellCount = scene_.model().cellCount();
+    const float heightStep = scene_.heightStep();
+    const float modelScale = scene_.getModelScaleFactor();  // <-- ПОЛУЧАЕМ МАСШТАБ
+
+    if (cellCount == 0) return;
+
+    // Собираем ID сущностей для обновления
+    std::vector<ecs::EntityId> entityIds;
+    ecs_.each<ecs::Transform>([&](const ecs::Entity& entity, const ecs::Transform&) {
+        entityIds.push_back(entity.id);
+        });
+
+    // Обновляем позиции и currentCell
+    for (ecs::EntityId id : entityIds) {
+        auto* entity = ecs_.getEntity(id);
+        auto* transform = ecs_.get<ecs::Transform>(id);
+        if (!entity || !transform) continue;
+
+        // Обновляем currentCell
+        int newCell = -1;
+        if (entity->currentCell >= 0 && entity->currentCell < cellCount) {
+            const QVector3D cellPos = computeSurfacePoint(scene_, entity->currentCell, heightStep, kEntitySurfaceOffset);
+            const QVector3D dir = transform->position.normalized();
+            const QVector3D cellDir = cellPos.normalized();
+            float dot = QVector3D::dotProduct(dir, cellDir);
+            if (dot > 0.9f) {
+                newCell = entity->currentCell;
+            }
+        }
+
+        if (newCell == -1) {
+            newCell = scene_.findCellByPosition(transform->position);
+        }
+
+        if (newCell >= 0 && newCell < cellCount) {
+            entity->currentCell = newCell;
+            const QVector3D newPos = computeSurfacePoint(scene_, newCell, heightStep, kEntitySurfaceOffset);
+            transform->position = newPos;
+
+            // ===== КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: обновляем радиус коллайдера =====
+            auto* collider = ecs_.get<ecs::Collider>(id);
+            if (collider) {
+                // Базовый радиус 0.20f при L=2 (modelScale=1.0)
+                // Масштабируем пропорционально modelScale
+                collider->radius = 0.20f * modelScale;
+                qDebug() << "Updated collider radius for entity" << id << "to" << collider->radius;
+            }
+
+            if (transform->surfaceForward.length() > 0.1f) {
+                QVector3D up = newPos.normalized();
+                QVector3D forward = transform->surfaceForward;
+                forward = forward - QVector3D::dotProduct(forward, up) * up;
+                if (forward.length() > 0.001f) {
+                    transform->surfaceForward = forward.normalized();
+                }
+            }
+        }
+    }
+
+    // Сбрасываем анимации
+    ecs_.each<ecs::Animation>([&](const ecs::Entity& entity, ecs::Animation& anim) {
+        if (anim.type == ecs::Animation::Type::MoveTo) {
+            if (anim.startCell < 0 || anim.startCell >= cellCount ||
+                anim.targetCell < 0 || anim.targetCell >= cellCount) {
+                anim.type = ecs::Animation::Type::None;
+                anim.duration = 0.0f;
+                anim.elapsed = 1.0f;
+            }
+        }
+        });
+
+    qDebug() << "Refreshed" << entityIds.size() << "entities positions after terrain change";
+}

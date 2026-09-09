@@ -197,6 +197,8 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (envCubemap_) gl_->glDeleteTextures(1, &envCubemap_);
     if (sceneDepthTexture_) gl_->glDeleteTextures(1, &sceneDepthTexture_);
     if (sceneDepthFbo_) gl_->glDeleteFramebuffers(1, &sceneDepthFbo_);
+    if (vaoRoad_ != 0) gl_->glDeleteVertexArrays(1, &vaoRoad_);
+    if (vboRoad_ != 0) gl_->glDeleteBuffers(1, &vboRoad_);
 
     if (QOpenGLContext::currentContext()) {
         owner_->doneCurrent();
@@ -300,6 +302,8 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     uLightDir_ = gl_->glGetUniformLocation(progTerrain_, "uLightDir");
     uNormalMatrix_ = gl_->glGetUniformLocation(progTerrain_, "uNormalMatrix");
     uOreEnabled_ = gl_->glGetUniformLocation(progTerrain_, "uOreVisualizationEnabled");
+    uRoadColor_ = gl_->glGetUniformLocation(progTerrain_, "uRoadColor");      
+    uIsRoad_ = gl_->glGetUniformLocation(progTerrain_, "uIsRoad");
 
     gl_->glUseProgram(progSel_);
     uMVP_Sel_ = gl_->glGetUniformLocation(progSel_, "uMVP");
@@ -382,6 +386,15 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
 
     gl_->glBindVertexArray(vaoPath_);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboPath_);
+    gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    gl_->glEnableVertexAttribArray(0);
+    gl_->glBindVertexArray(0);
+
+    gl_->glGenVertexArrays(1, &vaoRoad_);
+    gl_->glGenBuffers(1, &vboRoad_);
+
+    gl_->glBindVertexArray(vaoRoad_);
+    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboRoad_);
     gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(0);
     gl_->glBindVertexArray(0);
@@ -1000,6 +1013,47 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     entityRenderer_->renderEntities(ctx);
     overlayRenderer_->render(ctx);
 
+    if (roadVertexCount_ > 0 && progTerrain_ != 0) {
+        gl_->glUseProgram(progTerrain_);
+
+        // Устанавливаем матрицы
+        gl_->glUniformMatrix4fv(uMVP_Terrain_, 1, GL_FALSE, ctx.mvp.constData());
+
+        QMatrix4x4 model;
+        model.setToIdentity();
+        gl_->glUniformMatrix4fv(uModel_, 1, GL_FALSE, model.constData());
+        gl_->glUniformMatrix3fv(uNormalMatrix_, 1, GL_FALSE, model.normalMatrix().constData());
+
+        // Устанавливаем свет
+        const QVector3D& lightDir = ctx.lighting.direction;
+        gl_->glUniform3f(uLightDir_, lightDir.x(), lightDir.y(), lightDir.z());
+
+        /*// Отключаем визуализацию руды для дороги
+        if (uOreEnabled_ >= 0) {
+            gl_->glUniform1i(uOreEnabled_, 0);
+        }*/
+
+        // Устанавливаем цвет дороги
+        if (uRoadColor_ >= 0) {
+            gl_->glUniform3f(uRoadColor_, 0.35f, 0.32f, 0.28f);  // Серо-коричневый асфальт
+        }
+
+        // Устанавливаем флаг, что это дорога
+        if (uIsRoad_ >= 0) {
+            gl_->glUniform1i(uIsRoad_, 1);
+        }
+
+        // Рендерим
+        gl_->glBindVertexArray(vaoRoad_);
+        gl_->glDrawArrays(GL_TRIANGLES, 0, roadVertexCount_);
+        gl_->glBindVertexArray(0);
+
+        // Восстанавливаем флаг
+        if (uIsRoad_ >= 0) {
+            gl_->glUniform1i(uIsRoad_, 0);
+        }
+    }
+
     // overlay пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ/пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ state
     //gl_->glDisable(GL_BLEND);
     //gl_->glDepthMask(GL_TRUE);
@@ -1247,3 +1301,36 @@ void HexSphereRenderer::setOreVisualizationEnabled(bool enabled) {
     }
 }
 
+void HexSphereRenderer::uploadRoad(const std::vector<float>& vertices) {
+    withContext([&]() {
+        if (vertices.empty()) {
+            roadVertexCount_ = 0;
+            gl_->glBindBuffer(GL_ARRAY_BUFFER, vboRoad_);
+            gl_->glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+            return;
+        }
+
+        gl_->glBindBuffer(GL_ARRAY_BUFFER, vboRoad_);
+        gl_->glBufferData(GL_ARRAY_BUFFER,
+            vertices.size() * sizeof(float),
+            vertices.data(),
+            GL_DYNAMIC_DRAW);
+        roadVertexCount_ = GLsizei(vertices.size() / 3);
+        });
+}
+
+
+void HexSphereRenderer::updateTerrainOreData(const TerrainMesh& mesh) {
+    withContext([&]() {
+        if (mesh.ore.empty() || vboTerrainOre_ == 0) {
+            return;
+        }
+
+        // Обновляем только ore-буфер
+        gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainOre_);
+        gl_->glBufferSubData(GL_ARRAY_BUFFER, 0,
+            mesh.ore.size() * sizeof(float),
+            mesh.ore.data());
+        gl_->glBindBuffer(GL_ARRAY_BUFFER, 0);
+        });
+}

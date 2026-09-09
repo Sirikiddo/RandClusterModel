@@ -195,6 +195,8 @@ public:
         dualVerts_ = std::move(d);
     }
 
+    void rebuildPickTris();
+
 private:
     int L_ = 0;
     int pentCount_ = 0;

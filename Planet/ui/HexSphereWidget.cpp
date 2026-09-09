@@ -147,6 +147,22 @@ HexSphereWidget::HexSphereWidget(const AppViewConfig& viewConfig,
             updateOverlayLayout();
         });
 
+        QToolButton* mineOreButton = new QToolButton(placementContent_);
+        mineOreButton->setText("Mine\nOre");
+        mineOreButton->setCursor(Qt::PointingHandCursor);
+        mineOreButton->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        mineOreButton->setFixedSize(96, 118);
+        mineOreButton->setStyleSheet(
+            "QToolButton {"
+            " color: white;"
+            " background: rgba(255,200,50,20);"
+            " border: 1px solid rgba(255,200,50,80);"
+            " border-radius: 10px;"
+            " padding: 6px;"
+            "}"
+            "QToolButton:hover { background: rgba(255,200,50,35); }"
+        );
+
         placementContentWidthAnimation_ = new QVariantAnimation(this);
         placementContentWidthAnimation_->setDuration(220);
         placementContentWidthAnimation_->setEasingCurve(QEasingCurve::OutCubic);
@@ -169,6 +185,16 @@ HexSphereWidget::HexSphereWidget(const AppViewConfig& viewConfig,
         connect(deleteButton_, &QToolButton::clicked, this, [this]() {
             togglePlacementSelection(InputController::PlacementModel::Delete);
         });
+
+        
+
+        // Добавляем в layout
+        contentLayout->addWidget(mineOreButton);
+
+        // Подключаем сигнал
+        connect(mineOreButton, &QToolButton::clicked, this, [this]() {
+            triggerCommand(SceneCommand::MineOre);
+            });
 
         placementContent_->adjustSize();
         placementContentExpandedWidth_ = placementContent_->sizeHint().width();
@@ -271,6 +297,42 @@ void HexSphereWidget::paintEvent(QPaintEvent* e) {
 
     // 2) ������ ������ ����� (��� � 2D) ������ �����
     if (overlayText_.isEmpty()) return;
+    
+    // ===== ОТОБРАЖЕНИЕ РЕСУРСОВ В ПРАВОМ ВЕРХНЕМ УГЛУ =====
+    if (!viewConfig_.isContributorMode()) {
+        const PlayerResources& resources = inputController_.getPlayerResources();
+
+        QPainter p(this);
+        p.setRenderHint(QPainter::TextAntialiasing, true);
+
+        // Белый текст с чёрной тенью для читаемости
+        QColor textColor(255, 255, 255);
+        QColor shadowColor(0, 0, 0, 180);
+
+        // Формируем строку с ресурсами
+        QString resourceText = QString("Resources: Iron: %1  Copper: %2  Gold: %3  Diamond: %4")
+            .arg(resources.getResource(ResourceType::Iron))
+            .arg(resources.getResource(ResourceType::Copper))
+            .arg(resources.getResource(ResourceType::Gold))
+            .arg(resources.getResource(ResourceType::Diamond));
+
+        // Вычисляем размер текста
+        QFontMetrics metrics(p.font());
+        QRect textRect = metrics.boundingRect(resourceText);
+
+        // Позиция: правый верхний угол с отступом
+        int margin = 15;
+        int x = width() - textRect.width() - margin;
+        int y = margin + textRect.height();
+
+        // Рисуем тень
+        p.setPen(shadowColor);
+        p.drawText(x + 1, y + 1, resourceText);
+
+        // Рисуем текст
+        p.setPen(textColor);
+        p.drawText(x, y, resourceText);
+    }
 
     QPainter p(this);
     p.setRenderHint(QPainter::TextAntialiasing, true);

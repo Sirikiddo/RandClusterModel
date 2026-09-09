@@ -14,6 +14,7 @@
 #include "renderers/HexSphereRenderer.h"
 #include "ui/PerformanceStats.h"
 #include "ECS/ComponentStorage.h"
+#include "core/PlayerResources.h"
 
 class QMouseEvent;
 class QWheelEvent;
@@ -41,7 +42,8 @@ enum class SceneCommand {
     SetBiomeTundra,
     SetBiomeDesert,
     SetBiomeSavanna,
-    SetBiomeJungle
+    SetBiomeJungle,
+    MineOre
 };
 
 class InputController : public ITerrainSceneBridge {
@@ -65,6 +67,9 @@ public:
     void initialize(QOpenGLWidget* owner);
     void resize(int w, int h, float devicePixelRatio);
     Response render();
+
+    Response mineOreAtCell(int cellId);
+    const PlayerResources& getPlayerResources() const { return playerResources_; }
 
     Response mousePress(QMouseEvent* e);
     Response mouseMove(QMouseEvent* e);
@@ -107,6 +112,9 @@ public:
     void rebuildTerrainFromInputs() override;
     TerrainSnapshot captureTerrainSnapshot() const override;
     void projectTerrainSnapshot(const TerrainSnapshot& snapshot) override;
+
+    void refreshRoadIfExists();
+    void refreshAllEntitiesPosition();
 
 private:
     struct PickHit {
@@ -175,5 +183,8 @@ private:
     int lastBuildPreviewAnchorCell_ = -2;
 
     bool oreVisualizationEnabled_ = true;
+
+    PlayerResources playerResources_{};
+    bool isMineEntity(int entityId) const;
 };
 

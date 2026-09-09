@@ -49,6 +49,7 @@ public:
 
     bool enableOreVisualization = true;
     float oreAnimationSpeed = 0.1f;
+    static void updateOreData(TerrainMesh& mesh, const HexSphereModel& model);
 
     class OreNoiseGenerator {
     public:

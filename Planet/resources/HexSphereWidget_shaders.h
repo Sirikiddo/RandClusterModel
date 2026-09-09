@@ -24,6 +24,7 @@ layout(location=3) in vec2 aOreData;
 uniform mat4 uMVP;
 uniform mat4 uModel;
 uniform mat3 uNormalMatrix; 
+uniform vec3 uRoadColor;    
 
 out vec3 vColor;
 out vec3 vNormal;
@@ -55,6 +56,8 @@ out vec4 FragColor;
 uniform vec3 uLightDir;
 uniform vec3 uViewPos;
 uniform bool uOreVisualizationEnabled;
+uniform vec3 uRoadColor;
+uniform bool uIsRoad;
 
 float hash31(vec3 p) {
     p = fract(p * 0.1031);
@@ -94,6 +97,15 @@ vec3 oreColor(int oreType) {
 }
 
 void main() {
+    if (uIsRoad) {
+        vec3 N = normalize(vNormal);
+        vec3 L = normalize(-uLightDir);
+        float diff = max(dot(N, L), 0.0);
+        vec3 ambient = 0.3 * uRoadColor;
+        vec3 diffuse = 0.7 * diff * uRoadColor;
+        FragColor = vec4(ambient + diffuse, 1.0);
+        return;
+    }
     vec3 N = normalize(vNormal);
     vec3 L = normalize(-uLightDir);
     float diff = max(dot(N, L), 0.0);
