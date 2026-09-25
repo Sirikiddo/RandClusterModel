@@ -176,7 +176,7 @@ void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
         if (!sum.isNull()) sum.normalize();
         cell.centroid = sum;
 
-        // Инициализируем климатические данные
+        // Ð˜Ð½Ð¸Ñ†Ð¸Ð°Ð»Ð¸Ð·Ð¸Ñ€ÑƒÐµÐ¼ ÐºÐ»Ð¸Ð¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸Ðµ Ð´Ð°Ð½Ð½Ñ‹Ðµ
         cell.temperature = 0.5f;
         cell.humidity = 0.5f;
         cell.pressure = 0.5f;
@@ -299,7 +299,7 @@ void HexSphereModel::resetClimateData() {
 }
 
 QVector3D HexSphereModel::biomeColor(Biome b, float temperature) {
-    // Базовые цвета биомов
+    // Ð‘Ð°Ð·Ð¾Ð²Ñ‹Ðµ Ñ†Ð²ÐµÑ‚Ð° Ð±Ð¸Ð¾Ð¼Ð¾Ð²
     QVector3D baseColor;
     switch (b) {
     case Biome::Sea:      baseColor = { 0.12f, 0.40f, 0.85f }; break;
@@ -313,15 +313,15 @@ QVector3D HexSphereModel::biomeColor(Biome b, float temperature) {
     default:              baseColor = { 1,1,1 }; break;
     }
 
-    // Корректировка цвета в зависимости от температуры
+    // ÐšÐ¾Ñ€Ñ€ÐµÐºÑ‚Ð¸Ñ€Ð¾Ð²ÐºÐ° Ñ†Ð²ÐµÑ‚Ð° Ð² Ð·Ð°Ð²Ð¸ÑÐ¸Ð¼Ð¾ÑÑ‚Ð¸ Ð¾Ñ‚ Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñ‹
     QVector3D tempAdjust;
     if (temperature < 0.3f) {
-        // Холодно - синий оттенок
+        // Ð¥Ð¾Ð»Ð¾Ð´Ð½Ð¾ - ÑÐ¸Ð½Ð¸Ð¹ Ð¾Ñ‚Ñ‚ÐµÐ½Ð¾Ðº
         float coldFactor = (0.3f - temperature) / 0.3f;
         tempAdjust = { 0.0f, 0.0f, 0.2f * coldFactor };
     }
     else if (temperature > 0.7f) {
-        // Жарко - красный/желтый оттенок
+        // Ð–Ð°Ñ€ÐºÐ¾ - ÐºÑ€Ð°ÑÐ½Ñ‹Ð¹/Ð¶ÐµÐ»Ñ‚Ñ‹Ð¹ Ð¾Ñ‚Ñ‚ÐµÐ½Ð¾Ðº
         float heatFactor = (temperature - 0.7f) / 0.3f;
         tempAdjust = { 0.15f * heatFactor, 0.1f * heatFactor, 0.0f };
     }

@@ -86,7 +86,7 @@ struct WaterWaveComponent {
     float mixingRate = 0.0f;
     float mixingPhase = 0.0f;
     std::array<float, 2> couplingPhaseOffsets{};
-    std::array<std::int8_t, 2> driverSlots{{ -1, -1 }};
+    std::array<std::int8_t, 2> driverSlots{ { -1, -1 } };
     std::uint8_t band = 0;
 };
 

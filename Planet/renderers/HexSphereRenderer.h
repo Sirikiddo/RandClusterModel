@@ -23,6 +23,7 @@
 #include "model/MineModelHandler.h"
 #include "renderers/ParticleRenderer.h"
 #include "contributor/ContributorParticles.h"
+#include "contributor/TreeBuilder.h"
 
 #include <QMutex>
 #include <QtConcurrent/QtConcurrent>
@@ -92,7 +93,7 @@ public:
     bool ready() const { return glReady_; }
     GLuint envCubemap() const { return envCubemap_; }
 
-    // ��� ������� �����������
+    // Для двойной буферизации видимости
     struct VisibilityBuffer {
         std::vector<uint32_t> indices;
         bool ready = false;
@@ -125,9 +126,8 @@ private:
     void uploadWaterInternal(const WaterGeometryData& data);
     void loadContributorModel();
     void renderContributorModel(const RenderContext& ctx);
-    void renderPlanetTreeParticles(const RenderContext& ctx);
+    void renderProceduralTreeParticles(const RenderContext& ctx);  // Твой метод
 
-    // ����� �����
     void recreateTerrainVAO();
 
     HexSphereSceneController* lastScene_ = nullptr;
@@ -176,8 +176,10 @@ private:
     GLint uRoadColor_ = -1;
     GLint uIsRoad_ = -1;
 
-    std::shared_ptr<ModelHandler> treeModel_;
-    std::shared_ptr<ModelHandler> firTreeModel_;
+    // ===== ТОЛЬКО ПРОЦЕДУРНЫЕ ДЕРЕВЬЯ (БЕЗ OBJ) =====
+    std::shared_ptr<ModelHandler> proceduralLeavesModel_;
+
+    // Модели для Contributor-режима
     std::shared_ptr<ModelHandler> contributorModel_;
     std::shared_ptr<ModelHandler> contributorWoodModel_;
     std::shared_ptr<ModelHandler> contributorLeavesModel_;
@@ -208,9 +210,17 @@ private:
     std::shared_ptr<CarModelHandler> carModel_;
     std::shared_ptr<FactoryModelHandler> factoryModel_;
     std::shared_ptr<MineModelHandler> mineModel_;
-    std::unique_ptr<ParticleRenderer> particleRenderer_;
-    std::vector<ContributorParticle> planetTreeParticleTemplate_;
-    uint64_t planetTreeParticlesPlacementHash_ = 0;
-    ContributorWindField windField_;
-};
 
+    // Рендерер частиц для крон процедурных деревьев
+    std::unique_ptr<ParticleRenderer> particleRenderer_;
+    uint64_t treeParticlesPlacementHash_ = 0;
+    ContributorWindField windField_;
+
+    // 7 видов × 8 вариантов моделей
+    std::vector<std::vector<std::shared_ptr<ModelHandler>>> proceduralTreeModelsBySpecies;
+
+    // 7 видов × 8 вариантов шаблонов частиц
+    std::vector<std::vector<std::vector<ContributorParticle>>> treeParticlesBySpecies;
+
+    // 7 видов × 8 вариантов (цвета + параметры + масштаб)
+    std::vector<std::vector<TreeBuilder::TreeVariant>> speciesVariants;};

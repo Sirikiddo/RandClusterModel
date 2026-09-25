@@ -580,11 +580,11 @@ void CarModelHandler::loadMaterials(const QString& objPath) {
     }
     mtlFile.close();
 
-    // Сохраняем пути к текстурам и цвета диффузии (Kd), но НЕ загружаем текстуры сейчас
+    // Ð¡Ð¾Ñ…Ñ€Ð°Ð½ÑÐµÐ¼ Ð¿ÑƒÑ‚Ð¸ Ðº Ñ‚ÐµÐºÑÑ‚ÑƒÑ€Ð°Ð¼ Ð¸ Ñ†Ð²ÐµÑ‚Ð° Ð´Ð¸Ñ„Ñ„ÑƒÐ·Ð¸Ð¸ (Kd), Ð½Ð¾ ÐÐ• Ð·Ð°Ð³Ñ€ÑƒÐ¶Ð°ÐµÐ¼ Ñ‚ÐµÐºÑÑ‚ÑƒÑ€Ñ‹ ÑÐµÐ¹Ñ‡Ð°Ñ
     for (auto& sub : meshes_) {
         auto it = textureMap.find(sub.materialName);
         if (it != textureMap.end()) {
-            sub.texturePath = it->second;  // Нужно добавить поле texturePath в SubMesh
+            sub.texturePath = it->second;  // ÐÑƒÐ¶Ð½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ð¿Ð¾Ð»Ðµ texturePath Ð² SubMesh
         }
 
         auto itKd = kdMap.find(sub.materialName);
@@ -595,7 +595,7 @@ void CarModelHandler::loadMaterials(const QString& objPath) {
 }
 
 GLuint CarModelHandler::loadTexture(const QString& path) {
-    // Проверяем, есть ли активный контекст
+    // ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼, ÐµÑÑ‚ÑŒ Ð»Ð¸ Ð°ÐºÑ‚Ð¸Ð²Ð½Ñ‹Ð¹ ÐºÐ¾Ð½Ñ‚ÐµÐºÑÑ‚
     if (!QOpenGLContext::currentContext()) {
         qDebug() << "Cannot load texture" << path << "- no OpenGL context";
         return 0;
@@ -653,7 +653,7 @@ void CarModelHandler::uploadSubMeshToGPU(SubMesh& sub) {
         return;
     }
 
-    // Проверяем, есть ли активный контекст
+    // ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼, ÐµÑÑ‚ÑŒ Ð»Ð¸ Ð°ÐºÑ‚Ð¸Ð²Ð½Ñ‹Ð¹ ÐºÐ¾Ð½Ñ‚ÐµÐºÑÑ‚
     if (!QOpenGLContext::currentContext()) {
         qDebug() << "No OpenGL context for uploading submesh!";
         return;
@@ -715,7 +715,7 @@ void CarModelHandler::uploadSubMeshToGPU(SubMesh& sub) {
     sub.indexCount = static_cast<GLsizei>(sub.indices.size());
     glBindVertexArray(0);
 
-    // Загружаем текстуру ТОЛЬКО здесь, когда контекст активен
+    // Ð—Ð°Ð³Ñ€ÑƒÐ¶Ð°ÐµÐ¼ Ñ‚ÐµÐºÑÑ‚ÑƒÑ€Ñƒ Ð¢ÐžÐ›Ð¬ÐšÐž Ð·Ð´ÐµÑÑŒ, ÐºÐ¾Ð³Ð´Ð° ÐºÐ¾Ð½Ñ‚ÐµÐºÑÑ‚ Ð°ÐºÑ‚Ð¸Ð²ÐµÐ½
     if (!sub.texturePath.isEmpty() && sub.textureId == 0) {
         sub.textureId = loadTexture(sub.texturePath);
     }
@@ -737,7 +737,7 @@ void CarModelHandler::draw(GLuint shader,
     GLint uUseTexture = glGetUniformLocation(shader, "uUseTexture");
     GLint uTexture = glGetUniformLocation(shader, "uTexture");
     GLint uUseVertexColor = glGetUniformLocation(shader, "uUseVertexColor");
-    GLint uColor = glGetUniformLocation(shader, "uColor");  // <-- получаем location цвета
+    GLint uColor = glGetUniformLocation(shader, "uColor");  // <-- Ð¿Ð¾Ð»ÑƒÑ‡Ð°ÐµÐ¼ location Ñ†Ð²ÐµÑ‚Ð°
 
     QVector3D eye = (viewMatrix.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
     if (uViewPos >= 0) glUniform3f(uViewPos, eye.x(), eye.y(), eye.z());
@@ -786,7 +786,7 @@ void CarModelHandler::draw(GLuint shader,
         }
 
         if (uUseTexture >= 0) {
-            // Используем текстуры, если они есть
+            // Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼ Ñ‚ÐµÐºÑÑ‚ÑƒÑ€Ñ‹, ÐµÑÐ»Ð¸ Ð¾Ð½Ð¸ ÐµÑÑ‚ÑŒ
             //      :                              UV.
             //      vboUV           (    texcoords), vUV                                            ,
             //                                      "         ".
@@ -820,9 +820,9 @@ void CarModelHandler::clear() {
     resetDerivedPlacementData();
 }
 
-// Исправить clearGPUResources — добавить проверку контекста:
+// Ð˜ÑÐ¿Ñ€Ð°Ð²Ð¸Ñ‚ÑŒ clearGPUResources â€” Ð´Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÑƒ ÐºÐ¾Ð½Ñ‚ÐµÐºÑÑ‚Ð°:
 void CarModelHandler::clearGPUResources() {
-    // Проверяем, есть ли активный контекст перед удалением
+    // ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼, ÐµÑÑ‚ÑŒ Ð»Ð¸ Ð°ÐºÑ‚Ð¸Ð²Ð½Ñ‹Ð¹ ÐºÐ¾Ð½Ñ‚ÐµÐºÑÑ‚ Ð¿ÐµÑ€ÐµÐ´ ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸ÐµÐ¼
     bool hasContext = QOpenGLContext::currentContext() != nullptr;
 
     for (auto& sub : meshes_) {

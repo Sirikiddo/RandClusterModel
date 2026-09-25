@@ -116,16 +116,13 @@ HexSphereRenderer::~HexSphereRenderer() {
         return;
     }
 
-    // РџСЂРѕРІРµСЂСЏРµРј, СЃСѓС‰РµСЃС‚РІСѓРµС‚ Р»Рё РµС‰С‘ РєРѕРЅС‚РµРєСЃС‚ OpenGL
     if (!QOpenGLContext::currentContext()) {
-        // РљРѕРЅС‚РµРєСЃС‚ СѓР¶Рµ СѓРЅРёС‡С‚РѕР¶РµРЅ - РЅРёС‡РµРіРѕ РЅРµ РґРµР»Р°РµРј
         glReady_ = false;
         return;
     }
 
     owner_->makeCurrent();
 
-    // 1. РЎРЅР°С‡Р°Р»Р° СѓРґР°Р»СЏРµРј СЂРµРЅРґРµСЂРµСЂС‹ (РѕРЅРё РёСЃРїРѕР»СЊР·СѓСЋС‚ OpenGL)
     terrainRenderer_.reset();
     waterRenderer_.reset();
     entityRenderer_.reset();
@@ -136,12 +133,6 @@ HexSphereRenderer::~HexSphereRenderer() {
         surfaceAtlasPass_.reset();
     }
 
-    if (treeModel_.use_count() == 1 && treeModel_) {
-        treeModel_->clearGPUResources();
-    }
-    if (firTreeModel_.use_count() == 1 && firTreeModel_) {
-        firTreeModel_->clearGPUResources();
-    }
     if (carModel_.use_count() == 1 && carModel_) {
         carModel_->clearGPUResources();
     }
@@ -169,20 +160,16 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (progFactory_) gl_->glDeleteProgram(progFactory_);
     if (progSteam_)   gl_->glDeleteProgram(progSteam_);
 
-    // 4. РЈРґР°Р»СЏРµРј VAO (РєСЂРѕРјРµ vaoTerrain_ - РѕРЅ СѓРґР°Р»РёС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё)
     if (vaoWire_ != 0)     gl_->glDeleteVertexArrays(1, &vaoWire_);
     if (vaoSel_ != 0)      gl_->glDeleteVertexArrays(1, &vaoSel_);
     if (vaoWater_ != 0)    gl_->glDeleteVertexArrays(1, &vaoWater_);
     if (vaoPyramid_ != 0)  gl_->glDeleteVertexArrays(1, &vaoPyramid_);
 
-    // 5. РЇРІРЅРѕ СѓРЅРёС‡С‚РѕР¶Р°РµРј QOpenGLVertexArrayObject
     if (vaoTerrain_.isCreated()) {
-        // РЈР±РµР¶РґР°РµРјСЃСЏ, С‡С‚Рѕ VAO РЅРµ РїСЂРёРІСЏР·Р°РЅ
         gl_->glBindVertexArray(0);
         vaoTerrain_.destroy();
     }
 
-    // 6. РЈРґР°Р»СЏРµРј Р±СѓС„РµСЂС‹
     if (vboPositions_)   gl_->glDeleteBuffers(1, &vboPositions_);
     if (vboTerrainPos_)  gl_->glDeleteBuffers(1, &vboTerrainPos_);
     if (vboTerrainCol_)  gl_->glDeleteBuffers(1, &vboTerrainCol_);
@@ -228,7 +215,7 @@ GLuint HexSphereRenderer::makeProgram(const QByteArray& vertexSource, const QByt
         qCritical().noquote() << "Shader compilation failed:" << log;
         gl_->glDeleteShader(shader);
         return 0;
-    };
+        };
 
     const GLuint v = compile(GL_VERTEX_SHADER, vertexSource);
     const GLuint f = compile(GL_FRAGMENT_SHADER, fragmentSource);
@@ -260,7 +247,9 @@ GLuint HexSphereRenderer::makeProgram(const QByteArray& vertexSource, const QByt
     return p;
 }
 
-void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Core* gl, PerformanceStats* stats) {
+void HexSphereRenderer::initialize(QOpenGLWidget* owner,
+    QOpenGLFunctions_3_3_Core* gl,
+    PerformanceStats* stats) {
     owner_ = owner;
     gl_ = gl;
     stats_ = stats;
@@ -280,6 +269,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     progModel_ = makeProgram(VS_MODEL, FS_MODEL);
     progFactory_ = makeProgram(VS_FACTORY, FS_FACTORY);
     progSteam_ = makeProgram(VS_STEAM, FS_STEAM);
+
     if (progWire_ == 0 || progTerrain_ == 0 || progSel_ == 0 || progWater_ == 0
         || progModel_ == 0 || progFactory_ == 0 || progSteam_ == 0) {
         qCritical() << "HexSphereRenderer initialization stopped because a shader program is invalid";
@@ -302,7 +292,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     uLightDir_ = gl_->glGetUniformLocation(progTerrain_, "uLightDir");
     uNormalMatrix_ = gl_->glGetUniformLocation(progTerrain_, "uNormalMatrix");
     uOreEnabled_ = gl_->glGetUniformLocation(progTerrain_, "uOreVisualizationEnabled");
-    uRoadColor_ = gl_->glGetUniformLocation(progTerrain_, "uRoadColor");      
+    uRoadColor_ = gl_->glGetUniformLocation(progTerrain_, "uRoadColor");
     uIsRoad_ = gl_->glGetUniformLocation(progTerrain_, "uIsRoad");
 
     gl_->glUseProgram(progSel_);
@@ -316,10 +306,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         qCritical() << "HexSphereRenderer initialization stopped because the planet surface atlas is unavailable";
         surfaceAtlasPass_->release();
         surfaceAtlasPass_.reset();
-        if (envCubemap_ != 0) {
-            gl_->glDeleteTextures(1, &envCubemap_);
-            envCubemap_ = 0;
-        }
+        if (envCubemap_ != 0) { gl_->glDeleteTextures(1, &envCubemap_); envCubemap_ = 0; }
         for (GLuint* program : {
                 &progWire_, &progTerrain_, &progSel_, &progWater_,
                 &progModel_, &progFactory_, &progSteam_ }) {
@@ -392,7 +379,6 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
 
     gl_->glGenVertexArrays(1, &vaoRoad_);
     gl_->glGenBuffers(1, &vboRoad_);
-
     gl_->glBindVertexArray(vaoRoad_);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboRoad_);
     gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
@@ -411,68 +397,59 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
     particleRenderer_ = std::make_unique<ParticleRenderer>();
     particleRenderer_->initialize();
 
+    // ===================================================================
+    // ================ ЗАГРУЗКА КЭША ПРОЦЕДУРНЫХ ДЕРЕВЬЕВ ================
+    // ===================================================================
     {
         ContributorAsset treeAsset = buildContributorAsset();
-        planetTreeParticleTemplate_ = treeAsset.particles;
-        if (treeAsset.render.scale > 1e-5f) {
-            const float inverseTemplateScale = 1.0f / treeAsset.render.scale;
-            for (auto& particle : planetTreeParticleTemplate_) {
-                particle.restPosition *= inverseTemplateScale;
-                particle.position *= inverseTemplateScale;
+
+        // ---- 1. Модели стволов: 7 видов × N вариантов ----
+        auto loadMeshAsModel = [](const simple3d::Mesh& sourceMesh,
+            const QString& debugName) -> std::shared_ptr<ModelHandler> {
+                if (sourceMesh.positions.empty() || sourceMesh.indices.empty()) {
+                    return nullptr;
+                }
+                auto model = std::make_shared<ModelHandler>();
+                simple3d::Mesh meshCopy = sourceMesh;
+                if (!model->loadFromMesh(debugName, std::move(meshCopy))) {
+                    return nullptr;
+                }
+                return model;
+            };
+
+        proceduralTreeModelsBySpecies.clear();
+        proceduralTreeModelsBySpecies.resize(treeAsset.speciesMeshes.size());
+
+        for (size_t s = 0; s < treeAsset.speciesMeshes.size(); ++s) {
+            proceduralTreeModelsBySpecies[s].resize(treeAsset.speciesMeshes[s].size());
+            for (size_t v = 0; v < treeAsset.speciesMeshes[s].size(); ++v) {
+                const QString name = QString("tree_s%1_v%2").arg(s).arg(v);
+                auto model = loadMeshAsModel(treeAsset.speciesMeshes[s][v], name);
+                if (model) {
+                    model->uploadToGPU();
+                }
+                proceduralTreeModelsBySpecies[s][v] = model;
             }
+            qDebug() << "Loaded species" << s
+                << "variants:" << treeAsset.speciesMeshes[s].size();
         }
 
-        auto makeTreeFromMesh = [](const simple3d::Mesh& sourceMesh, const QString& debugName) -> std::shared_ptr<ModelHandler> {
-            if (sourceMesh.positions.empty() || sourceMesh.indices.empty()) {
-                return nullptr;
-            }
-            auto model = std::make_shared<ModelHandler>();
-            simple3d::Mesh meshCopy = sourceMesh;
-            if (!model->loadFromMesh(debugName, std::move(meshCopy))) {
-                return nullptr;
-            }
-            return model;
-        };
+        // ---- 2. Шаблоны частиц: 7 видов × N вариантов ----
+        treeParticlesBySpecies = std::move(treeAsset.speciesParticles);
 
-        treeModel_ = makeTreeFromMesh(treeAsset.generatedMesh, "planet/procedural_tree_oak");
-        if (!treeModel_) {
-            treeModel_ = makeTreeFromMesh(treeAsset.generatedWoodMesh, "planet/procedural_tree_oak");
-        }
-        if (treeModel_) {
-            treeModel_->uploadToGPU();
-            qDebug() << "Procedural oak tree model loaded";
-        }
-        else {
-            treeModel_ = ModelHandler::loadShared("resources/tree.obj");
-            if (treeModel_) {
-                treeModel_->uploadToGPU();
-                qDebug() << "Fallback oak tree model loaded";
-            }
-        }
+        // ---- 3. Метаданные вариантов (цвета/масштаб/параметры) ----
+        speciesVariants = std::move(treeAsset.speciesVariants);
 
-        firTreeModel_ = makeTreeFromMesh(treeAsset.generatedMesh, "planet/procedural_tree_fir");
-        if (!firTreeModel_) {
-            firTreeModel_ = makeTreeFromMesh(treeAsset.generatedWoodMesh, "planet/procedural_tree_fir");
-        }
-        if (firTreeModel_) {
-            firTreeModel_->uploadToGPU();
-            qDebug() << "Procedural fir tree model loaded";
-        }
-        else {
-            firTreeModel_ = ModelHandler::loadShared("resources/fir_tree.obj");
-            if (firTreeModel_) {
-                firTreeModel_->uploadToGPU();
-                qDebug() << "Fallback fir tree model loaded";
-            }
-        }
+        qDebug() << "Loaded tree particle templates:"
+            << treeParticlesBySpecies.size() << "species";
     }
+    // ===================================================================
 
     if (defaultAppViewConfig().isContributorMode()) {
         loadContributorModel();
     }
 
-    // Р’ HexSphereRenderer::initialize(), РїРѕСЃР»Рµ РІСЃРµС… РѕСЃС‚Р°Р»СЊРЅС‹С… РёРЅРёС†РёР°Р»РёР·Р°С†РёР№:
-    owner_->makeCurrent();  // РЈР±РµР¶РґР°РµРјСЃСЏ, С‡С‚Рѕ РєРѕРЅС‚РµРєСЃС‚ С‚РµРєСѓС‰РёР№
+    owner_->makeCurrent();
 
     const QString carPath = "resources/car/scene.obj";
     carModel_ = std::make_shared<CarModelHandler>();
@@ -480,7 +457,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         qDebug() << "Failed to load car model from:" << carPath;
     }
     else {
-        carModel_->uploadToGPU();  // РўРµРїРµСЂСЊ С‚РµРєСЃС‚СѓСЂС‹ Р·Р°РіСЂСѓР·СЏС‚СЃСЏ СЃ Р°РєС‚РёРІРЅС‹Рј РєРѕРЅС‚РµРєСЃС‚РѕРј
+        carModel_->uploadToGPU();
         qDebug() << "Car model loaded successfully";
     }
 
@@ -504,35 +481,29 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Co
         qDebug() << "Mine model loaded successfully";
     }
 
-    // РЎРћР—Р”РђРЃРњ Р Р•РќР”Р•Р Р•Р Р« РџРћРЎР›Р• Р’РЎР•РҐ РРќРР¦РРђР›РР—РђР¦РР™
     terrainRenderer_ = std::make_unique<TerrainRenderer>(
-        gl_,
-        progTerrain_,
-        uMVP_Terrain_,
-        uModel_,
-        uLightDir_,
-        uNormalMatrix_,
-        uOreEnabled_,
-        vaoTerrain_.objectId()  // в†ђ objectId() РІРѕР·РІСЂР°С‰Р°РµС‚ GLuint
-    );
+        gl_, progTerrain_, uMVP_Terrain_, uModel_, uLightDir_,
+        uNormalMatrix_, uOreEnabled_, vaoTerrain_.objectId());
 
     waterRenderer_ = std::make_unique<WaterRenderer>(gl_, progWater_);
+
     entityRenderer_ = std::make_unique<EntityRenderer>(
         gl_, progWire_, progSel_, progModel_, progFactory_, progSteam_,
         uMVP_Wire_, uMVP_Sel_, uMVP_Model_, uModel_Model_,
         uLightDir_Model_, uViewPos_Model_, uColor_Model_, uUseTexture_,
-        uMVP_Factory_, uModel_Factory_, uLightDir_Factory_, uViewPos_Factory_, uColor_Factory_, uUseTexture_Factory_,
+        uMVP_Factory_, uModel_Factory_, uLightDir_Factory_,
+        uViewPos_Factory_, uColor_Factory_, uUseTexture_Factory_,
         uMVP_Steam_, uModel_Steam_, uTime_Steam_, uViewPos_Steam_,
-        vaoPyramid_, pyramidVertexCount_, treeModel_, firTreeModel_, carModel_, factoryModel_, mineModel_);
-    overlayRenderer_ = std::make_unique<OverlayRenderer>(gl_, progWire_, progSel_, uMVP_Wire_, uMVP_Sel_, vaoWire_, vaoSel_, vaoPath_, lineVertexCount_, selLineVertexCount_, pathVertexCount_);
+        vaoPyramid_, pyramidVertexCount_, carModel_, factoryModel_, mineModel_);
 
-    // Renderer constructors query their uniforms, so the GL context must stay
-    // current until every renderer has been initialized.
+    overlayRenderer_ = std::make_unique<OverlayRenderer>(
+        gl_, progWire_, progSel_, uMVP_Wire_, uMVP_Sel_,
+        vaoWire_, vaoSel_, vaoPath_,
+        lineVertexCount_, selLineVertexCount_, pathVertexCount_);
+
     owner_->doneCurrent();
-
     glReady_ = true;
 }
-
 void HexSphereRenderer::loadContributorModel() {
     ContributorAsset asset = buildContributorAsset();
     contributorModelPosition_ = asset.render.position;
@@ -616,7 +587,7 @@ void HexSphereRenderer::uploadWireInternal(const std::vector<float>& vertices, G
 void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum usage) {
     qDebug() << "uploadTerrainInternal - original indices:" << mesh.idx.size();
 
-    // Р—Р°РіСЂСѓР¶Р°РµРј РІРµСЂС€РёРЅС‹ (СЌС‚Рѕ РЅРµ РјРµРЅСЏРµС‚СЃСЏ)
+    // Р вЂ”Р В°Р С–РЎР‚РЎС“Р В¶Р В°Р ВµР С Р Р†Р ВµРЎР‚РЎв‚¬Р С‘Р Р…РЎвЂ№ (РЎРЊРЎвЂљР С• Р Р…Р Вµ Р СР ВµР Р…РЎРЏР ВµРЎвЂљРЎРѓРЎРЏ)
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
     gl_->glBufferData(GL_ARRAY_BUFFER, mesh.pos.size() * sizeof(float), mesh.pos.data(), usage);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainCol_);
@@ -626,17 +597,17 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainOre_);
     gl_->glBufferData(GL_ARRAY_BUFFER, mesh.ore.size() * sizeof(float), mesh.ore.data(), usage);
 
-    // РќР• Р¤РР›Р¬РўР РЈР•Рњ Р·РґРµСЃСЊ - СЃРѕС…СЂР°РЅСЏРµРј РІСЃРµ РёРЅРґРµРєСЃС‹
+    // Р СњР вЂў Р В¤Р ВР вЂєР В¬Р СћР В Р Р€Р вЂўР Сљ Р В·Р Т‘Р ВµРЎРѓРЎРЉ - РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎРЏР ВµР С Р Р†РЎРѓР Вµ Р С‘Р Р…Р Т‘Р ВµР С”РЎРѓРЎвЂ№
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
     gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER,
         mesh.idx.size() * sizeof(uint32_t),
         mesh.idx.data(),
-        GL_DYNAMIC_DRAW);  // Р’СЃРµРіРґР° DYNAMIC, С‚Р°Рє РєР°Рє Р±СѓРґРµРј РјРµРЅСЏС‚СЊ
+        GL_DYNAMIC_DRAW);  // Р вЂ™РЎРѓР ВµР С–Р Т‘Р В° DYNAMIC, РЎвЂљР В°Р С” Р С”Р В°Р С” Р В±РЎС“Р Т‘Р ВµР С Р СР ВµР Р…РЎРЏРЎвЂљРЎРЉ
 
     terrainIndexCount_ = GLsizei(mesh.idx.size());
-    totalIndexCount_ = mesh.idx.size();  // РЎРѕС…СЂР°РЅСЏРµРј РґР»СЏ СЃС‚Р°С‚РёСЃС‚РёРєРё
+    totalIndexCount_ = mesh.idx.size();  // Р РЋР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎРЏР ВµР С Р Т‘Р В»РЎРЏ РЎРѓРЎвЂљР В°РЎвЂљР С‘РЎРѓРЎвЂљР С‘Р С”Р С‘
 
-    // РЎРѕР·РґР°РµРј VAO РѕРґРёРЅ СЂР°Р·
+    // Р РЋР С•Р В·Р Т‘Р В°Р ВµР С VAO Р С•Р Т‘Р С‘Р Р… РЎР‚Р В°Р В·
     if (!vaoTerrain_.isCreated()) {
         recreateTerrainVAO();
     }
@@ -644,24 +615,24 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
     qDebug() << "uploadTerrainInternal - total indexCount:" << terrainIndexCount_;
 }
 
-// ========== РќРћР’Р«Р™ РњР•РўРћР” Р”Р›РЇ РћР‘РќРћР’Р›Р•РќРРЇ Р’РР”РРњРћРЎРўР ==========
+// ========== Р СњР С›Р вЂ™Р В«Р в„ў Р СљР вЂўР СћР С›Р вЂќ Р вЂќР вЂєР Р‡ Р С›Р вЂР СњР С›Р вЂ™Р вЂєР вЂўР СњР ВР Р‡ Р вЂ™Р ВР вЂќР ВР СљР С›Р РЋР СћР В ==========
 //void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
 //    if (!glReady_ || !lastScene_) return;
 //
-//    // РћР±РЅРѕРІР»СЏРµРј РїРѕР·РёС†РёСЋ РєР°РјРµСЂС‹ РІ СЃС†РµРЅРµ
+//    // Р С›Р В±Р Р…Р С•Р Р†Р В»РЎРЏР ВµР С Р С—Р С•Р В·Р С‘РЎвЂ Р С‘РЎР‹ Р С”Р В°Р СР ВµРЎР‚РЎвЂ№ Р Р† РЎРѓРЎвЂ Р ВµР Р…Р Вµ
 //    lastScene_->setCameraPosition(cameraPos);
 //
-//    // РќР°РіР»СЏРґРЅРѕ СѓР±РµРґРёС‚СЊСЃСЏ, С‡С‚Рѕ С‚СЂРµСѓРіРѕР»СЊРЅРёРєРѕРІ СЂРµР°Р»СЊРЅРѕ РјРµРЅСЊС€Рµ
+//    // Р СњР В°Р С–Р В»РЎРЏР Т‘Р Р…Р С• РЎС“Р В±Р ВµР Т‘Р С‘РЎвЂљРЎРЉРЎРѓРЎРЏ, РЎвЂЎРЎвЂљР С• РЎвЂљРЎР‚Р ВµРЎС“Р С–Р С•Р В»РЎРЉР Р…Р С‘Р С”Р С•Р Р† РЎР‚Р ВµР В°Р В»РЎРЉР Р…Р С• Р СР ВµР Р…РЎРЉРЎв‚¬Р Вµ
 //    static QElapsedTimer timer;
 //    if (!timer.isValid()) {
 //        timer.start();
 //    }
-//    if (timer.elapsed() < 100) return;  // РќРµ С‡Р°С‰Рµ С‡РµРј СЂР°Р· РІ 100 РјСЃ
+//    if (timer.elapsed() < 100) return;  // Р СњР Вµ РЎвЂЎР В°РЎвЂ°Р Вµ РЎвЂЎР ВµР С РЎР‚Р В°Р В· Р Р† 100 Р СРЎРѓ
 //    timer.restart();
 //
-//    // РџСЂРѕРІРµСЂСЏРµРј, РґРІРёРіР°Р»Р°СЃСЊ Р»Рё РєР°РјРµСЂР°
+//    // Р СџРЎР‚Р С•Р Р†Р ВµРЎР‚РЎРЏР ВµР С, Р Т‘Р Р†Р С‘Р С–Р В°Р В»Р В°РЎРѓРЎРЉ Р В»Р С‘ Р С”Р В°Р СР ВµРЎР‚Р В°
 //    if (lastScene_->hasCameraMoved()) {
-//        // РџРѕР»СѓС‡Р°РµРј С‚РѕР»СЊРєРѕ РІРёРґРёРјС‹Рµ РёРЅРґРµРєСЃС‹
+//        // Р СџР С•Р В»РЎС“РЎвЂЎР В°Р ВµР С РЎвЂљР С•Р В»РЎРЉР С”Р С• Р Р†Р С‘Р Т‘Р С‘Р СРЎвЂ№Р Вµ Р С‘Р Р…Р Т‘Р ВµР С”РЎРѓРЎвЂ№
 //        std::vector<uint32_t> visibleIndices = lastScene_->getVisibleIndices(cameraPos);
 //
 //        if (visibleIndices.empty()) {
@@ -671,16 +642,16 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
 //
 //        qDebug() << "Updating visibility - visible indices:" << visibleIndices.size();
 //
-//        // РћР±РЅРѕРІР»СЏРµРј РўРћР›Р¬РљРћ РёРЅРґРµРєСЃРЅС‹Р№ Р±СѓС„РµСЂ
+//        // Р С›Р В±Р Р…Р С•Р Р†Р В»РЎРЏР ВµР С Р СћР С›Р вЂєР В¬Р С™Р С› Р С‘Р Р…Р Т‘Р ВµР С”РЎРѓР Р…РЎвЂ№Р в„– Р В±РЎС“РЎвЂћР ВµРЎР‚
 //        gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
 //        gl_->glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
 //            visibleIndices.size() * sizeof(uint32_t),
 //            visibleIndices.data());
 //
-//        // РћР±РЅРѕРІР»СЏРµРј СЃС‡РµС‚С‡РёРє РґР»СЏ РѕС‚СЂРёСЃРѕРІРєРё
+//        // Р С›Р В±Р Р…Р С•Р Р†Р В»РЎРЏР ВµР С РЎРѓРЎвЂЎР ВµРЎвЂљРЎвЂЎР С‘Р С” Р Т‘Р В»РЎРЏ Р С•РЎвЂљРЎР‚Р С‘РЎРѓР С•Р Р†Р С”Р С‘
 //        terrainIndexCount_ = GLsizei(visibleIndices.size());
 //
-//        // РћС‚РјРµС‡Р°РµРј, С‡С‚Рѕ РєР°РјРµСЂР° РѕР±СЂР°Р±РѕС‚Р°РЅР°
+//        // Р С›РЎвЂљР СР ВµРЎвЂЎР В°Р ВµР С, РЎвЂЎРЎвЂљР С• Р С”Р В°Р СР ВµРЎР‚Р В° Р С•Р В±РЎР‚Р В°Р В±Р С•РЎвЂљР В°Р Р…Р В°
 //        lastScene_->updateLastCameraPosition();
 //
 //        qDebug() << "Visibility updated, drawing" << terrainIndexCount_ << "indices";
@@ -690,41 +661,37 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
 void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
     if (!glReady_ || !lastScene_) return;
 
-    // РћР±РЅРѕРІР»СЏРµРј РїРѕР·РёС†РёСЋ РєР°РјРµСЂС‹ РІ СЃС†РµРЅРµ
+    // Р С›Р В±Р Р…Р С•Р Р†Р В»РЎРЏР ВµР С Р С—Р С•Р В·Р С‘РЎвЂ Р С‘РЎР‹ Р С”Р В°Р СР ВµРЎР‚РЎвЂ№ Р Р† РЎРѓРЎвЂ Р ВµР Р…Р Вµ
     lastScene_->setCameraPosition(cameraPos);
     if (!lastScene_->supportsTerrainVisibility()) {
         terrainIndexCount_ = 0;
         return;
     }
 
-    // РЈР”РђР›РРўР¬ СЌС‚Сѓ СЃС‚СЂРѕРєСѓ:
+    // Р Р€Р вЂќР С’Р вЂєР ВР СћР В¬ РЎРЊРЎвЂљРЎС“ РЎРѓРЎвЂљРЎР‚Р С•Р С”РЎС“:
     // lastScene_->updatePrediction(cameraPos);
 
-    // РСЃРїРѕР»СЊР·СѓРµРј Р°РґР°РїС‚РёРІРЅСѓСЋ Р»РѕРіРёРєСѓ РґР»СЏ РѕРїСЂРµРґРµР»РµРЅРёСЏ РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё РѕР±РЅРѕРІР»РµРЅРёСЏ
+    // Р ВРЎРѓР С—Р С•Р В»РЎРЉР В·РЎС“Р ВµР С Р В°Р Т‘Р В°Р С—РЎвЂљР С‘Р Р†Р Р…РЎС“РЎР‹ Р В»Р С•Р С–Р С‘Р С”РЎС“ Р Т‘Р В»РЎРЏ Р С•Р С—РЎР‚Р ВµР Т‘Р ВµР В»Р ВµР Р…Р С‘РЎРЏ Р Р…Р ВµР С•Р В±РЎвЂ¦Р С•Р Т‘Р С‘Р СР С•РЎРѓРЎвЂљР С‘ Р С•Р В±Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С‘РЎРЏ
     if (lastScene_->shouldUpdateVisibility() && lastScene_->hasCameraMoved(0.1f)) {
         QElapsedTimer filterTimer;
         filterTimer.start();
 
-        // РРЎРџР РђР’РРўР¬: РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РѕР±С‹С‡РЅСѓСЋ РІРµСЂСЃРёСЋ, РЅРµ СЃ РїСЂРµРґСЃРєР°Р·Р°РЅРёРµРј
+        // Р ВР РЋР СџР В Р С’Р вЂ™Р ВР СћР В¬: Р С‘РЎРѓР С—Р С•Р В»РЎРЉР В·Р С•Р Р†Р В°РЎвЂљРЎРЉ Р С•Р В±РЎвЂ№РЎвЂЎР Р…РЎС“РЎР‹ Р Р†Р ВµРЎР‚РЎРѓР С‘РЎР‹, Р Р…Р Вµ РЎРѓ Р С—РЎР‚Р ВµР Т‘РЎРѓР С”Р В°Р В·Р В°Р Р…Р С‘Р ВµР С
         std::vector<uint32_t> visibleIndices = lastScene_->getVisibleIndices(cameraPos);
 
         qint64 elapsed = filterTimer.elapsed();
 
-        // РЎС‚Р°С‚РёСЃС‚РёРєР°
+        // Р РЋРЎвЂљР В°РЎвЂљР С‘РЎРѓРЎвЂљР С‘Р С”Р В°
         static int updateCount = 0;
         static qint64 totalTime = 0;
         updateCount++;
         totalTime += elapsed;
 
         if (updateCount % 10 == 0) {
-            qDebug() << "=== ADAPTIVE UPDATE STATS ===";  // Р’РµСЂРЅСѓС‚СЊ СЃС‚Р°СЂРѕРµ РЅР°Р·РІР°РЅРёРµ
-            qDebug() << "Avg filter time:" << (totalTime / updateCount) << "ms";
-            qDebug() << "Triangles:" << (visibleIndices.size() / 3)
-                << "/" << (lastScene_->terrain().idx.size() / 3);
-            qDebug() << "==============================";
+            // Отключено для производительности
         }
 
-        // РћР±РЅРѕРІР»СЏРµРј РёРЅРґРµРєСЃРЅС‹Р№ Р±СѓС„РµСЂ
+        // Р С›Р В±Р Р…Р С•Р Р†Р В»РЎРЏР ВµР С Р С‘Р Р…Р Т‘Р ВµР С”РЎРѓР Р…РЎвЂ№Р в„– Р В±РЎС“РЎвЂћР ВµРЎР‚
         gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
         gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER,
             visibleIndices.size() * sizeof(uint32_t),
@@ -742,7 +709,7 @@ void HexSphereRenderer::recreateTerrainVAO() {
         return;
     }
 
-    // Р•СЃР»Рё VAO СѓР¶Рµ СЃРѕР·РґР°РЅ, РЅРµ СЃРѕР·РґР°РµРј Р·Р°РЅРѕРІРѕ
+    // Р вЂўРЎРѓР В»Р С‘ VAO РЎС“Р В¶Р Вµ РЎРѓР С•Р В·Р Т‘Р В°Р Р…, Р Р…Р Вµ РЎРѓР С•Р В·Р Т‘Р В°Р ВµР С Р В·Р В°Р Р…Р С•Р Р†Р С•
     if (vaoTerrain_.isCreated()) {
         qDebug() << "VAO already created, skipping recreation";
         return;
@@ -750,7 +717,7 @@ void HexSphereRenderer::recreateTerrainVAO() {
 
     qDebug() << "Creating terrain VAO - START";
 
-    // РЎРѕР·РґР°РµРј РЅРѕРІС‹Р№ VAO
+    // Р РЋР С•Р В·Р Т‘Р В°Р ВµР С Р Р…Р С•Р Р†РЎвЂ№Р в„– VAO
     if (!vaoTerrain_.create()) {
         qDebug() << "Failed to create VAO!";
         return;
@@ -758,7 +725,7 @@ void HexSphereRenderer::recreateTerrainVAO() {
 
     vaoTerrain_.bind();
 
-    // РќР°СЃС‚СЂР°РёРІР°РµРј Р°С‚СЂРёР±СѓС‚С‹
+    // Р СњР В°РЎРѓРЎвЂљРЎР‚Р В°Р С‘Р Р†Р В°Р ВµР С Р В°РЎвЂљРЎР‚Р С‘Р В±РЎС“РЎвЂљРЎвЂ№
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
     gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(0);
@@ -775,12 +742,12 @@ void HexSphereRenderer::recreateTerrainVAO() {
     gl_->glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(3);
 
-    // РџСЂРёРІСЏР·С‹РІР°РµРј РёРЅРґРµРєСЃРЅС‹Р№ Р±СѓС„РµСЂ
+    // Р СџРЎР‚Р С‘Р Р†РЎРЏР В·РЎвЂ№Р Р†Р В°Р ВµР С Р С‘Р Р…Р Т‘Р ВµР С”РЎРѓР Р…РЎвЂ№Р в„– Р В±РЎС“РЎвЂћР ВµРЎР‚
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
 
     vaoTerrain_.release();
 
-    // РћР±РЅРѕРІР»СЏРµРј VAO РІ СЂРµРЅРґРµСЂРµСЂРµ
+    // Р С›Р В±Р Р…Р С•Р Р†Р В»РЎРЏР ВµР С VAO Р Р† РЎР‚Р ВµР Р…Р Т‘Р ВµРЎР‚Р ВµРЎР‚Р Вµ
     if (terrainRenderer_) {
         terrainRenderer_->updateVAO(vaoTerrain_.objectId());
     }
@@ -961,15 +928,21 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
 void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting) {
     if (!glReady_) return;
 
+    static QElapsedTimer frameTimer;
+    static int frameCount = 0;
+    static qint64 totalTime = 0;
+
+    if (!frameTimer.isValid()) {
+        frameTimer.start();
+    }
+
     QVector3D cameraPos = (camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
 
-    // РџСЂРѕРІРµСЂСЏРµРј, С‡С‚Рѕ СЂРµРЅРґРµСЂРµСЂС‹ СЃСѓС‰РµСЃС‚РІСѓСЋС‚
     if (!terrainRenderer_ || !waterRenderer_ || !entityRenderer_ || !overlayRenderer_) {
         qDebug() << "ERROR: One or more renderers are null!";
         return;
     }
 
-    // РћР±РЅРѕРІР»СЏРµРј РІРёРґРёРјРѕСЃС‚СЊ
     updateVisibility(cameraPos);
 
     const float dpr = owner_->devicePixelRatioF();
@@ -979,7 +952,6 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     gl_->glClearColor(0.05f, 0.06f, 0.08f, 1.0f);
     gl_->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // === BASELINE GL STATE ===
     gl_->glDisable(GL_BLEND);
     gl_->glDepthMask(GL_TRUE);
     gl_->glEnable(GL_DEPTH_TEST);
@@ -994,7 +966,6 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     gl_->glUseProgram(0);
 
     if (stats_) stats_->startGPUTimer();
-
 
     const QMatrix4x4 viewProjection = camera.projection * camera.view;
     RenderContext ctx{
@@ -1016,7 +987,6 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     if (roadVertexCount_ > 0 && progTerrain_ != 0) {
         gl_->glUseProgram(progTerrain_);
 
-        // Устанавливаем матрицы
         gl_->glUniformMatrix4fv(uMVP_Terrain_, 1, GL_FALSE, ctx.mvp.constData());
 
         QMatrix4x4 model;
@@ -1024,86 +994,147 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
         gl_->glUniformMatrix4fv(uModel_, 1, GL_FALSE, model.constData());
         gl_->glUniformMatrix3fv(uNormalMatrix_, 1, GL_FALSE, model.normalMatrix().constData());
 
-        // Устанавливаем свет
         const QVector3D& lightDir = ctx.lighting.direction;
         gl_->glUniform3f(uLightDir_, lightDir.x(), lightDir.y(), lightDir.z());
 
-        /*// Отключаем визуализацию руды для дороги
-        if (uOreEnabled_ >= 0) {
-            gl_->glUniform1i(uOreEnabled_, 0);
-        }*/
-
-        // Устанавливаем цвет дороги
         if (uRoadColor_ >= 0) {
-            gl_->glUniform3f(uRoadColor_, 0.35f, 0.32f, 0.28f);  // Серо-коричневый асфальт
+            gl_->glUniform3f(uRoadColor_, 0.35f, 0.32f, 0.28f);
         }
 
-        // Устанавливаем флаг, что это дорога
         if (uIsRoad_ >= 0) {
             gl_->glUniform1i(uIsRoad_, 1);
         }
 
-        // Рендерим
         gl_->glBindVertexArray(vaoRoad_);
         gl_->glDrawArrays(GL_TRIANGLES, 0, roadVertexCount_);
         gl_->glBindVertexArray(0);
 
-        // Восстанавливаем флаг
         if (uIsRoad_ >= 0) {
             gl_->glUniform1i(uIsRoad_, 0);
         }
     }
 
-    // overlay пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ/пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ state
-    //gl_->glDisable(GL_BLEND);
-    //gl_->glDepthMask(GL_TRUE);
-    //gl_->glEnable(GL_DEPTH_TEST);
-    //gl_->glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    //gl_->glBindVertexArray(0);
-    //gl_->glUseProgram(0);
-
     if (graph.scene.isContributorMode()) {
         renderContributorModel(ctx);
     }
     else {
-        entityRenderer_->renderTrees(ctx);
-        renderPlanetTreeParticles(ctx);
+        renderProceduralTreeParticles(ctx);
     }
 
     if (stats_) stats_->stopGPUTimer();
+
+    frameCount++;
+    totalTime += frameTimer.restart();
+
+    if (frameCount >= 60) {
+        const float fps = 60.0f / (totalTime / 1000.0f);
+        const float avgMs = static_cast<float>(totalTime) / 60.0f;
+        qDebug() << "FPS:" << fps << "AVG frame:" << avgMs << "ms";
+        frameCount = 0;
+        totalTime = 0;
+    }
 }
 
-void HexSphereRenderer::renderPlanetTreeParticles(const RenderContext& ctx) {
-    if (!particleRenderer_ || !particleRenderer_->isInitialized()) {
-        return;
-    }
-    if (planetTreeParticleTemplate_.empty()) {
-        return;
-    }
+void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) {
+    if (!particleRenderer_ || !particleRenderer_->isInitialized()) return;
+    if (treeParticlesBySpecies.empty()) return;
+    if (proceduralTreeModelsBySpecies.empty()) return;
+    if (speciesVariants.empty()) return;
+
+    // ========== ВРЕМЯ ==========
+    static QElapsedTimer animTimer;
+    if (!animTimer.isValid()) animTimer.start();
+    const float dt = std::min(static_cast<float>(animTimer.restart()) / 1000.0f, 0.1f);
+    static float treeParticleTime = 0.0f;
+    treeParticleTime += dt;
+
+    // ========== СРЕДНИЙ ВЕТЕР ==========
+    windField_.direction = QVector3D(0.8f, 0.2f, 0.4f).normalized();
+    windField_.strength = 0.20f;
+    windField_.gustStrength = 0.22f;
+    windField_.gustSpeed = 1.1f;
+    windField_.turbulence = 0.09f;
+
+    particleRenderer_->update(dt, windField_, QVector3D(0, 0, 0));
+    particleRenderer_->setTime(treeParticleTime);
 
     const auto& placements = ctx.graph.scene.getTreePlacements();
-    if (placements.empty()) {
-        return;
-    }
+    if (placements.empty()) return;
 
-    const float modelScale = ctx.graph.scene.getModelScaleFactor();
+    // ========== ГЛОБАЛЬНЫЙ МАСШТАБ ==========
+    constexpr float kTreeGlobalScale = 0.12f;
 
-    constexpr size_t kMaxTreesWithParticles = 96;
-    constexpr size_t kMaxParticlesTotal = 30000;
-    const size_t treeCount = std::min(placements.size(), kMaxTreesWithParticles);
+    // ========== БЮДЖЕТ ЧАСТИЦ ==========
+    constexpr size_t kMaxParticlesTotal = 60000;
+    constexpr size_t kMinParticlesPerTree = 1000;
+    constexpr size_t kMaxParticlesPerTree = 5000;
 
+    const size_t treeCount = placements.size();
+    const size_t computedPerTree = kMaxParticlesTotal / std::max<size_t>(treeCount, 1);
+    const size_t particlesPerTreeBudget = std::clamp<size_t>(
+        computedPerTree, kMinParticlesPerTree, kMaxParticlesPerTree);
+
+    // ========== ХЭШ ДЛЯ ПЕРЕСОЗДАНИЯ ==========
     uint64_t placementHash = 1469598103934665603ull;
     auto hashCombine = [&placementHash](uint64_t value) {
         placementHash ^= value;
         placementHash *= 1099511628211ull;
         };
 
+    const auto& model = ctx.graph.scene.model();
+    const auto& cells = model.cells();
+
+    // Считаем индекс вида и варианта для каждого placement
+    struct PlacementInfo {
+        TreeBuilder::TreeSpecies species;
+        int speciesIdx;
+        int variantIdx;
+        QVector3D treePos;
+        QVector3D up;
+    };
+    std::vector<PlacementInfo> infos;
+    infos.reserve(treeCount);
+
     hashCombine(static_cast<uint64_t>(treeCount));
+
     for (size_t i = 0; i < treeCount; ++i) {
         const auto& placement = placements[i];
-        const QVector3D treePos = computeSurfacePoint(ctx.graph.scene, placement, ctx.graph.heightStep);
+        const QVector3D treePos = computeSurfacePoint(
+            ctx.graph.scene, placement, ctx.graph.heightStep);
+        const QVector3D up = treePos.normalized();
+
+        // Биом клетки
+        Biome biome = Biome::Grass;
+        if (placement.cellId >= 0 &&
+            placement.cellId < static_cast<int>(cells.size())) {
+            biome = cells[static_cast<size_t>(placement.cellId)].biome;
+        }
+
+        // Вид по биому + seed
+        const uint32_t speciesSeed =
+            static_cast<uint32_t>(placement.cellId) * 2654435761u;
+        const auto species = TreeBuilder::selectSpecies(biome, speciesSeed);
+        const int speciesIdx = static_cast<int>(species);
+
+        // Вариант
+        const size_t variantsForSpecies =
+            speciesVariants[speciesIdx].size();
+        if (variantsForSpecies == 0) {
+            continue;
+        }
+
+        const uint32_t variantSeed =
+            static_cast<uint32_t>(placement.cellId) * 40503u ^
+            static_cast<uint32_t>(placement.triangleIdx) * 2246822519u ^
+            static_cast<uint32_t>(i) * 3266489917u;
+        const int variantIdx = static_cast<int>(variantSeed % variantsForSpecies);
+
+        infos.push_back({ species, speciesIdx, variantIdx, treePos, up });
+
+        // Хэш
         hashCombine(static_cast<uint64_t>(placement.cellId + 10007));
-        hashCombine(static_cast<uint64_t>(placement.treeType));
+        hashCombine(static_cast<uint64_t>(speciesIdx));
+        hashCombine(static_cast<uint64_t>(variantIdx));
         hashCombine(static_cast<uint64_t>(placement.triangleIdx + 1009));
         hashCombine(quantizedHashFloat(placement.baryU));
         hashCombine(quantizedHashFloat(placement.baryV));
@@ -1115,69 +1146,133 @@ void HexSphereRenderer::renderPlanetTreeParticles(const RenderContext& ctx) {
         hashCombine(quantizedHashFloat(treePos.z()));
     }
 
-    if (placementHash != planetTreeParticlesPlacementHash_) {
+    // ========== ПЕРЕСОЗДАНИЕ ЧАСТИЦ ==========
+    if (placementHash != treeParticlesPlacementHash_) {
         std::vector<ContributorParticle> worldParticles;
-        worldParticles.reserve(std::min(kMaxParticlesTotal, treeCount * planetTreeParticleTemplate_.size()));
-        const size_t particlesPerTreeBudget = std::max<size_t>(1, kMaxParticlesTotal / treeCount);
-        const size_t sourceStep = std::max<size_t>(1, planetTreeParticleTemplate_.size() / particlesPerTreeBudget);
+        worldParticles.reserve(treeCount * kMaxParticlesPerTree);
 
-        for (size_t i = 0; i < treeCount; ++i) {
-            const auto& placement = placements[i];
-            const QVector3D treePos = computeSurfacePoint(ctx.graph.scene, placement, ctx.graph.heightStep);
-            const QVector3D up = treePos.normalized();
+        for (const auto& info : infos) {
+            const auto& variant = speciesVariants[info.speciesIdx][info.variantIdx];
+
+            const auto& particleTemplate =
+                treeParticlesBySpecies[info.speciesIdx][info.variantIdx];
+            if (particleTemplate.empty()) continue;
+
+            // Итоговый масштаб: реалистичный × глобальный × per-placement
+            const float baseScale =
+                variant.realisticScale * kTreeGlobalScale;
+            const float finalScale = baseScale * placements[
+                &info - infos.data()].scale;
 
             QMatrix4x4 transform;
-            transform.translate(treePos);
-            orientTreeToSurface(transform, up);
-            transform.rotate(placement.rotation * 180.0f / 3.14159f, 0, 1, 0);
-            const float baseScale = (placement.treeType == TreeType::Fir) ? 0.045f : 0.04f;
-            transform.scale(baseScale * placement.scale);
+            transform.translate(info.treePos);
+            orientTreeToSurface(transform, info.up);
 
-            QVector3D foliageColor = placement.foliageColor;
-            if (placement.colorType == TreePlacement::TreeColorType::Autumn) {
-                foliageColor = QVector3D(0.85f, 0.48f, 0.18f);
-            }
-            else {
-                foliageColor = QVector3D(0.22f, 0.68f, 0.24f);
-            }
+            // rotation из placement — но нужно найти соответствующий
+            const size_t idx = static_cast<size_t>(&info - infos.data());
+            transform.rotate(
+                placements[idx].rotation * 180.0f / 3.14159265f, 0, 1, 0);
+            transform.scale(finalScale);
 
+            const QVector3D foliageColor = variant.foliageColor;
+
+            const size_t sourceStep = std::max<size_t>(
+                1, particleTemplate.size() / particlesPerTreeBudget);
             size_t emittedForTree = 0;
-            for (size_t sourceIndex = 0; sourceIndex < planetTreeParticleTemplate_.size(); sourceIndex += sourceStep) {
-                if (worldParticles.size() >= kMaxParticlesTotal) {
-                    break;
-                }
-                if (emittedForTree >= particlesPerTreeBudget) {
-                    break;
-                }
-                const auto& source = planetTreeParticleTemplate_[sourceIndex];
+
+            for (size_t srcIdx = 0;
+                srcIdx < particleTemplate.size();
+                srcIdx += sourceStep) {
+                if (emittedForTree >= particlesPerTreeBudget) break;
+
+                const auto& source = particleTemplate[srcIdx];
                 ContributorParticle particle = source;
-                particle.restPosition = (transform * QVector4D(source.restPosition, 1.0f)).toVector3D();
-                particle.position = (transform * QVector4D(source.position, 1.0f)).toVector3D();
-                particle.normal = transform.mapVector(source.normal).normalized();
+                particle.restPosition =
+                    (transform * QVector4D(source.restPosition, 1.0f)).toVector3D();
+                particle.position =
+                    (transform * QVector4D(source.position, 1.0f)).toVector3D();
+                particle.normal =
+                    transform.mapVector(source.normal).normalized();
                 particle.color = foliageColor;
-                particle.size *= 1.25f;
-                particle.velocity = QVector3D(0.0f, 0.0f, 0.0f);
-                particle.windWeight = 0.0f;
+                particle.size *= 3.0f * finalScale;
+                particle.velocity = QVector3D(0, 0, 0);
+                particle.windWeight = 0.6f;
+
                 worldParticles.push_back(particle);
                 ++emittedForTree;
             }
-
-            if (worldParticles.size() >= kMaxParticlesTotal) {
-                break;
-            }
         }
 
-        if (worldParticles.empty()) {
-            return;
+        if (!worldParticles.empty()) {
+            qDebug() << "Updating procedural tree particles:"
+                << worldParticles.size() << "particles for"
+                << treeCount << "trees";
+            particleRenderer_->updateParticles(worldParticles);
+            treeParticlesPlacementHash_ = placementHash;
         }
-
-        particleRenderer_->updateParticles(worldParticles);
-        planetTreeParticlesPlacementHash_ = placementHash;
     }
 
     particleRenderer_->render(ctx.mvp, ctx.camera.view, ctx.cameraPos);
-}
 
+    // ===================================================================
+    // ================ РИСУЕМ СТВОЛЫ ====================================
+    // ===================================================================
+    gl_->glUseProgram(progModel_);
+
+    const GLint uIsCar = gl_->glGetUniformLocation(progModel_, "uIsCar");
+    if (uIsCar >= 0) gl_->glUniform1i(uIsCar, 0);
+
+    const GLint uUseFoliageColor =
+        gl_->glGetUniformLocation(progModel_, "uUseFoliageColor");
+    if (uUseFoliageColor >= 0) gl_->glUniform1i(uUseFoliageColor, 0);
+
+    const GLint uTrunkColor =
+        gl_->glGetUniformLocation(progModel_, "uTrunkColor");
+
+    const QVector3D globalLightDir = QVector3D(0.5f, 1.0f, 0.3f).normalized();
+    const QVector3D eye =
+        (ctx.camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
+
+    gl_->glUniform3f(uLightDir_Model_,
+        globalLightDir.x(), globalLightDir.y(), globalLightDir.z());
+    gl_->glUniform3f(uViewPos_Model_, eye.x(), eye.y(), eye.z());
+
+    for (size_t i = 0; i < infos.size(); ++i) {
+        const auto& info = infos[i];
+        const auto& placement = placements[i];
+        const auto& variant = speciesVariants[info.speciesIdx][info.variantIdx];
+
+        const auto& model3d =
+            proceduralTreeModelsBySpecies[info.speciesIdx][info.variantIdx];
+        if (!model3d || !model3d->isInitialized()) continue;
+
+        const float baseScale = variant.realisticScale * kTreeGlobalScale;
+        const float finalScale = baseScale * placement.scale;
+
+        QMatrix4x4 modelMat;
+        modelMat.translate(info.treePos);
+        orientTreeToSurface(modelMat, info.up);
+        modelMat.rotate(placement.rotation * 180.0f / 3.14159265f, 0, 1, 0);
+        modelMat.scale(finalScale);
+
+        const QMatrix4x4 mvpTree =
+            ctx.camera.projection * ctx.camera.view * modelMat;
+
+        if (uTrunkColor >= 0) {
+            gl_->glUniform3f(uTrunkColor,
+                variant.trunkColor.x(),
+                variant.trunkColor.y(),
+                variant.trunkColor.z());
+        }
+
+        model3d->draw(progModel_, mvpTree, modelMat, ctx.camera.view,
+            variant.trunkColor, /*forceTextureOff=*/true);
+    }
+
+    // Возвращаем состояние
+    if (uUseFoliageColor >= 0) gl_->glUniform1i(uUseFoliageColor, 0);
+    gl_->glUseProgram(0);
+}
 void HexSphereRenderer::generateEnvCubemap() {
     if (envCubemap_) return;
 
@@ -1211,7 +1306,7 @@ void HexSphereRenderer::uploadTerrainHydrology(
     withContext([&]() {
         uploadTerrainInternal(scene.terrain(), terrainUsage);
         rebuildPlanetSurfaceAtlas(scene.terrain(), scene.model());
-    });
+        });
 }
 
 void HexSphereRenderer::ensureSceneDepthTexture(int width, int height) {
@@ -1326,7 +1421,7 @@ void HexSphereRenderer::updateTerrainOreData(const TerrainMesh& mesh) {
             return;
         }
 
-        // Обновляем только ore-буфер
+        // РћР±РЅРѕРІР»СЏРµРј С‚РѕР»СЊРєРѕ ore-Р±СѓС„РµСЂ
         gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainOre_);
         gl_->glBufferSubData(GL_ARRAY_BUFFER, 0,
             mesh.ore.size() * sizeof(float),

@@ -25,7 +25,7 @@ void main() {
     vRotation = aRotation;
     
     vec3 N = normalize(aNormal);
-    vec3 L = normalize(uLightDir);
+    vec3 L = normalize(-uLightDir);
     float NdotL = dot(N, L);
     vDiffuse = max(NdotL, 0.0) * 0.6 + 0.4;
     
@@ -113,27 +113,22 @@ void ParticleRenderer::initialize() {
     vao_.bind();
     vbo_.bind();
 
-    // Позиции (location = 0)
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(ContributorParticle),
         reinterpret_cast<void*>(offsetof(ContributorParticle, position)));
 
-    // Цвета (location = 1)
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(ContributorParticle),
         reinterpret_cast<void*>(offsetof(ContributorParticle, color)));
 
-    // Размер (location = 2)
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(ContributorParticle),
         reinterpret_cast<void*>(offsetof(ContributorParticle, size)));
 
-    // Вращение (location = 3)
     glEnableVertexAttribArray(3);
     glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(ContributorParticle),
         reinterpret_cast<void*>(offsetof(ContributorParticle, rotation)));
 
-    // Нормали (location = 4)
     glEnableVertexAttribArray(4);
     glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(ContributorParticle),
         reinterpret_cast<void*>(offsetof(ContributorParticle, normal)));
@@ -144,6 +139,7 @@ void ParticleRenderer::initialize() {
     initialized_ = true;
     qDebug() << "ParticleRenderer initialized with normals";
 }
+
 void ParticleRenderer::createShaders() {
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vs, 1, &vertexShader, nullptr);
@@ -207,8 +203,6 @@ void ParticleRenderer::updateParticles(const std::vector<ContributorParticle>& p
 void ParticleRenderer::render(const QMatrix4x4& mvp, const QMatrix4x4& view, const QVector3D& cameraPos) {
     if (!initialized_ || particleCount_ == 0) return;
 
-    time_ += 0.016f;
-
     glUseProgram(program_);
     glUniformMatrix4fv(uMVP_, 1, GL_FALSE, mvp.constData());
     glUniform3f(uViewPos_, cameraPos.x(), cameraPos.y(), cameraPos.z());
@@ -229,13 +223,12 @@ void ParticleRenderer::render(const QMatrix4x4& mvp, const QMatrix4x4& view, con
     glEnable(GL_CULL_FACE);
     glDisable(GL_BLEND);
 }
+
 void ParticleRenderer::update(float deltaTime, const ContributorWindField& wind, const QVector3D& treeCenter) {
     if (!initialized_ || particleCount_ == 0) return;
 
-    // Ограничиваем deltaTime
-    deltaTime = std::min(deltaTime, 0.033f);
+    deltaTime = std::min(deltaTime, 0.1f);
 
-    // Получаем указатель на данные частиц
     vbo_.bind();
     ContributorParticle* particles = reinterpret_cast<ContributorParticle*>(vbo_.map(QOpenGLBuffer::ReadWrite));
 
@@ -245,39 +238,37 @@ void ParticleRenderer::update(float deltaTime, const ContributorWindField& wind,
         return;
     }
 
-    const float stiffness = 8.0f;   // Сила возврата к restPosition
-    const float damping = 3.0f;     // Затухание
+    // ========== СРЕДНЯЯ ЖИВОСТЬ ==========
+    const float stiffness = 11.0f;   // было 15.0 — чуть мягче
+    const float damping = 4.5f;      // было 6.0 — чуть меньше затухания
+    // ======================================
 
     for (int i = 0; i < particleCount_; ++i) {
         ContributorParticle& p = particles[i];
 
-        // 1. Wind force (ветер)
+        float seed = p.phase + p.restPosition.y() * 1.7f + p.restPosition.x() * 2.3f + p.restPosition.z() * 3.1f;
+
         float heightFactor = (p.restPosition.y() - treeCenter.y()) / 5.0f;
         heightFactor = std::clamp(heightFactor, 0.3f, 1.2f);
 
-        float gust = std::sin(time_ * wind.gustSpeed + p.phase) * wind.gustStrength;
-        float turbulenceX = std::sin(time_ * 2.3f + p.restPosition.y() * 1.5f) * wind.turbulence;
-        float turbulenceZ = std::cos(time_ * 1.7f + p.restPosition.x() * 1.2f) * wind.turbulence;
+        // ========== СРЕДНИЕ МНОЖИТЕЛИ ==========
+        float gust = std::sin(time_ * (wind.gustSpeed * 0.6f + seed * 0.3f) + seed) * wind.gustStrength * 1.2f;
+        float turbulenceX = std::sin(time_ * (2.3f + seed * 0.5f) + p.restPosition.y() * 1.5f) * wind.turbulence * 1.1f;
+        float turbulenceZ = std::cos(time_ * (1.7f + seed * 0.7f) + p.restPosition.x() * 1.2f) * wind.turbulence * 1.1f;
+        // ======================================
 
         QVector3D windForce = wind.direction * (wind.strength + gust) * heightFactor;
         windForce.setX(windForce.x() + turbulenceX);
         windForce.setZ(windForce.z() + turbulenceZ);
         windForce *= p.windWeight;
 
-        // 2. Spring force (возврат к restPosition)
         QVector3D springForce = (p.restPosition - p.position) * stiffness;
-
-        // 3. Damping force (затухание)
         QVector3D dampingForce = -p.velocity * damping;
 
-        // Суммарная сила
         QVector3D acceleration = windForce + springForce + dampingForce;
 
-        // Обновление скорости и позиции
         p.velocity += acceleration * deltaTime;
         p.position += p.velocity * deltaTime;
-
-        // Небольшое затухание скорости
         p.velocity *= 0.99f;
     }
 

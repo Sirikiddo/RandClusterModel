@@ -419,10 +419,11 @@ void HexSphereSceneController::updateTreeOccupiedCells() {
 void HexSphereSceneController::generateTreePlacements() {
     treePlacements_.clear();
 
+    // ========== CONTRIBUTOR MODE ==========
     if (isContributorMode()) {
         TreePlacement placement;
         placement.cellId = 0;
-        placement.treeType = TreeType::Oak;
+        // treeType убран — вид теперь определяется в рендерере через TreeBuilder
         placement.placementMode = TreePlacement::PlacementMode::World;
         placement.worldPosition = QVector3D(0.0f, 1.0f, 0.0f);
         placement.worldUp = QVector3D(0.0f, 1.0f, 0.0f);
@@ -434,93 +435,81 @@ void HexSphereSceneController::generateTreePlacements() {
         return;
     }
 
+    // ========== PLANET MODE ==========
     const auto& cells = model_.cells();
-    const float modelScale = getModelScaleFactor();
 
     const uint32_t deterministicSeed =
         genParams_.seed ^
         (static_cast<uint32_t>(generatorIndex_ + 1) * 0x9e3779b9u) ^
         (static_cast<uint32_t>(L_ + 1) * 0x85ebca6bu);
     std::mt19937 gen(deterministicSeed);
+
     std::uniform_real_distribution<float> distBary(0.1f, 0.8f);
     std::uniform_real_distribution<float> distScale(0.7f, 1.3f);
     std::uniform_real_distribution<float> distRot(0.0f, 2.0f * 3.14159f);
     std::uniform_real_distribution<float> distTreePresence(0.0f, 1.0f);
 
-    // Зеленые оттенки
-    std::uniform_real_distribution<float> distGreenR(0.15f, 0.45f);
-    std::uniform_real_distribution<float> distGreenG(0.55f, 0.85f);
-    std::uniform_real_distribution<float> distGreenB(0.1f, 0.35f);
-
-    // Зеленые оттенки для ёлочек (более темные, синеватые)
-    std::uniform_real_distribution<float> distFirR(0.1f, 0.35f);
-    std::uniform_real_distribution<float> distFirG(0.35f, 0.65f);
-    std::uniform_real_distribution<float> distFirB(0.2f, 0.45f);
-
-    // Оранжевые оттенки
-    std::uniform_real_distribution<float> distAutumnR(0.7f, 1.0f);
-    std::uniform_real_distribution<float> distAutumnG(0.4f, 0.7f);
-    std::uniform_real_distribution<float> distAutumnB(0.1f, 0.3f);
-
-    // Ствол
-    std::uniform_real_distribution<float> distTrunkR(0.4f, 0.65f);
-    std::uniform_real_distribution<float> distTrunkG(0.25f, 0.4f);
-    std::uniform_real_distribution<float> distTrunkB(0.1f, 0.2f);
-
-    // Ствол для ёлочек
-    std::uniform_real_distribution<float> distFirTrunkR(0.35f, 0.55f);
-    std::uniform_real_distribution<float> distFirTrunkG(0.2f, 0.35f);
-    std::uniform_real_distribution<float> distFirTrunkB(0.1f, 0.18f);
-
-    int greenCount = 0;
-    int firCount = 0;
-    int autumnCount = 0;
+    int greenCount = 0;   // Grass/Jungle
+    int savannaCount = 0; // Savanna
 
     for (size_t i = 0; i < cells.size(); ++i) {
         const auto& cell = cells[i];
 
-        bool shouldPlaceTree = false;
-        TreeType treeTypeToPlace = TreeType::Oak;
+        // ========== ТОЛЬКО GRASS, JUNGLE, SAVANNA ==========
+        const bool isVegetationBiome =
+            (cell.biome == Biome::Grass ||
+                cell.biome == Biome::Jungle ||
+                cell.biome == Biome::Savanna);
+        if (!isVegetationBiome) {
+            continue;
+        }
 
-        if (cell.biome == Biome::Grass) {
-            shouldPlaceTree = distTreePresence(gen) < 0.28f;
-            if (shouldPlaceTree) {
-                // 70% обычные деревья, 30% ёлочки
-                std::uniform_real_distribution<float> distTreeType(0.0f, 1.0f);
-                if (distTreeType(gen) < 0.3f) {
-                    treeTypeToPlace = TreeType::Fir;
-                }
-                else {
-                    treeTypeToPlace = TreeType::Oak;
+        // ========== ВЫСОТА ==========
+        if (cell.height >= 2) {
+            continue;
+        }
+
+        // ========== НЕ РЯДОМ С ВОДОЙ ==========
+        bool hasWaterNeighbor = false;
+        for (int neighborId : cell.neighbors) {
+            if (neighborId >= 0 &&
+                neighborId < static_cast<int>(cells.size())) {
+                if (cells[static_cast<size_t>(neighborId)].biome == Biome::Sea) {
+                    hasWaterNeighbor = true;
+                    break;
                 }
             }
+        }
+        if (hasWaterNeighbor) {
+            continue;
+        }
+
+        // ========== ПЛОТНОСТЬ ПО БИОМУ ==========
+        bool shouldPlaceTree = false;
+        if (cell.biome == Biome::Grass) {
+            shouldPlaceTree = distTreePresence(gen) < 0.35f;
         }
         else if (cell.biome == Biome::Savanna) {
-            shouldPlaceTree = distTreePresence(gen) < 0.16f;
-            treeTypeToPlace = TreeType::Oak;
+            shouldPlaceTree = distTreePresence(gen) < 0.25f;
         }
-        else if (cell.biome == Biome::Snow) {
-            if (distTreePresence(gen) < 0.12f) {
-                shouldPlaceTree = true;
-                treeTypeToPlace = TreeType::Fir;
-            }
-        }
-        else if (cell.biome == Biome::Tundra) {
-            if (distTreePresence(gen) < 0.08f) {
-                shouldPlaceTree = true;
-                treeTypeToPlace = TreeType::Fir;
-            }
+        else if (cell.biome == Biome::Jungle) {
+            shouldPlaceTree = distTreePresence(gen) < 0.45f;
         }
 
-        if (!shouldPlaceTree) continue;
+        if (!shouldPlaceTree) {
+            continue;
+        }
 
+        // ========== СОЗДАНИЕ PLACEMENT ==========
+        // Вид, цвет и вариант дерева определяются позже в HexSphereRenderer
+        // через TreeBuilder::selectSpecies + выбор варианта из кэша.
         TreePlacement placement;
         placement.cellId = static_cast<int>(i);
-        placement.treeType = treeTypeToPlace;
-        placement.scale *= modelScale;
+        // placement.treeType — УБРАНО
 
         if (!cell.poly.empty()) {
-            std::uniform_int_distribution<int> distTri(0, static_cast<int>(cell.poly.size()) - 1);
+            std::uniform_int_distribution<int> distTri(
+                0, static_cast<int>(cell.poly.size()) - 1);
             placement.triangleIdx = distTri(gen);
         }
 
@@ -534,83 +523,35 @@ void HexSphereSceneController::generateTreePlacements() {
         placement.baryV = v;
         placement.baryW = 1.0f - u - v;
 
-        if (cell.biome == Biome::Savanna) {
-            // Осенние деревья
-            placement.colorType = TreePlacement::TreeColorType::Autumn;
-            placement.isYellowCellTree = true;
-            autumnCount++;
+        placement.rotation = distRot(gen);
 
-            placement.foliageColor = QVector3D(
-                distAutumnR(gen),
-                distAutumnG(gen),
-                distAutumnB(gen)
-            );
-
-            placement.trunkColor = QVector3D(
-                distTrunkR(gen) * 0.7f,
-                distTrunkG(gen) * 0.6f,
-                distTrunkB(gen) * 0.5f
-            );
-
-            placement.scale = distScale(gen) * 0.85f;
+        // ========== МАСШТАБ (без цветов!) ==========
+        float s = distScale(gen);
+        if (cell.biome == Biome::Jungle && cell.humidity > 0.7f) {
+            s *= 1.15f;
         }
-        else if (placement.treeType == TreeType::Fir) {
-            // Ёлочки
-            placement.colorType = TreePlacement::TreeColorType::Green;
-            placement.isYellowCellTree = false;
-            firCount++;
+        else if (cell.biome == Biome::Savanna && cell.humidity < 0.3f) {
+            s *= 0.85f;
+        }
+        placement.scale = s;
 
-            placement.foliageColor = QVector3D(
-                distFirR(gen),
-                distFirG(gen),
-                distFirB(gen)
-            );
+        // placement.foliageColor / trunkColor / colorType / isYellowCellTree — УБРАНО.
+        // Всё это теперь берётся из TreeVariant в рендерере.
 
-            placement.trunkColor = QVector3D(
-                distFirTrunkR(gen),
-                distFirTrunkG(gen),
-                distFirTrunkB(gen)
-            );
-
-            placement.scale = distScale(gen) * 0.9f;
+        if (cell.biome == Biome::Savanna) {
+            ++savannaCount;
         }
         else {
-            // Зеленые деревья
-            placement.colorType = TreePlacement::TreeColorType::Green;
-            placement.isYellowCellTree = false;
-            greenCount++;
-
-            placement.foliageColor = QVector3D(
-                distGreenR(gen),
-                distGreenG(gen),
-                distGreenB(gen)
-            );
-
-            placement.trunkColor = QVector3D(
-                distTrunkR(gen),
-                distTrunkG(gen),
-                distTrunkB(gen)
-            );
-
-            if (cell.humidity > 0.7f) {
-                placement.scale = distScale(gen) * 1.2f;
-            }
-            else if (cell.humidity < 0.3f) {
-                placement.scale = distScale(gen) * 0.7f;
-            }
-            else {
-                placement.scale = distScale(gen);
-            }
+            ++greenCount;
         }
 
-        placement.rotation = distRot(gen);
         treePlacements_.push_back(placement);
     }
 
     qDebug() << "Generated" << treePlacements_.size() << "tree placements";
-    qDebug() << "  - Green trees:" << greenCount;
-    qDebug() << "  - Fir trees:" << firCount;
-    qDebug() << "  - Autumn trees:" << autumnCount;
+    qDebug() << "  - Green trees (Grass/Jungle):" << greenCount;
+    qDebug() << "  - Savanna trees:" << savannaCount;
+
     updateTreeOccupiedCells();
 }
 

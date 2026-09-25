@@ -9,317 +9,317 @@
 
 namespace {
 
-constexpr float kPi = 3.14159265358979323846f;
-constexpr double kTwoPi = 6.283185307179586476925286766559;
-constexpr float kPhasePerScanSegment = kPi / 8.0f;
-constexpr float kMinimumAxisSeparationRadians = 15.0f * kPi / 180.0f;
-constexpr float kMaximumLocalModeWeight = 0.16f;
-constexpr float kInverseSqrtTwo = 0.7071067811865475244f;
+    constexpr float kPi = 3.14159265358979323846f;
+    constexpr double kTwoPi = 6.283185307179586476925286766559;
+    constexpr float kPhasePerScanSegment = kPi / 8.0f;
+    constexpr float kMinimumAxisSeparationRadians = 15.0f * kPi / 180.0f;
+    constexpr float kMaximumLocalModeWeight = 0.16f;
+    constexpr float kInverseSqrtTwo = 0.7071067811865475244f;
 
-WaterSpectrumBand makeSpectrumBand(
-    int count,
-    float lowMinimum,
-    float lowMaximum,
-    float highMinimum,
-    float highMaximum,
-    float bandShare,
-    float spread,
-    float coupling,
-    float packetOuter,
-    float packetContrast,
-    float activityFloor,
-    float activityCycle,
-    float mixingCycle) {
-    WaterSpectrumBand result;
-    result.modeCount = count;
-    result.lowDetailMinFrequencyMultiplier = lowMinimum;
-    result.lowDetailMaxFrequencyMultiplier = lowMaximum;
-    result.minFrequencyMultiplier = highMinimum;
-    result.maxFrequencyMultiplier = highMaximum;
-    result.energy = bandShare;
-    result.directionSpreadDegrees = spread;
-    result.phaseCouplingRadians = coupling;
-    result.packetInnerAngleDegrees = 20.0f;
-    result.packetOuterAngleDegrees = packetOuter;
-    result.packetContrast = packetContrast;
-    result.activityFloor = activityFloor;
-    result.activityCycleSeconds = activityCycle;
-    result.mixingCycleSeconds = mixingCycle;
-    return result;
-}
-
-WaterSpectrumConfig makeSpectrumConfig(WaterPreset preset) {
-    WaterSpectrumConfig result;
-    result.seed = 0xBF8574E2u;
-    result.windAxis = QVector3D(0.86f, 0.10f, 0.50f);
-    result.groupVelocityRatio = 0.5f;
-
-    switch (preset) {
-    case WaterPreset::Lagoon:
-        result.isotropicFraction = 0.60f;
-        result.couplingDriverFrequencyScale = 0.42f;
-        result.crestBreakupStrength = 0.76f;
-        result.crestBreakupFrequencyMultiplier = 1.45f;
-        result.bands = {{
-            makeSpectrumBand(5, 0.82f, 1.18f, 0.82f, 1.18f, 0.42f, 78.0f, 1.05f, 82.0f, 0.90f, 0.24f, 37.0f, 29.0f),
-            makeSpectrumBand(4, 0.92f, 1.28f, 1.43f, 1.78f, 0.34f, 86.0f, 0.72f, 76.0f, 0.88f, 0.24f, 29.0f, 23.0f),
-            makeSpectrumBand(3, 1.04f, 1.34f, 2.02f, 2.35f, 0.24f, 89.0f, 0.52f, 72.0f, 0.92f, 0.24f, 23.0f, 17.0f),
-        }};
-        break;
-    case WaterPreset::Storm:
-        result.isotropicFraction = 1.00f;
-        result.couplingDriverFrequencyScale = 0.28f;
-        result.crestBreakupStrength = 1.00f;
-        result.crestBreakupFrequencyMultiplier = 1.95f;
-        result.bands = {{
-            makeSpectrumBand(5, 0.82f, 1.18f, 0.82f, 1.18f, 0.30f, 89.0f, 1.55f, 52.0f, 0.95f, 0.06f, 17.0f, 11.0f),
-            makeSpectrumBand(4, 0.92f, 1.28f, 1.43f, 1.78f, 0.37f, 89.0f, 1.05f, 48.0f, 0.95f, 0.06f, 13.0f, 9.0f),
-            makeSpectrumBand(3, 1.04f, 1.34f, 2.02f, 2.35f, 0.33f, 89.0f, 0.82f, 45.0f, 0.95f, 0.06f, 11.0f, 7.0f),
-        }};
-        break;
-    case WaterPreset::Temperate:
-    default:
-        result.isotropicFraction = 0.80f;
-        result.couplingDriverFrequencyScale = 0.32f;
-        result.crestBreakupStrength = 0.94f;
-        result.crestBreakupFrequencyMultiplier = 1.75f;
-        result.bands = {{
-            makeSpectrumBand(5, 0.82f, 1.18f, 0.82f, 1.18f, 0.34f, 86.0f, 1.35f, 62.0f, 0.95f, 0.10f, 23.0f, 17.0f),
-            makeSpectrumBand(4, 0.92f, 1.28f, 1.43f, 1.78f, 0.36f, 89.0f, 0.90f, 58.0f, 0.95f, 0.10f, 17.0f, 13.0f),
-            makeSpectrumBand(3, 1.04f, 1.34f, 2.02f, 2.35f, 0.30f, 89.0f, 0.68f, 54.0f, 0.95f, 0.10f, 13.0f, 9.0f),
-        }};
-        break;
-    }
-    return result;
-}
-
-class Pcg32 {
-public:
-    explicit Pcg32(std::uint32_t seed) {
-        state_ = 0u;
-        increment_ = (static_cast<std::uint64_t>(seed) << 1u) | 1u;
-        next();
-        state_ += 0x9E3779B97F4A7C15ull ^ seed;
-        next();
+    WaterSpectrumBand makeSpectrumBand(
+        int count,
+        float lowMinimum,
+        float lowMaximum,
+        float highMinimum,
+        float highMaximum,
+        float bandShare,
+        float spread,
+        float coupling,
+        float packetOuter,
+        float packetContrast,
+        float activityFloor,
+        float activityCycle,
+        float mixingCycle) {
+        WaterSpectrumBand result;
+        result.modeCount = count;
+        result.lowDetailMinFrequencyMultiplier = lowMinimum;
+        result.lowDetailMaxFrequencyMultiplier = lowMaximum;
+        result.minFrequencyMultiplier = highMinimum;
+        result.maxFrequencyMultiplier = highMaximum;
+        result.energy = bandShare;
+        result.directionSpreadDegrees = spread;
+        result.phaseCouplingRadians = coupling;
+        result.packetInnerAngleDegrees = 20.0f;
+        result.packetOuterAngleDegrees = packetOuter;
+        result.packetContrast = packetContrast;
+        result.activityFloor = activityFloor;
+        result.activityCycleSeconds = activityCycle;
+        result.mixingCycleSeconds = mixingCycle;
+        return result;
     }
 
-    std::uint32_t next() {
-        const std::uint64_t oldState = state_;
-        state_ = oldState * 6364136223846793005ull + increment_;
-        const std::uint32_t xorshifted = static_cast<std::uint32_t>(((oldState >> 18u) ^ oldState) >> 27u);
-        const std::uint32_t rotation = static_cast<std::uint32_t>(oldState >> 59u);
-        return (xorshifted >> rotation) | (xorshifted << ((32u - rotation) & 31u));
-    }
+    WaterSpectrumConfig makeSpectrumConfig(WaterPreset preset) {
+        WaterSpectrumConfig result;
+        result.seed = 0xBF8574E2u;
+        result.windAxis = QVector3D(0.86f, 0.10f, 0.50f);
+        result.groupVelocityRatio = 0.5f;
 
-    float unitFloat() {
-        return static_cast<float>(next() >> 8u) * (1.0f / 16777216.0f);
-    }
-
-private:
-    std::uint64_t state_ = 0u;
-    std::uint64_t increment_ = 1u;
-};
-
-float smootherstep(float edge0, float edge1, float x) {
-    if (edge1 <= edge0) {
-        return x > edge0 ? 1.0f : 0.0f;
-    }
-    const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
-    return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
-}
-
-float softMinimumP8(float a, float b) {
-    if (a <= 0.0f || b <= 0.0f) {
-        return 0.0f;
-    }
-    const float scale = std::max(a, b);
-    const float na = a / scale;
-    const float nb = b / scale;
-    return scale / std::pow(std::pow(na, -8.0f) + std::pow(nb, -8.0f), 1.0f / 8.0f);
-}
-
-QVector3D safeNormalized(const QVector3D& value, const QVector3D& fallback) {
-    return value.lengthSquared() > 1e-10f ? value.normalized() : fallback;
-}
-
-void tangentFrame(const QVector3D& normal, QVector3D& tangent, QVector3D& bitangent) {
-    const QVector3D helper = std::abs(normal.y()) < 0.9f
-        ? QVector3D(0.0f, 1.0f, 0.0f)
-        : QVector3D(1.0f, 0.0f, 0.0f);
-    tangent = QVector3D::crossProduct(helper, normal).normalized();
-    bitangent = QVector3D::crossProduct(normal, tangent).normalized();
-}
-
-QVector3D sampleIsotropicAxis(Pcg32& random) {
-    const float z = 1.0f - 2.0f * random.unitFloat();
-    const float azimuth = 2.0f * kPi * random.unitFloat();
-    const float radial = std::sqrt(std::max(1.0f - z * z, 0.0f));
-    return QVector3D(radial * std::cos(azimuth), radial * std::sin(azimuth), z);
-}
-
-QVector3D sampleWindLobeAxis(
-    Pcg32& random,
-    const QVector3D& wind,
-    float spreadDegrees) {
-    QVector3D tangent;
-    QVector3D bitangent;
-    tangentFrame(wind, tangent, bitangent);
-    const float maxAngle = std::clamp(spreadDegrees, 1.0f, 89.0f) * kPi / 180.0f;
-    const float cosAngle = 1.0f - random.unitFloat() * (1.0f - std::cos(maxAngle));
-    const float sinAngle = std::sqrt(std::max(1.0f - cosAngle * cosAngle, 0.0f));
-    const float azimuth = 2.0f * kPi * random.unitFloat();
-    return safeNormalized(
-        wind * cosAngle + tangent * (sinAngle * std::cos(azimuth))
-            + bitangent * (sinAngle * std::sin(azimuth)),
-        wind);
-}
-
-float antipodalSeparation(const QVector3D& a, const QVector3D& b) {
-    return std::acos(std::clamp(std::abs(QVector3D::dotProduct(a, b)), 0.0f, 1.0f));
-}
-
-QVector3D chooseSeparatedAxis(
-    Pcg32& random,
-    const QVector3D& wind,
-    float spreadDegrees,
-    bool isotropic,
-    const WaterWaveSpectrum& spectrum,
-    int usedCount) {
-    QVector3D best = wind;
-    float bestSeparation = -1.0f;
-    constexpr int kCandidateCount = 128;
-    for (int candidateIndex = 0; candidateIndex < kCandidateCount; ++candidateIndex) {
-        const QVector3D candidate = isotropic
-            ? sampleIsotropicAxis(random)
-            : sampleWindLobeAxis(random, wind, spreadDegrees);
-        float minimumSeparation = kPi;
-        for (int i = 0; i < usedCount; ++i) {
-            minimumSeparation = std::min(
-                minimumSeparation,
-                antipodalSeparation(candidate, spectrum.components[static_cast<std::size_t>(i)].axis));
-        }
-        if (minimumSeparation > bestSeparation) {
-            bestSeparation = minimumSeparation;
-            best = candidate;
-        }
-        if (minimumSeparation >= kMinimumAxisSeparationRadians && candidateIndex >= 24) {
+        switch (preset) {
+        case WaterPreset::Lagoon:
+            result.isotropicFraction = 0.60f;
+            result.couplingDriverFrequencyScale = 0.42f;
+            result.crestBreakupStrength = 0.76f;
+            result.crestBreakupFrequencyMultiplier = 1.45f;
+            result.bands = { {
+                makeSpectrumBand(5, 0.82f, 1.18f, 0.82f, 1.18f, 0.42f, 78.0f, 1.05f, 82.0f, 0.90f, 0.24f, 37.0f, 29.0f),
+                makeSpectrumBand(4, 0.92f, 1.28f, 1.43f, 1.78f, 0.34f, 86.0f, 0.72f, 76.0f, 0.88f, 0.24f, 29.0f, 23.0f),
+                makeSpectrumBand(3, 1.04f, 1.34f, 2.02f, 2.35f, 0.24f, 89.0f, 0.52f, 72.0f, 0.92f, 0.24f, 23.0f, 17.0f),
+            } };
+            break;
+        case WaterPreset::Storm:
+            result.isotropicFraction = 1.00f;
+            result.couplingDriverFrequencyScale = 0.28f;
+            result.crestBreakupStrength = 1.00f;
+            result.crestBreakupFrequencyMultiplier = 1.95f;
+            result.bands = { {
+                makeSpectrumBand(5, 0.82f, 1.18f, 0.82f, 1.18f, 0.30f, 89.0f, 1.55f, 52.0f, 0.95f, 0.06f, 17.0f, 11.0f),
+                makeSpectrumBand(4, 0.92f, 1.28f, 1.43f, 1.78f, 0.37f, 89.0f, 1.05f, 48.0f, 0.95f, 0.06f, 13.0f, 9.0f),
+                makeSpectrumBand(3, 1.04f, 1.34f, 2.02f, 2.35f, 0.33f, 89.0f, 0.82f, 45.0f, 0.95f, 0.06f, 11.0f, 7.0f),
+            } };
+            break;
+        case WaterPreset::Temperate:
+        default:
+            result.isotropicFraction = 0.80f;
+            result.couplingDriverFrequencyScale = 0.32f;
+            result.crestBreakupStrength = 0.94f;
+            result.crestBreakupFrequencyMultiplier = 1.75f;
+            result.bands = { {
+                makeSpectrumBand(5, 0.82f, 1.18f, 0.82f, 1.18f, 0.34f, 86.0f, 1.35f, 62.0f, 0.95f, 0.10f, 23.0f, 17.0f),
+                makeSpectrumBand(4, 0.92f, 1.28f, 1.43f, 1.78f, 0.36f, 89.0f, 0.90f, 58.0f, 0.95f, 0.10f, 17.0f, 13.0f),
+                makeSpectrumBand(3, 1.04f, 1.34f, 2.02f, 2.35f, 0.30f, 89.0f, 0.68f, 54.0f, 0.95f, 0.10f, 13.0f, 9.0f),
+            } };
             break;
         }
+        return result;
     }
-    return best.normalized();
-}
 
-QVector3D chooseSeparatedPacketCenter(Pcg32& random, const WaterWaveSpectrum& spectrum, int usedCount) {
-    QVector3D best(0.0f, 1.0f, 0.0f);
-    float bestSeparation = -1.0f;
-    for (int candidateIndex = 0; candidateIndex < 96; ++candidateIndex) {
-        const QVector3D candidate = sampleIsotropicAxis(random);
-        float minimumSeparation = kPi;
-        for (int i = 0; i < usedCount; ++i) {
-            minimumSeparation = std::min(minimumSeparation, std::acos(std::clamp(
-                QVector3D::dotProduct(candidate, spectrum.components[static_cast<std::size_t>(i)].packetCenter),
-                -1.0f,
-                1.0f)));
+    class Pcg32 {
+    public:
+        explicit Pcg32(std::uint32_t seed) {
+            state_ = 0u;
+            increment_ = (static_cast<std::uint64_t>(seed) << 1u) | 1u;
+            next();
+            state_ += 0x9E3779B97F4A7C15ull ^ seed;
+            next();
         }
-        if (minimumSeparation > bestSeparation) {
-            bestSeparation = minimumSeparation;
-            best = candidate;
+
+        std::uint32_t next() {
+            const std::uint64_t oldState = state_;
+            state_ = oldState * 6364136223846793005ull + increment_;
+            const std::uint32_t xorshifted = static_cast<std::uint32_t>(((oldState >> 18u) ^ oldState) >> 27u);
+            const std::uint32_t rotation = static_cast<std::uint32_t>(oldState >> 59u);
+            return (xorshifted >> rotation) | (xorshifted << ((32u - rotation) & 31u));
         }
+
+        float unitFloat() {
+            return static_cast<float>(next() >> 8u) * (1.0f / 16777216.0f);
+        }
+
+    private:
+        std::uint64_t state_ = 0u;
+        std::uint64_t increment_ = 1u;
+    };
+
+    float smootherstep(float edge0, float edge1, float x) {
+        if (edge1 <= edge0) {
+            return x > edge0 ? 1.0f : 0.0f;
+        }
+        const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+        return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
     }
-    return best.normalized();
-}
 
-QVector3D rotateRodrigues(const QVector3D& value, const QVector3D& axis, double angle) {
-    const float cosine = static_cast<float>(std::cos(angle));
-    const float sine = static_cast<float>(std::sin(angle));
-    return value * cosine
-        + QVector3D::crossProduct(axis, value) * sine
-        + axis * QVector3D::dotProduct(axis, value) * (1.0f - cosine);
-}
-
-float smootherstepDerivative(float edge0, float edge1, float x) {
-    if (edge1 <= edge0 || x <= edge0 || x >= edge1) return 0.0f;
-    const float t = (x - edge0) / (edge1 - edge0);
-    return 30.0f * t * t * (t - 1.0f) * (t - 1.0f) / (edge1 - edge0);
-}
-
-float maximumSeaDepth(const HexSphereModel& model) {
-    const float waterRadius = model.waterSurfaceRadius();
-    float result = 0.0f;
-    for (const Cell& cell : model.cells()) {
-        if (cell.biome != Biome::Sea) {
-            continue;
+    float softMinimumP8(float a, float b) {
+        if (a <= 0.0f || b <= 0.0f) {
+            return 0.0f;
         }
-        result = std::max(result, waterRadius - model.radiusForHeight(static_cast<float>(cell.height)));
+        const float scale = std::max(a, b);
+        const float na = a / scale;
+        const float nb = b / scale;
+        return scale / std::pow(std::pow(na, -8.0f) + std::pow(nb, -8.0f), 1.0f / 8.0f);
     }
-    return result;
-}
 
-float maximumBedAngularGradient(const HexSphereModel& model) {
-    float result = 0.0f;
-    const auto& cells = model.cells();
-    for (const Cell& cell : cells) {
-        const float radius = model.radiusForHeight(static_cast<float>(cell.height));
-        for (int neighborId : cell.neighbors) {
-            if (neighborId < 0 || neighborId >= static_cast<int>(cells.size())) continue;
-            const Cell& neighbor = cells[static_cast<size_t>(neighborId)];
-            const float angle = std::acos(std::clamp(
-                QVector3D::dotProduct(cell.centroid.normalized(), neighbor.centroid.normalized()), -1.0f, 1.0f));
-            const float neighborRadius = model.radiusForHeight(static_cast<float>(neighbor.height));
-            result = std::max(result, std::abs(neighborRadius - radius) / std::max(angle, 1e-5f));
-        }
+    QVector3D safeNormalized(const QVector3D& value, const QVector3D& fallback) {
+        return value.lengthSquared() > 1e-10f ? value.normalized() : fallback;
     }
-    return result;
-}
 
-int bandIndex(const WaterWaveComponent& component) {
-    return std::clamp(static_cast<int>(component.band), 0, kWaterWaveBandCount - 1);
-}
-
-float quadraturePrimaryRmsGain(const WaterWaveSpectrum& spectrum) {
-    constexpr int sampleCount = 2048;
-    constexpr float goldenAngle = kPi * (3.0f - 2.2360679774997896964f);
-    double squaredWeightMean = 0.0;
-    for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
-        const float y = 1.0f - 2.0f
-            * (static_cast<float>(sampleIndex) + 0.5f) / static_cast<float>(sampleCount);
-        const float radial = std::sqrt(std::max(1.0f - y * y, 0.0f));
-        const float azimuth = goldenAngle * static_cast<float>(sampleIndex);
-        const QVector3D direction(radial * std::cos(azimuth), y, radial * std::sin(azimuth));
-        const double sampleTime = 0.371 * static_cast<double>(sampleIndex);
-        std::array<float, kWaterWaveComponentCount> packetSignals{};
-        std::array<float, kWaterWaveBandCount> bandSignalSums{};
-        for (int i = 0; i < kWaterWaveComponentCount; ++i) {
-            const WaterWaveComponent& component = spectrum.components[static_cast<std::size_t>(i)];
-            const double activityAngle = kPi * sampleTime
-                / static_cast<double>(std::max(component.activityCycleSeconds, 1.0f))
-                + static_cast<double>(component.activityPhase);
-            const float sineValue = static_cast<float>(std::sin(std::remainder(activityAngle, kTwoPi)));
-            const float activity = component.activityFloor
-                + (1.0f - component.activityFloor) * sineValue * sineValue;
-            const float envelope = smootherstep(
-                component.packetOuterCosine,
-                component.packetInnerCosine,
-                QVector3D::dotProduct(direction, component.packetCenter));
-            packetSignals[static_cast<std::size_t>(i)] = activity * envelope;
-            bandSignalSums[static_cast<std::size_t>(bandIndex(component))] += component.weight
-                * packetSignals[static_cast<std::size_t>(i)];
-        }
-        float primarySquaredWeight = 0.0f;
-        for (int i = 0; i < kWaterWaveComponentCount; ++i) {
-            const WaterWaveComponent& component = spectrum.components[static_cast<std::size_t>(i)];
-            if (component.band != 0) continue;
-            const float share = std::max(spectrum.bandShares[0], 1e-6f);
-            const float meanSignal = bandSignalSums[0] / share;
-            const float weight = component.weight * (1.0f + component.packetContrast
-                * (packetSignals[static_cast<std::size_t>(i)] - meanSignal));
-            primarySquaredWeight += weight * weight;
-        }
-        squaredWeightMean += primarySquaredWeight;
+    void tangentFrame(const QVector3D& normal, QVector3D& tangent, QVector3D& bitangent) {
+        const QVector3D helper = std::abs(normal.y()) < 0.9f
+            ? QVector3D(0.0f, 1.0f, 0.0f)
+            : QVector3D(1.0f, 0.0f, 0.0f);
+        tangent = QVector3D::crossProduct(helper, normal).normalized();
+        bitangent = QVector3D::crossProduct(normal, tangent).normalized();
     }
-    squaredWeightMean /= static_cast<double>(sampleCount);
-    return std::sqrt(std::max(2.0f * static_cast<float>(squaredWeightMean), 1e-8f));
-}
+
+    QVector3D sampleIsotropicAxis(Pcg32& random) {
+        const float z = 1.0f - 2.0f * random.unitFloat();
+        const float azimuth = 2.0f * kPi * random.unitFloat();
+        const float radial = std::sqrt(std::max(1.0f - z * z, 0.0f));
+        return QVector3D(radial * std::cos(azimuth), radial * std::sin(azimuth), z);
+    }
+
+    QVector3D sampleWindLobeAxis(
+        Pcg32& random,
+        const QVector3D& wind,
+        float spreadDegrees) {
+        QVector3D tangent;
+        QVector3D bitangent;
+        tangentFrame(wind, tangent, bitangent);
+        const float maxAngle = std::clamp(spreadDegrees, 1.0f, 89.0f) * kPi / 180.0f;
+        const float cosAngle = 1.0f - random.unitFloat() * (1.0f - std::cos(maxAngle));
+        const float sinAngle = std::sqrt(std::max(1.0f - cosAngle * cosAngle, 0.0f));
+        const float azimuth = 2.0f * kPi * random.unitFloat();
+        return safeNormalized(
+            wind * cosAngle + tangent * (sinAngle * std::cos(azimuth))
+            + bitangent * (sinAngle * std::sin(azimuth)),
+            wind);
+    }
+
+    float antipodalSeparation(const QVector3D& a, const QVector3D& b) {
+        return std::acos(std::clamp(std::abs(QVector3D::dotProduct(a, b)), 0.0f, 1.0f));
+    }
+
+    QVector3D chooseSeparatedAxis(
+        Pcg32& random,
+        const QVector3D& wind,
+        float spreadDegrees,
+        bool isotropic,
+        const WaterWaveSpectrum& spectrum,
+        int usedCount) {
+        QVector3D best = wind;
+        float bestSeparation = -1.0f;
+        constexpr int kCandidateCount = 128;
+        for (int candidateIndex = 0; candidateIndex < kCandidateCount; ++candidateIndex) {
+            const QVector3D candidate = isotropic
+                ? sampleIsotropicAxis(random)
+                : sampleWindLobeAxis(random, wind, spreadDegrees);
+            float minimumSeparation = kPi;
+            for (int i = 0; i < usedCount; ++i) {
+                minimumSeparation = std::min(
+                    minimumSeparation,
+                    antipodalSeparation(candidate, spectrum.components[static_cast<std::size_t>(i)].axis));
+            }
+            if (minimumSeparation > bestSeparation) {
+                bestSeparation = minimumSeparation;
+                best = candidate;
+            }
+            if (minimumSeparation >= kMinimumAxisSeparationRadians && candidateIndex >= 24) {
+                break;
+            }
+        }
+        return best.normalized();
+    }
+
+    QVector3D chooseSeparatedPacketCenter(Pcg32& random, const WaterWaveSpectrum& spectrum, int usedCount) {
+        QVector3D best(0.0f, 1.0f, 0.0f);
+        float bestSeparation = -1.0f;
+        for (int candidateIndex = 0; candidateIndex < 96; ++candidateIndex) {
+            const QVector3D candidate = sampleIsotropicAxis(random);
+            float minimumSeparation = kPi;
+            for (int i = 0; i < usedCount; ++i) {
+                minimumSeparation = std::min(minimumSeparation, std::acos(std::clamp(
+                    QVector3D::dotProduct(candidate, spectrum.components[static_cast<std::size_t>(i)].packetCenter),
+                    -1.0f,
+                    1.0f)));
+            }
+            if (minimumSeparation > bestSeparation) {
+                bestSeparation = minimumSeparation;
+                best = candidate;
+            }
+        }
+        return best.normalized();
+    }
+
+    QVector3D rotateRodrigues(const QVector3D& value, const QVector3D& axis, double angle) {
+        const float cosine = static_cast<float>(std::cos(angle));
+        const float sine = static_cast<float>(std::sin(angle));
+        return value * cosine
+            + QVector3D::crossProduct(axis, value) * sine
+            + axis * QVector3D::dotProduct(axis, value) * (1.0f - cosine);
+    }
+
+    float smootherstepDerivative(float edge0, float edge1, float x) {
+        if (edge1 <= edge0 || x <= edge0 || x >= edge1) return 0.0f;
+        const float t = (x - edge0) / (edge1 - edge0);
+        return 30.0f * t * t * (t - 1.0f) * (t - 1.0f) / (edge1 - edge0);
+    }
+
+    float maximumSeaDepth(const HexSphereModel& model) {
+        const float waterRadius = model.waterSurfaceRadius();
+        float result = 0.0f;
+        for (const Cell& cell : model.cells()) {
+            if (cell.biome != Biome::Sea) {
+                continue;
+            }
+            result = std::max(result, waterRadius - model.radiusForHeight(static_cast<float>(cell.height)));
+        }
+        return result;
+    }
+
+    float maximumBedAngularGradient(const HexSphereModel& model) {
+        float result = 0.0f;
+        const auto& cells = model.cells();
+        for (const Cell& cell : cells) {
+            const float radius = model.radiusForHeight(static_cast<float>(cell.height));
+            for (int neighborId : cell.neighbors) {
+                if (neighborId < 0 || neighborId >= static_cast<int>(cells.size())) continue;
+                const Cell& neighbor = cells[static_cast<size_t>(neighborId)];
+                const float angle = std::acos(std::clamp(
+                    QVector3D::dotProduct(cell.centroid.normalized(), neighbor.centroid.normalized()), -1.0f, 1.0f));
+                const float neighborRadius = model.radiusForHeight(static_cast<float>(neighbor.height));
+                result = std::max(result, std::abs(neighborRadius - radius) / std::max(angle, 1e-5f));
+            }
+        }
+        return result;
+    }
+
+    int bandIndex(const WaterWaveComponent& component) {
+        return std::clamp(static_cast<int>(component.band), 0, kWaterWaveBandCount - 1);
+    }
+
+    float quadraturePrimaryRmsGain(const WaterWaveSpectrum& spectrum) {
+        constexpr int sampleCount = 2048;
+        constexpr float goldenAngle = kPi * (3.0f - 2.2360679774997896964f);
+        double squaredWeightMean = 0.0;
+        for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
+            const float y = 1.0f - 2.0f
+                * (static_cast<float>(sampleIndex) + 0.5f) / static_cast<float>(sampleCount);
+            const float radial = std::sqrt(std::max(1.0f - y * y, 0.0f));
+            const float azimuth = goldenAngle * static_cast<float>(sampleIndex);
+            const QVector3D direction(radial * std::cos(azimuth), y, radial * std::sin(azimuth));
+            const double sampleTime = 0.371 * static_cast<double>(sampleIndex);
+            std::array<float, kWaterWaveComponentCount> packetSignals{};
+            std::array<float, kWaterWaveBandCount> bandSignalSums{};
+            for (int i = 0; i < kWaterWaveComponentCount; ++i) {
+                const WaterWaveComponent& component = spectrum.components[static_cast<std::size_t>(i)];
+                const double activityAngle = kPi * sampleTime
+                    / static_cast<double>(std::max(component.activityCycleSeconds, 1.0f))
+                    + static_cast<double>(component.activityPhase);
+                const float sineValue = static_cast<float>(std::sin(std::remainder(activityAngle, kTwoPi)));
+                const float activity = component.activityFloor
+                    + (1.0f - component.activityFloor) * sineValue * sineValue;
+                const float envelope = smootherstep(
+                    component.packetOuterCosine,
+                    component.packetInnerCosine,
+                    QVector3D::dotProduct(direction, component.packetCenter));
+                packetSignals[static_cast<std::size_t>(i)] = activity * envelope;
+                bandSignalSums[static_cast<std::size_t>(bandIndex(component))] += component.weight
+                    * packetSignals[static_cast<std::size_t>(i)];
+            }
+            float primarySquaredWeight = 0.0f;
+            for (int i = 0; i < kWaterWaveComponentCount; ++i) {
+                const WaterWaveComponent& component = spectrum.components[static_cast<std::size_t>(i)];
+                if (component.band != 0) continue;
+                const float share = std::max(spectrum.bandShares[0], 1e-6f);
+                const float meanSignal = bandSignalSums[0] / share;
+                const float weight = component.weight * (1.0f + component.packetContrast
+                    * (packetSignals[static_cast<std::size_t>(i)] - meanSignal));
+                primarySquaredWeight += weight * weight;
+            }
+            squaredWeightMean += primarySquaredWeight;
+        }
+        squaredWeightMean /= static_cast<double>(sampleCount);
+        return std::sqrt(std::max(2.0f * static_cast<float>(squaredWeightMean), 1e-8f));
+    }
 
 } // namespace
 
@@ -441,7 +441,7 @@ WaterWaveSpectrum buildWaterWaveSpectrum(const WaterSpectrumConfig& config, floa
 
     // Four unwarped modes drive all cross-phase modulation. Keeping this graph
     // acyclic preserves the exact zero mean and diagonal phase variance.
-    result.driverComponentIndices = {{ 0u, 5u, 8u, 9u }};
+    result.driverComponentIndices = { { 0u, 5u, 8u, 9u } };
     for (int componentIndexValue = 0; componentIndexValue < kWaterWaveComponentCount; ++componentIndexValue) {
         WaterWaveComponent& component = result.components[static_cast<std::size_t>(componentIndexValue)];
         int ownDriverSlot = -1;
@@ -458,10 +458,10 @@ WaterWaveSpectrum buildWaterWaveSpectrum(const WaterSpectrumConfig& config, floa
         const int firstSlot = (componentIndexValue + bandIndex(component)) % kWaterWaveDriverCount;
         int secondSlot = (componentIndexValue * 3 + 1) % kWaterWaveDriverCount;
         if (secondSlot == firstSlot) secondSlot = (secondSlot + 1) % kWaterWaveDriverCount;
-        component.driverSlots = {{
+        component.driverSlots = { {
             static_cast<std::int8_t>(firstSlot),
             static_cast<std::int8_t>(secondSlot),
-        }};
+        } };
     }
 
     for (WaterWaveComponent& component : result.components) {
@@ -561,7 +561,7 @@ WaterWaveInteractionShape resolveWaterWaveInteractionShape(
             const float numerator = minimumCarrier
                 + result.strength * (minimumCarrier * minimumCarrier - variance)
                 + result.thirdMomentStrength
-                    * (minimumCarrier * minimumCarrier * minimumCarrier - thirdMoment);
+                * (minimumCarrier * minimumCarrier * minimumCarrier - thirdMoment);
             minimumHeight = std::min(minimumHeight, numerator / denominator);
         }
     }
@@ -619,7 +619,7 @@ WaterWaveSpec makeWaterWaveSpec(
     const float breakupBaseShare = 1.0f - result.crestBreakupStrength;
     const float breakupRmsFactor = std::sqrt(std::max(
         breakupBaseShare * breakupBaseShare
-            + result.crestBreakupStrength * result.crestBreakupStrength * baseCarrierVariance,
+        + result.crestBreakupStrength * result.crestBreakupStrength * baseCarrierVariance,
         1e-5f));
     // Cutting a long carrier into compact wavelets removes RMS energy. Restore
     // that energy through the already bounded geometric amplitude, not through
@@ -750,22 +750,22 @@ WaterWaveFrameState resolveWaterWaveFrameState(const ResolvedWaterWaveSpec& spec
         const WaterWaveComponent& component = spec.requested.components[static_cast<std::size_t>(i)];
         const double temporalPhase = static_cast<double>(component.phase)
             - static_cast<double>(spec.requested.speed)
-                * static_cast<double>(component.speedMultiplier) * time;
+            * static_cast<double>(component.speedMultiplier) * time;
         result.temporalPhases[static_cast<std::size_t>(i)] = static_cast<float>(
             std::remainder(temporalPhase, kTwoPi));
         const double breakupTemporalPhase = static_cast<double>(component.breakupPhase)
             - static_cast<double>(spec.requested.speed)
-                * static_cast<double>(component.breakupSpeedMultiplier) * time;
+            * static_cast<double>(component.breakupSpeedMultiplier) * time;
         result.breakupTemporalPhases[static_cast<std::size_t>(i)] = static_cast<float>(
             std::remainder(breakupTemporalPhase, kTwoPi));
-        constexpr std::array<double, 4> microScales{{
+        constexpr std::array<double, 4> microScales{ {
             2.05, 2.05 * 1.071, 3.55, 3.55 * 0.937
-        }};
-        constexpr std::array<double, 4> breakupMix{{ 0.73, -0.73, 0.61, -1.0 / 0.61 }};
+        } };
+        constexpr std::array<double, 4> breakupMix{ { 0.73, -0.73, 0.61, -1.0 / 0.61 } };
         for (int microMode = 0; microMode < 4; ++microMode) {
             const double phaseSeed = static_cast<double>(component.phase)
                 + breakupMix[static_cast<std::size_t>(microMode)]
-                    * static_cast<double>(component.breakupPhase)
+                * static_cast<double>(component.breakupPhase)
                 + static_cast<double>(i + 1) * (2.39996322972865332 + 0.47 * microMode);
             const double octaveSpeed = static_cast<double>(spec.requested.speed)
                 * std::sqrt(static_cast<double>(component.frequencyMultiplier)
@@ -806,7 +806,7 @@ WaterWaveFrameState resolveWaterWaveFrameState(const ResolvedWaterWaveSpec& spec
         const double driverPhase = static_cast<double>(spec.requested.couplingDriverFrequencyScale)
             * (static_cast<double>(driver.phase)
                 - static_cast<double>(spec.requested.speed)
-                    * static_cast<double>(driver.speedMultiplier) * time);
+                * static_cast<double>(driver.speedMultiplier) * time);
         result.driverTemporalPhases[static_cast<std::size_t>(driverSlot)] = static_cast<float>(
             std::remainder(driverPhase, kTwoPi));
     }
@@ -838,7 +838,7 @@ WaterWaveFieldSample sampleWaterWaveFieldWithGradient(
         const float axisDot = QVector3D::dotProduct(dir, component.axis);
         basePhases[static_cast<std::size_t>(i)] = static_cast<float>(std::remainder(
             static_cast<double>(frequencyRadius * axisDot)
-                + static_cast<double>(frame.temporalPhases[static_cast<std::size_t>(i)]),
+            + static_cast<double>(frame.temporalPhases[static_cast<std::size_t>(i)]),
             kTwoPi));
         baseGradients[static_cast<std::size_t>(i)] = frequencyRadius
             * (component.axis - dir * axisDot);
@@ -847,7 +847,7 @@ WaterWaveFieldSample sampleWaterWaveFieldWithGradient(
         const float breakupDot = QVector3D::dotProduct(dir, component.breakupAxis);
         breakupPhases[static_cast<std::size_t>(i)] = static_cast<float>(std::remainder(
             static_cast<double>(breakupFrequencyRadius * breakupDot)
-                + static_cast<double>(frame.breakupTemporalPhases[static_cast<std::size_t>(i)]),
+            + static_cast<double>(frame.breakupTemporalPhases[static_cast<std::size_t>(i)]),
             kTwoPi));
         breakupGradients[static_cast<std::size_t>(i)] = breakupFrequencyRadius
             * (component.breakupAxis - dir * breakupDot);
@@ -886,7 +886,7 @@ WaterWaveFieldSample sampleWaterWaveFieldWithGradient(
         const float driverDot = QVector3D::dotProduct(dir, driver.axis);
         driverControlPhases[static_cast<std::size_t>(driverSlot)] = static_cast<float>(std::remainder(
             static_cast<double>(driverFrequencyRadius * driverDot)
-                + static_cast<double>(frame.driverTemporalPhases[static_cast<std::size_t>(driverSlot)]),
+            + static_cast<double>(frame.driverTemporalPhases[static_cast<std::size_t>(driverSlot)]),
             kTwoPi));
         driverControlGradients[static_cast<std::size_t>(driverSlot)] = driverFrequencyRadius
             * (driver.axis - dir * driverDot);
@@ -937,9 +937,9 @@ WaterWaveFieldSample sampleWaterWaveFieldWithGradient(
             displacement = coefficient0 * std::sin(argument0) + coefficient1 * std::sin(argument1);
             phase += displacement;
             phaseGradient += coefficient0 * std::cos(argument0)
-                    * driverControlGradients[static_cast<std::size_t>(driverSlot0)]
+                * driverControlGradients[static_cast<std::size_t>(driverSlot0)]
                 + coefficient1 * std::cos(argument1)
-                    * driverControlGradients[static_cast<std::size_t>(driverSlot1)];
+                * driverControlGradients[static_cast<std::size_t>(driverSlot1)];
         }
         const float exponential = std::exp(spec.requested.shape.exponent * (std::sin(phase) - 1.0f));
         const float carrier = (exponential - spec.requested.shape.mean) / (1.0f - spec.requested.shape.mean);
@@ -957,7 +957,7 @@ WaterWaveFieldSample sampleWaterWaveFieldWithGradient(
         const float wavelet = carrier * breakupFactor;
         const QVector3D waveletGradient = derivative * breakupFactor * phaseGradient
             + carrier * spec.requested.crestBreakupStrength * breakupDerivative
-                * breakupGradients[static_cast<std::size_t>(i)];
+            * breakupGradients[static_cast<std::size_t>(i)];
         const float weight = localWeights[static_cast<std::size_t>(i)];
         result.carrierHeight += weight * wavelet;
         carrierGradient += weight * waveletGradient
@@ -970,9 +970,9 @@ WaterWaveFieldSample sampleWaterWaveFieldWithGradient(
         + interaction.strength * (1.0f - result.fieldVariance)
         + interaction.thirdMomentStrength * (1.0f - fieldThirdMoment);
     const float numerator = result.carrierHeight + interaction.strength
-            * (result.carrierHeight * result.carrierHeight - result.fieldVariance)
+        * (result.carrierHeight * result.carrierHeight - result.fieldVariance)
         + interaction.thirdMomentStrength
-            * (result.carrierHeight * result.carrierHeight * result.carrierHeight - fieldThirdMoment);
+        * (result.carrierHeight * result.carrierHeight * result.carrierHeight - fieldThirdMoment);
     result.height = numerator / denominator;
     const float carrierPartial = (1.0f + 2.0f * interaction.strength * result.carrierHeight)
         / denominator;

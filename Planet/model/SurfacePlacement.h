@@ -1,8 +1,8 @@
 #pragma once
 
 #include "controllers/HexSphereSceneController.h"
-
 #include <random>
+#include <QDebug>
 
 inline QVector3D computeSurfacePoint(const HexSphereSceneController& scene, int cellId, float heightStep,
     float objectOffset = 0.03f) {
@@ -28,8 +28,19 @@ inline QVector3D computeSurfacePoint(const HexSphereSceneController& scene, cons
     }
 
     const Cell& cell = cells[static_cast<size_t>(placement.cellId)];
+
+    if (placement.placementMode == TreePlacement::PlacementMode::World) {
+        return placement.worldPosition;
+    }
+
+    QVector3D direction = placement.getPosition(scene.model());
+    if (direction.lengthSquared() < 1e-8f) {
+        direction = cell.centroid;
+    }
+    direction = direction.normalized();
+
+    // ========== ÓÁÐÀËÈ surfaceOffset ==========
     const float surfaceHeight = 1.0f + cell.height * heightStep;
 
-    QVector3D posOnSphere = placement.getPosition(scene.model());
-    return posOnSphere.normalized() * surfaceHeight;
+    return direction * surfaceHeight;
 }

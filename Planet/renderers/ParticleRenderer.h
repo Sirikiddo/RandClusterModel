@@ -17,6 +17,7 @@ public:
     void update(float deltaTime, const ContributorWindField& wind, const QVector3D& treeCenter);
     void updateParticles(const std::vector<ContributorParticle>& particles);
     void render(const QMatrix4x4& mvp, const QMatrix4x4& view, const QVector3D& cameraPos);
+    void setTime(float time) { time_ = time; }
     bool isInitialized() const { return initialized_; }
 
 private:

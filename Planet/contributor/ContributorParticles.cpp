@@ -33,12 +33,12 @@ std::vector<ContributorParticle> generateParticleBlob(
         if (isSurfaceParticle) {
             radiusFactor = 0.85f + std::abs(distNormal(rng)) * 0.15f;
             radiusFactor = std::min(radiusFactor, 1.02f);
-            sizeBase = 0.30f;
+            sizeBase = 0.30f;  // ← из GitHub-версии
             colorVariation = 1.1f;
         }
         else {
             radiusFactor = distUnit(rng) * 0.55f;
-            sizeBase = 0.17f;
+            sizeBase = 0.17f;  // ← из GitHub-версии
             colorVariation = 0.85f;
         }
 

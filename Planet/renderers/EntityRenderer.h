@@ -40,14 +40,11 @@ public:
         GLint uViewPosSteam,
         GLuint vaoPyramid,
         const GLsizei& pyramidVertexCount,
-        const std::shared_ptr<ModelHandler>& treeModel,
-        const std::shared_ptr<ModelHandler>& firTreeModel,
         const std::shared_ptr<CarModelHandler>& carModel,
         const std::shared_ptr<FactoryModelHandler>& factoryModel,
         const std::shared_ptr<MineModelHandler>& mineModel);
 
     void renderEntities(const HexSphereRenderer::RenderContext& ctx) const;
-    void renderTrees(const HexSphereRenderer::RenderContext& ctx) const;
     void renderCar(const HexSphereRenderer::RenderContext& ctx, const ecs::Entity& entity) const;
     void renderFactory(const HexSphereRenderer::RenderContext& ctx, const ecs::Entity& entity) const;
     void renderMine(const HexSphereRenderer::RenderContext& ctx, const ecs::Entity& entity) const;
@@ -95,8 +92,6 @@ private:
     GLuint steamVbo_ = 0;
     GLsizei steamParticleCount_ = 0;
 
-    std::shared_ptr<ModelHandler> treeModel_;
-    std::shared_ptr<ModelHandler> firTreeModel_;
     std::shared_ptr<CarModelHandler> carModel_;
     std::shared_ptr<FactoryModelHandler> factoryModel_;
     std::shared_ptr<MineModelHandler> mineModel_;

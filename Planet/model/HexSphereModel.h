@@ -50,11 +50,6 @@ enum class Biome : uint8_t {
     Jungle = 7
 };
 
-enum class TreeType : uint8_t {
-    Oak = 0,      // Обычное дерево (дуб)
-    Fir = 1       // Ёлочка
-};
-
 enum class OreType : uint8_t {
     None = 0,
     Iron = 1,
@@ -81,19 +76,10 @@ struct TreePlacement {
     float scale = 1.0f;
     float rotation = 0.0f;
 
-    // НОВОЕ: тип дерева
-    TreeType treeType = TreeType::Oak;
-
-    // Цвета листвы и ствола
-    enum class TreeColorType : uint8_t {
-        Green = 0,
-        Autumn = 1
-    };
-
-    TreeColorType colorType = TreeColorType::Green;
-    QVector3D foliageColor = QVector3D(0.2f, 0.55f, 0.15f);
-    QVector3D trunkColor = QVector3D(0.5f, 0.35f, 0.2f);
-    bool isYellowCellTree = false;
+    // УБРАНО: TreeType treeType;
+    // УБРАНО: TreeColorType colorType;
+    // УБРАНО: foliageColor / trunkColor
+    // (цвета теперь берутся из TreeBuilder::TreeVariant по species+variant)
 
     PlacementMode placementMode = PlacementMode::Surface;
     QVector3D worldPosition = QVector3D(0.0f, 0.0f, 0.0f);
@@ -102,31 +88,28 @@ struct TreePlacement {
     float worldScale = 1.0f;
 
     QVector3D getPosition(const HexSphereModel& model) const;
-    // Метод для применения масштаба подразбиения
-    void applyGlobalScale(float globalScale) {
-        scale *= globalScale;
-    }
-};
 
+    void applyGlobalScale(float globalScale) { scale *= globalScale; }
+};
 // Dual (hex/pent) sphere data
 struct Cell {
     int id = -1;                 // equals primal vertex index
     bool isPentagon = false;     // degree==5
     std::vector<int> poly;       // indices into dualVerts (centers of triangles), CCW around cell
     std::vector<int> neighbors;  // neighbor cell ids CCW (same length as poly)
-    int height = 0;                 // дискретная высота
-    Biome biome = Biome::Grass;     // тип биома
+    int height = 0;                 // Ð´Ð¸ÑÐºÑ€ÐµÑ‚Ð½Ð°Ñ Ð²Ñ‹ÑÐ¾Ñ‚Ð°
+    Biome biome = Biome::Grass;     // Ñ‚Ð¸Ð¿ Ð±Ð¸Ð¾Ð¼Ð°
     QVector3D centroid;          // normalized average of poly vertices
     float area = 0.0f;           // euclidean triangle-fan area (for info)
     uint32_t stateMask = 0;      // bit 0 => selected
 
-    // Климатические данные (из старой версии)
-    float temperature = 0.0f;    // температура [0..1]
-    float humidity = 0.0f;       // влажность [0..1] 
-    float pressure = 0.0f;       // давление [0..1]
+    // ÐšÐ»Ð¸Ð¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸Ðµ Ð´Ð°Ð½Ð½Ñ‹Ðµ (Ð¸Ð· ÑÑ‚Ð°Ñ€Ð¾Ð¹ Ð²ÐµÑ€ÑÐ¸Ð¸)
+    float temperature = 0.0f;    // Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ð° [0..1]
+    float humidity = 0.0f;       // Ð²Ð»Ð°Ð¶Ð½Ð¾ÑÑ‚ÑŒ [0..1] 
+    float pressure = 0.0f;       // Ð´Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ [0..1]
 
-    // Данные о руде (из старой версии)
-    float oreDensity = 0.0f;     // плотность руды [0..1]
+    // Ð”Ð°Ð½Ð½Ñ‹Ðµ Ð¾ Ñ€ÑƒÐ´Ðµ (Ð¸Ð· ÑÑ‚Ð°Ñ€Ð¾Ð¹ Ð²ÐµÑ€ÑÐ¸Ð¸)
+    float oreDensity = 0.0f;     // Ð¿Ð»Ð¾Ñ‚Ð½Ð¾ÑÑ‚ÑŒ Ñ€ÑƒÐ´Ñ‹ [0..1]
     OreType oreType = OreType::None;
 };
 
@@ -168,28 +151,28 @@ public:
     QVector3D positionOnSurface(const QVector3D& unitDir, float height, float bias = 0.0f) const;
     QVector3D cellSurfacePosition(int cellId, float bias = 0.0f) const;
 
-    // Удобные сеттеры
+    // Ð£Ð´Ð¾Ð±Ð½Ñ‹Ðµ ÑÐµÑ‚Ñ‚ÐµÑ€Ñ‹
     void setHeight(int cellId, int h);
     void addHeight(int cellId, int dh);
     void setBiome(int cellId, Biome b);
 
-    // Сеттеры для климатических данных
+    // Ð¡ÐµÑ‚Ñ‚ÐµÑ€Ñ‹ Ð´Ð»Ñ ÐºÐ»Ð¸Ð¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸Ñ… Ð´Ð°Ð½Ð½Ñ‹Ñ…
     void setTemperature(int cellId, float temp);
     void setHumidity(int cellId, float humidity);
     void setPressure(int cellId, float pressure);
     void setOreDensity(int cellId, float oreDensity);
     void setOreType(int cellId, OreType oreType);
 
-    // Утилиты для климатических данных
+    // Ð£Ñ‚Ð¸Ð»Ð¸Ñ‚Ñ‹ Ð´Ð»Ñ ÐºÐ»Ð¸Ð¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸Ñ… Ð´Ð°Ð½Ð½Ñ‹Ñ…
     float getAverageTemperature() const;
     float getAverageHumidity() const;
     std::vector<int> getCellsWithOre(OreType oreType) const;
     void resetClimateData();
 
-    // Утилиты
+    // Ð£Ñ‚Ð¸Ð»Ð¸Ñ‚Ñ‹
     static QVector3D biomeColor(Biome b, float temperature = 0.5f);
 
-    // Для тестирования
+    // Ð”Ð»Ñ Ñ‚ÐµÑÑ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ñ
     void debug_setCellsAndDual(std::vector<Cell> c, std::vector<QVector3D> d) {
         cells_ = std::move(c);
         dualVerts_ = std::move(d);
@@ -207,10 +190,10 @@ private:
     std::vector<Cell> cells_;
     std::vector<std::pair<int, int>> wireEdges_;         // unique undirected pairs of dual vertex indices
     std::vector<PickTri> pickTris_;                     // triangles for picking and green fill
-    std::vector<std::array<int, 3>> dualOwners_; // для каждой дуальной вершины dv ? {cellA,cellB,cellC}
+    std::vector<std::array<int, 3>> dualOwners_; // Ð´Ð»Ñ ÐºÐ°Ð¶Ð´Ð¾Ð¹ Ð´ÑƒÐ°Ð»ÑŒÐ½Ð¾Ð¹ Ð²ÐµÑ€ÑˆÐ¸Ð½Ñ‹ dv ? {cellA,cellB,cellC}
 };
 
-// Определение TreePlacement::getPosition
+// ÐžÐ¿Ñ€ÐµÐ´ÐµÐ»ÐµÐ½Ð¸Ðµ TreePlacement::getPosition
 inline QVector3D TreePlacement::getPosition(const HexSphereModel& model) const {
     if (placementMode == PlacementMode::World) {
         return worldPosition;

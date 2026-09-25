@@ -348,7 +348,7 @@ void TerrainTessellator::MeshBuilder::triToward(
         oreDensity, oreType,
         oreDensity, oreType,
         oreDensity, oreType
-    });
+        });
     idx.insert(idx.end(), { base, base + 1, base + 2 });
 
     if (owner) {
@@ -488,11 +488,11 @@ void TerrainTessellator::finalizeCliffs(
             t = (hi.P_edgeL + hi.P_edgeR + lo.P_edgeL + lo.P_edgeR);
         }
         return t;
-    };
+        };
 
     auto diff = [&](const QVector3D& a, const QVector3D& b) {
         return (a - b).lengthSquared() > (epsApex * epsApex);
-    };
+        };
 
     for (const auto& [key, rec] : reg) {
         (void)key;
@@ -593,7 +593,7 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
 void TerrainTessellator::updateOreData(TerrainMesh& mesh, const HexSphereModel& model) {
     const auto& cells = model.cells();
 
-    // Проходим по всем треугольникам
+    // РџСЂРѕС…РѕРґРёРј РїРѕ РІСЃРµРј С‚СЂРµСѓРіРѕР»СЊРЅРёРєР°Рј
     for (size_t tri = 0; tri < mesh.triOwner.size(); ++tri) {
         int ownerId = mesh.triOwner[tri];
         if (ownerId < 0 || ownerId >= static_cast<int>(cells.size())) {
@@ -610,8 +610,8 @@ void TerrainTessellator::updateOreData(TerrainMesh& mesh, const HexSphereModel& 
             oreType = static_cast<float>(cell.oreType);
         }
 
-        // Обновляем ore-данные для 3 вершин треугольника
-        size_t baseIndex = tri * 6;  // 2 float'а на вершину * 3 вершины
+        // РћР±РЅРѕРІР»СЏРµРј ore-РґР°РЅРЅС‹Рµ РґР»СЏ 3 РІРµСЂС€РёРЅ С‚СЂРµСѓРіРѕР»СЊРЅРёРєР°
+        size_t baseIndex = tri * 6;  // 2 float'Р° РЅР° РІРµСЂС€РёРЅСѓ * 3 РІРµСЂС€РёРЅС‹
         if (baseIndex + 5 < mesh.ore.size()) {
             mesh.ore[baseIndex + 0] = oreDensity;
             mesh.ore[baseIndex + 1] = oreType;

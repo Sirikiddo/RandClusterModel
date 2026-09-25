@@ -3,7 +3,7 @@
 #include <memory>
 #include "TerrainBackendSelector.h"
 
-// Расширяем Impl для поддержки PathBackend
+// Ð Ð°ÑÑˆÐ¸Ñ€ÑÐµÐ¼ Impl Ð´Ð»Ñ Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ¸ PathBackend
 struct EngineFacade::Impl {
     SelectedTerrainBackend terrainBackend;
     DagPathBackend pathBackend;
@@ -12,7 +12,7 @@ struct EngineFacade::Impl {
 
 static_assert(TerrainBackend<SelectedTerrainBackend>);
 
-// ===== КОНСТРУКТОР / ДЕСТРУКТОР =====
+// ===== ÐšÐžÐÐ¡Ð¢Ð Ð£ÐšÐ¢ÐžÐ  / Ð”Ð•Ð¡Ð¢Ð Ð£ÐšÐ¢ÐžÐ  =====
 
 EngineFacade::EngineFacade()
     : impl_(std::make_unique<Impl>()) {
@@ -26,7 +26,7 @@ EngineFacade::~EngineFacade() {
 EngineFacade::EngineFacade(EngineFacade&&) noexcept = default;
 EngineFacade& EngineFacade::operator=(EngineFacade&&) noexcept = default;
 
-// ===== ТЕРРЕЙН =====
+// ===== Ð¢Ð•Ð Ð Ð•Ð™Ð =====
 
 void EngineFacade::attachTerrainBridge(ITerrainSceneBridge* bridge) {
     impl_->terrainBackend.attachTerrainBridge(bridge);
@@ -55,7 +55,7 @@ TerrainRegenerationResult EngineFacade::regenerateTerrain() {
     if (result) {
         ++overlay_.sceneVersion;
 
-        // После успешной регенерации террейна обновляем PathBackend
+        // ÐŸÐ¾ÑÐ»Ðµ ÑƒÑÐ¿ÐµÑˆÐ½Ð¾Ð¹ Ñ€ÐµÐ³ÐµÐ½ÐµÑ€Ð°Ñ†Ð¸Ð¸ Ñ‚ÐµÑ€Ñ€ÐµÐ¹Ð½Ð° Ð¾Ð±Ð½Ð¾Ð²Ð»ÑÐµÐ¼ PathBackend
         const TerrainSnapshot* snapshot = impl_->terrainBackend.currentTerrainSnapshot();
         if (snapshot) {
             impl_->pathBackend.setTerrainSnapshot(*snapshot);
@@ -69,7 +69,7 @@ const TerrainSnapshot* EngineFacade::currentTerrainSnapshot() const {
     return impl_->terrainBackend.currentTerrainSnapshot();
 }
 
-// ===== ПОИСК ПУТИ =====
+// ===== ÐŸÐžÐ˜Ð¡Ðš ÐŸÐ£Ð¢Ð˜ =====
 
 void EngineFacade::setPathSmoothMaxDelta(int delta) {
     impl_->pathBackend.setSmoothMaxDelta(delta);
@@ -87,7 +87,7 @@ const PathResult& EngineFacade::lastPathResult() const {
     return impl_->pathBackend.lastResult();
 }
 
-// ===== ПРОИЗВОДНЫЕ ДАННЫЕ СЦЕНЫ =====
+// ===== ÐŸÐ ÐžÐ˜Ð—Ð’ÐžÐ”ÐÐ«Ð• Ð”ÐÐÐÐ«Ð• Ð¡Ð¦Ð•ÐÐ« =====
 
 SceneDagResult EngineFacade::rebuildSceneDerived(const SceneDagRequest& request) {
     return impl_->sceneBackend.rebuild(request);

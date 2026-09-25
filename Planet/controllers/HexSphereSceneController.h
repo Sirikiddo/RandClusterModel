@@ -20,29 +20,29 @@
 #include "model/HexSphereModel.h"
 
 struct CachedTriangle {
-    QVector3D center;      // Центр треугольника в world-space
-    uint32_t i0, i1, i2;   // Индексы вершин
-    float cachedDot;        // Кэшированное значение dot product (опционально)
+    QVector3D center;      // Ð¦ÐµÐ½Ñ‚Ñ€ Ñ‚Ñ€ÐµÑƒÐ³Ð¾Ð»ÑŒÐ½Ð¸ÐºÐ° Ð² world-space
+    uint32_t i0, i1, i2;   // Ð˜Ð½Ð´ÐµÐºÑÑ‹ Ð²ÐµÑ€ÑˆÐ¸Ð½
+    float cachedDot;        // ÐšÑÑˆÐ¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ð¾Ðµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ dot product (Ð¾Ð¿Ñ†Ð¸Ð¾Ð½Ð°Ð»ÑŒÐ½Ð¾)
 };
 
 struct VisibilityConfig {
-    float baseThreshold = 0.1f;        // Базовый порог движения
-    float farDistance = 5.0f;           // Расстояние, с которого начинается "далеко"
-    float nearDistance = 2.0f;          // Расстояние, с которого начинается "близко"
-    float fastSpeed = 1.0f;             // Порог быстрой скорости
-    float mediumSpeed = 0.1f;           // Порог средней скорости
-    float fastUpdateInterval = 0.2f;     // Интервал обновления при быстрой скорости (сек)
-    float mediumUpdateInterval = 0.5f;   // Интервал при средней скорости
-    float slowUpdateInterval = 1.0f;     // Интервал при медленной скорости
-    float forceUpdateDistance = 2.0f;    // Принудительное обновление при таком перемещении
+    float baseThreshold = 0.1f;        // Ð‘Ð°Ð·Ð¾Ð²Ñ‹Ð¹ Ð¿Ð¾Ñ€Ð¾Ð³ Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ
+    float farDistance = 5.0f;           // Ð Ð°ÑÑÑ‚Ð¾ÑÐ½Ð¸Ðµ, Ñ ÐºÐ¾Ñ‚Ð¾Ñ€Ð¾Ð³Ð¾ Ð½Ð°Ñ‡Ð¸Ð½Ð°ÐµÑ‚ÑÑ "Ð´Ð°Ð»ÐµÐºÐ¾"
+    float nearDistance = 2.0f;          // Ð Ð°ÑÑÑ‚Ð¾ÑÐ½Ð¸Ðµ, Ñ ÐºÐ¾Ñ‚Ð¾Ñ€Ð¾Ð³Ð¾ Ð½Ð°Ñ‡Ð¸Ð½Ð°ÐµÑ‚ÑÑ "Ð±Ð»Ð¸Ð·ÐºÐ¾"
+    float fastSpeed = 1.0f;             // ÐŸÐ¾Ñ€Ð¾Ð³ Ð±Ñ‹ÑÑ‚Ñ€Ð¾Ð¹ ÑÐºÐ¾Ñ€Ð¾ÑÑ‚Ð¸
+    float mediumSpeed = 0.1f;           // ÐŸÐ¾Ñ€Ð¾Ð³ ÑÑ€ÐµÐ´Ð½ÐµÐ¹ ÑÐºÐ¾Ñ€Ð¾ÑÑ‚Ð¸
+    float fastUpdateInterval = 0.2f;     // Ð˜Ð½Ñ‚ÐµÑ€Ð²Ð°Ð» Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð¿Ñ€Ð¸ Ð±Ñ‹ÑÑ‚Ñ€Ð¾Ð¹ ÑÐºÐ¾Ñ€Ð¾ÑÑ‚Ð¸ (ÑÐµÐº)
+    float mediumUpdateInterval = 0.5f;   // Ð˜Ð½Ñ‚ÐµÑ€Ð²Ð°Ð» Ð¿Ñ€Ð¸ ÑÑ€ÐµÐ´Ð½ÐµÐ¹ ÑÐºÐ¾Ñ€Ð¾ÑÑ‚Ð¸
+    float slowUpdateInterval = 1.0f;     // Ð˜Ð½Ñ‚ÐµÑ€Ð²Ð°Ð» Ð¿Ñ€Ð¸ Ð¼ÐµÐ´Ð»ÐµÐ½Ð½Ð¾Ð¹ ÑÐºÐ¾Ñ€Ð¾ÑÑ‚Ð¸
+    float forceUpdateDistance = 2.0f;    // ÐŸÑ€Ð¸Ð½ÑƒÐ´Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾Ðµ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ Ð¿Ñ€Ð¸ Ñ‚Ð°ÐºÐ¾Ð¼ Ð¿ÐµÑ€ÐµÐ¼ÐµÑ‰ÐµÐ½Ð¸Ð¸
 };
 
 struct VisibilityPrediction {
-    std::vector<uint32_t> indicesNow;        // Для текущей позиции
-    std::vector<uint32_t> indicesPredicted;  // Для предсказанной позиции
-    QVector3D predictedPos;                   // Предсказанная позиция
-    float predictionTime = 0.1f;               // Время предсказания (сек)
-    bool usePrediction = false;                // Флаг использования предсказания
+    std::vector<uint32_t> indicesNow;        // Ð”Ð»Ñ Ñ‚ÐµÐºÑƒÑ‰ÐµÐ¹ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¸
+    std::vector<uint32_t> indicesPredicted;  // Ð”Ð»Ñ Ð¿Ñ€ÐµÐ´ÑÐºÐ°Ð·Ð°Ð½Ð½Ð¾Ð¹ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¸
+    QVector3D predictedPos;                   // ÐŸÑ€ÐµÐ´ÑÐºÐ°Ð·Ð°Ð½Ð½Ð°Ñ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ñ
+    float predictionTime = 0.1f;               // Ð’Ñ€ÐµÐ¼Ñ Ð¿Ñ€ÐµÐ´ÑÐºÐ°Ð·Ð°Ð½Ð¸Ñ (ÑÐµÐº)
+    bool usePrediction = false;                // Ð¤Ð»Ð°Ð³ Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ð½Ð¸Ñ Ð¿Ñ€ÐµÐ´ÑÐºÐ°Ð·Ð°Ð½Ð¸Ñ
 };
 
 
@@ -128,17 +128,9 @@ public:
         adaptiveThreshold = std::max(adaptiveThreshold, 0.05f);
 
         float thresholdSq = adaptiveThreshold * adaptiveThreshold;
-        bool moved = distSq > thresholdSq;
-
-        if (moved) {
-            auto stats = getVisibilityStats();
-            qDebug() << "Camera moved. Dist:" << sqrt(distSq)
-                << "Adaptive threshold:" << adaptiveThreshold
-                << "Visible:" << stats.first << "/" << stats.second;
-        }
-
-        return moved;
+        return distSq > thresholdSq;
     }
+
     void updateLastCameraPosition() { lastCameraPos_ = cameraPos_; }
     std::vector<uint32_t> getVisibleIndices(const QVector3D& cameraPos) const;
     TerrainMesh getVisibleTerrainMesh() const;
@@ -185,8 +177,6 @@ public:
 
         if (needUpdate) {
             lastUpdateTimer_.restart();
-            qDebug() << "Updating visibility - Speed:" << speed
-                << "Time since last:" << timeSinceLastUpdate;
         }
 
         return needUpdate;
@@ -245,8 +235,8 @@ private:
     std::vector<float> selectionOutlineVertices_;
     bool selectionOutlineDirty_ = true;
 
-    QVector3D cameraPos_{ 0, 0, 5 };      // Текущая позиция камеры (начальное значение)
-    QVector3D lastCameraPos_{ 0, 0, 5 };  // Позиция на прошлом кадре для детекта движения
+    QVector3D cameraPos_{ 0, 0, 5 };      // Ð¢ÐµÐºÑƒÑ‰Ð°Ñ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ñ ÐºÐ°Ð¼ÐµÑ€Ñ‹ (Ð½Ð°Ñ‡Ð°Ð»ÑŒÐ½Ð¾Ðµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ)
+    QVector3D lastCameraPos_{ 0, 0, 5 };  // ÐŸÐ¾Ð·Ð¸Ñ†Ð¸Ñ Ð½Ð° Ð¿Ñ€Ð¾ÑˆÐ»Ð¾Ð¼ ÐºÐ°Ð´Ñ€Ðµ Ð´Ð»Ñ Ð´ÐµÑ‚ÐµÐºÑ‚Ð° Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ
     mutable std::vector<CachedTriangle> triangleCache_;
     mutable bool cacheValid_ = false;
     mutable QVector3D lastCacheCameraPos_;
@@ -254,7 +244,7 @@ private:
     void rebuildCache() const;
     void validateCache() const;
 
-    // Новые поля для детектора скорости
+    // ÐÐ¾Ð²Ñ‹Ðµ Ð¿Ð¾Ð»Ñ Ð´Ð»Ñ Ð´ÐµÑ‚ÐµÐºÑ‚Ð¾Ñ€Ð° ÑÐºÐ¾Ñ€Ð¾ÑÑ‚Ð¸
     mutable QVector3D velocity_;
     mutable QElapsedTimer speedTimer_;
     mutable bool speedTimerStarted_ = false;
@@ -264,5 +254,4 @@ private:
 
     VisibilityConfig visibilityConfig_;
 };
-
 

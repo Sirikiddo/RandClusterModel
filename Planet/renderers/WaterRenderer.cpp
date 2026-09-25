@@ -254,7 +254,7 @@ void WaterRenderer::render(
         gl_->glActiveTexture(unit);
         gl_->glBindTexture(target, texture);
         gl_->glUniform1i(sampler, static_cast<GLint>(unit - GL_TEXTURE0));
-    };
+        };
     bindTexture(GL_TEXTURE0, GL_TEXTURE_CUBE_MAP, resources.envCubemap, uEnvMap_);
     bindTexture(GL_TEXTURE1, GL_TEXTURE_2D, resources.sceneDepthTexture, uSceneDepthTexture_);
     bindTexture(GL_TEXTURE2, GL_TEXTURE_CUBE_MAP, resources.planetRadiusAtlas, uPlanetRadiusAtlas_);

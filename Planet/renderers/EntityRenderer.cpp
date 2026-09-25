@@ -1,4 +1,4 @@
-#include "renderers/EntityRenderer.h"
+ï»¿#include "renderers/EntityRenderer.h"
 
 #include <QElapsedTimer>
 #include <QOpenGLContext>
@@ -82,8 +82,6 @@ EntityRenderer::EntityRenderer(QOpenGLFunctions_3_3_Core* gl,
     GLint uViewPosSteam,
     GLuint vaoPyramid,
     const GLsizei& pyramidVertexCount,
-    const std::shared_ptr<ModelHandler>& treeModel,
-    const std::shared_ptr<ModelHandler>& firTreeModel,
     const std::shared_ptr<CarModelHandler>& carModel,
     const std::shared_ptr<FactoryModelHandler>& factoryModel,
     const std::shared_ptr<MineModelHandler>& mineModel)
@@ -113,8 +111,6 @@ EntityRenderer::EntityRenderer(QOpenGLFunctions_3_3_Core* gl,
     , uViewPosSteam_(uViewPosSteam)
     , vaoPyramid_(vaoPyramid)
     , pyramidVertexCount_(pyramidVertexCount)
-    , treeModel_(treeModel)
-    , firTreeModel_(firTreeModel)
     , carModel_(carModel)
     , factoryModel_(factoryModel)
     , mineModel_(mineModel) {
@@ -168,13 +164,14 @@ void EntityRenderer::renderEntities(const HexSphereRenderer::RenderContext& ctx)
         else {
             renderCar(ctx, e);
         }
-    });
+        });
 }
+
 
 void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, const ecs::Entity& entity) const {
     if (!carModel_ || !carModel_->isReady()) return;
 
-    const float modelScale = ctx.graph.scene.getModelScaleFactor(); // Äëÿ èçìåíåíèÿ ìàñøòàáà
+    const float modelScale = ctx.graph.scene.getModelScaleFactor(); // Ð”Ð»Ñ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ñ Ð¼Ð°ÑÑˆÑ‚Ð°Ð±Ð°
 
     QVector3D surfacePos;
     if (entity.currentCell >= 0) {
@@ -219,7 +216,7 @@ void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, cons
     model = model * basisFromHorizontalForward(up, forwardTangent);
     model = model * carModel_->localAlignment();
 
-    const float carScale = 0.035f * modelScale;  // Óìíîæàåì áàçîâûé ìàñøòàá íà êîýôôèöèåíò
+    const float carScale = 0.035f * modelScale;  // Ð£Ð¼Ð½Ð¾Ð¶Ð°ÐµÐ¼ Ð±Ð°Ð·Ð¾Ð²Ñ‹Ð¹ Ð¼Ð°ÑÑˆÑ‚Ð°Ð± Ð½Ð° ÐºÐ¾ÑÑ„Ñ„Ð¸Ñ†Ð¸ÐµÐ½Ñ‚
     model.scale(carScale);
 
     if (entity.selected) {
@@ -270,6 +267,7 @@ void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, cons
         wheelSpinDegrees = wheelState.spinDegrees;
     }
 
+    // gl_->glDisable(GL_DEPTH_TEST);
     carModel_->draw(progModel_, mvpCar, model, ctx.camera.view, wheelSpinDegrees);
 
     if (blendWasEnabled) gl_->glEnable(GL_BLEND);
@@ -423,7 +421,7 @@ void EntityRenderer::renderMine(const HexSphereRenderer::RenderContext& ctx, con
     }
 
     model = model * basisFromHorizontalForward(elevatedPos.normalized(), forwardTangent);
-    
+
     const float mineScale = 0.008f * modelScale;
     model.scale(mineScale);
     model = model * mineModel_->localPlacement();
@@ -456,109 +454,4 @@ void EntityRenderer::renderMine(const HexSphereRenderer::RenderContext& ctx, con
     else gl_->glDisable(GL_DEPTH_TEST);
 
     gl_->glDepthMask(depthWriteMask);
-}
-
-void EntityRenderer::renderTrees(const HexSphereRenderer::RenderContext& ctx) const {
-    if ((!treeModel_ || !treeModel_->isInitialized()) &&
-        (!firTreeModel_ || !firTreeModel_->isInitialized())) return;
-
-    if (progModel_ == 0) return;
-
-    gl_->glUseProgram(progModel_);
-
-    const GLint uIsCar = gl_->glGetUniformLocation(progModel_, "uIsCar");
-    const GLint uUseFoliageColor = gl_->glGetUniformLocation(progModel_, "uUseFoliageColor");
-    const GLint uFoliageColor = gl_->glGetUniformLocation(progModel_, "uFoliageColor");
-    const GLint uTrunkColor = gl_->glGetUniformLocation(progModel_, "uTrunkColor");
-    const GLint uWindTime = gl_->glGetUniformLocation(progModel_, "uWindTime");
-
-    if (uIsCar >= 0) gl_->glUniform1i(uIsCar, 0);
-    static float foliageWindTime = 0.0f;
-    foliageWindTime += 0.016f;
-    if (uWindTime >= 0) {
-        gl_->glUniform1f(uWindTime, foliageWindTime);
-    }
-
-    const GLboolean cullWasEnabled = gl_->glIsEnabled(GL_CULL_FACE);
-    gl_->glDisable(GL_CULL_FACE);
-
-    const QVector3D globalLightDir = QVector3D(0.5f, 1.0f, 0.3f).normalized();
-    const QVector3D eye = (ctx.camera.view.inverted() * QVector4D(0, 0, 0, 1)).toVector3D();
-
-    gl_->glUniform3f(uLightDir_, globalLightDir.x(), globalLightDir.y(), globalLightDir.z());
-    gl_->glUniform3f(uViewPos_, eye.x(), eye.y(), eye.z());
-
-    const auto& placements = ctx.graph.scene.getTreePlacements();
-
-    constexpr size_t kMaxRenderedTrees = 96;
-    size_t renderedTrees = 0;
-    for (const auto& placement : placements) {
-        if (renderedTrees >= kMaxRenderedTrees) {
-            break;
-        }
-
-        const QVector3D treePos = computeSurfacePoint(ctx.graph.scene, placement, ctx.graph.heightStep);
-
-        QMatrix4x4 model;
-        model.translate(treePos);
-        orientToSurfaceNormal(model, treePos.normalized());
-        model.rotate(placement.rotation * 180.0f / 3.14159f, 0, 1, 0);
-
-        const float baseScale = (placement.treeType == TreeType::Fir) ? 0.045f : 0.04f;
-        model.scale(baseScale * placement.scale);
-
-        const QMatrix4x4 mvpTree = ctx.camera.projection * ctx.camera.view * model;
-        const auto& currentModel = (placement.treeType == TreeType::Fir)
-            ? firTreeModel_
-            : treeModel_;
-
-        if (!currentModel || !currentModel->isInitialized()) continue;
-
-        const bool hasTrunk = currentModel->hasDrawablePart("trunk");
-        const bool hasFoliage = currentModel->hasDrawablePart("foliage");
-
-        if (hasTrunk) {
-            if (uUseFoliageColor >= 0) {
-                gl_->glUniform1i(uUseFoliageColor, 0);
-            }
-            if (uTrunkColor >= 0) {
-                gl_->glUniform3f(uTrunkColor,
-                    placement.trunkColor.x(),
-                    placement.trunkColor.y(),
-                    placement.trunkColor.z());
-            }
-            currentModel->drawPart("trunk", progModel_, mvpTree, model, ctx.camera.view);
-        }
-
-        if (hasFoliage) {
-            if (uUseFoliageColor >= 0) {
-                gl_->glUniform1i(uUseFoliageColor, 1);
-            }
-            if (uFoliageColor >= 0) {
-                gl_->glUniform3f(uFoliageColor,
-                    placement.foliageColor.x(),
-                    placement.foliageColor.y(),
-                    placement.foliageColor.z());
-            }
-            currentModel->drawPart("foliage", progModel_, mvpTree, model, ctx.camera.view);
-        }
-
-        if (!hasTrunk && !hasFoliage) {
-            if (uUseFoliageColor >= 0) {
-                gl_->glUniform1i(uUseFoliageColor, 1);
-            }
-            if (uFoliageColor >= 0) {
-                gl_->glUniform3f(uFoliageColor,
-                    placement.foliageColor.x(),
-                    placement.foliageColor.y(),
-                    placement.foliageColor.z());
-            }
-            currentModel->draw(progModel_, mvpTree, model, ctx.camera.view, placement.foliageColor, false);
-        }
-
-        ++renderedTrees;
-    }
-
-    if (cullWasEnabled) gl_->glEnable(GL_CULL_FACE);
-    else gl_->glDisable(GL_CULL_FACE);
 }
