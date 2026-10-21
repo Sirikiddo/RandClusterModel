@@ -14,7 +14,6 @@
 #include "dag/TerrainBackendTypes.h"
 #include "controllers/PathBuilder.h"
 #include "generation/MeshGenerators/TerrainMeshGenerator.h"
-#include "generation/MeshGenerators/WaterMeshGenerator.h"
 #include "generation/TerrainGenerator.h"
 #include "generation/WaterWaveModel.h"
 #include "model/HexSphereModel.h"
@@ -77,7 +76,6 @@ public:
     std::vector<QVector3D> buildPathPolyline(const std::vector<int>& path) const;
     std::vector<float> buildRoadMesh(const std::vector<int>& path) const;
 
-    std::vector<float> buildWireVertices() const;
     std::vector<float> buildSelectionOutlineVertices() const;
     std::vector<float> buildOutlineVerticesForCells(const QSet<int>& cells) const;
     TerrainSnapshot captureTerrainSnapshot() const;
@@ -86,8 +84,6 @@ public:
     const HexSphereModel& model() const { return model_; }
     HexSphereModel& modelMutable() { return model_; }
     const TerrainMesh& terrain() const { return terrainCPU_; }
-    const WaterGeometryData& waterGeometry() const { return waterCPU_; }
-    uint64_t waterProxyRevision() const { return waterProxyRevision_; }
     const WaterParams& waterParams() const { return waterParams_; }
     const WaterParams& resolvedWaterParamsValue() const { return resolvedWaterParams_; }
     const CoastalBandData& coastalBand() const { return coastalBand_; }
@@ -193,7 +189,6 @@ public:
 private:
     float autoHeightStep() const;
     void rebuildTopology();
-    void rebuildWaterProxy();
     void updateTerrainMesh();
     void buildTerrainMeshFromCurrentCoast();
     void refreshResolvedWaterParams();
@@ -209,8 +204,6 @@ private:
     IcoMesh ico_;
     HexSphereModel model_;
     TerrainMesh terrainCPU_;
-    WaterGeometryData waterCPU_;
-    uint64_t waterProxyRevision_ = 0;
     CoastalBandData coastalBand_;
     WaterParams waterParams_ = waterParamsForPreset(WaterPreset::Temperate);
     WaterParams resolvedWaterParams_ = waterParams_;

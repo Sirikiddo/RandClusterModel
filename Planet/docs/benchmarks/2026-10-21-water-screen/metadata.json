@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-21",
+  "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+  "configuration": "Release x64",
+  "qt": "6.8.0",
+  "viewport": [
+    1280,
+    800
+  ],
+  "msaa": 4,
+  "preset": "Storm",
+  "water_time_seconds": 17,
+  "process_runs": 3,
+  "warmup_pairs": 6,
+  "measured_pairs_per_process_view": 21,
+  "clock": "GL_TIME_ELAPSED",
+  "scene": "Synthetic all-sea constant cubemaps, bottom radius 0.9, shore distance 1, opaque scene depth 1. Real wave and optics fragment shader. No terrain/entities rendered.",
+  "views": [
+    "eye=(0,0,3R), aim=origin",
+    "eye=(0,0,1.5R), aim=origin",
+    "eye=(0,1.12R,0), aim=(0,0.85R,-R)"
+  ],
+  "projection": "perspective 45 degrees, near 0.001, far 20",
+  "limitations": [
+    "GPU time of water draw only, not full frame or FPS",
+    "Memory delta measured around historical mesh construction before upload, not two entire app processes",
+    "GPU buffer payload measured by array size, not physical VRAM residency",
+    "No GPU clock/thermal/external load control; variants alternate order",
+    "Historical generator and vertex shader retained as benchmark reference only"
+  ],
+  "sha256": {
+    "tests/WaterScreenPassTests.cpp": "1cb817f30431e62824949905b270865bc8fef89599dad0da85caf418548c8359",
+    "generation/MeshGenerators/WaterMeshGenerator.cpp": "500a53b40d02754b838c8350e58fc890fb36f5f09499ca7f2d8c9cb1fdbe8642",
+    "resources/water/water_shell.vert": "3b455478e03be01fdd349cb22695e44019a615e6c8370fcc2507ea269c880bed",
+    "resources/water/water_shell.frag": "291d18725e7faa82536a8906c4b1cd2a7635144b2eb0f1047513f06420ab9225",
+    "resources/water/water_common.glsl": "68855490829e410d5bf9bd25e59aaaaa725a1e9ebc7ba876acaf2fa58d931c3f",
+    "resources/water/water_surface.glsl": "c010ba55636d082905c216617cf281fbe84fe803d52206aa0bf7422f2cd9604e",
+    "resources/water/water_intersection.glsl": "3470ab0deab67f02bb6d17a2e34fc320b9ad34b1165762ac60a338e5fed2ffa0",
+    "resources/water/water_shading.glsl": "eb02263d31e7eff43043e671e7610d849b9029394713f74c07d830c45b179c11",
+    "renderers/WaterRenderer.cpp": "c4b2b29913a8d72f16b4122621bda8ee4442fff5b3784afb9583eae52b0a0a21",
+    "build/Planet/Release/Planet.exe": "3a3ec52a1fa9b0504bfe7084ee9ad920b820fc3dcdfc25a26bf2f1262718d23f"
+  }
+}

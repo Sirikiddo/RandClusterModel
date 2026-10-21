@@ -319,7 +319,8 @@ void TerrainTessellator::MeshBuilder::triToward(
     const QVector3D& color,
     const QVector3D& toward,
     int cellOwner,
-    TriangleSurfaceRole role) {
+    TriangleSurfaceRole role,
+    NormalMode normalMode) {
     QVector3D n = QVector3D::crossProduct(B - A, C - A).normalized();
     QVector3D t = toward;
     if (!t.isNull()) {
@@ -333,7 +334,11 @@ void TerrainTessellator::MeshBuilder::triToward(
     const uint32_t base = static_cast<uint32_t>(pos.size() / 3);
     pos.insert(pos.end(), { A.x(), A.y(), A.z(), B.x(), B.y(), B.z(), C.x(), C.y(), C.z() });
     col.insert(col.end(), { color.x(), color.y(), color.z(), color.x(), color.y(), color.z(), color.x(), color.y(), color.z() });
-    norm.insert(norm.end(), { n.x(), n.y(), n.z(), n.x(), n.y(), n.z(), n.x(), n.y(), n.z() });
+    // Keep face winding above; only the lighting normals change on level surfaces.
+    const QVector3D nA = normalMode == NormalMode::Radial ? A.normalized() : n;
+    const QVector3D nB = normalMode == NormalMode::Radial ? B.normalized() : n;
+    const QVector3D nC = normalMode == NormalMode::Radial ? C.normalized() : n;
+    norm.insert(norm.end(), { nA.x(), nA.y(), nA.z(), nB.x(), nB.y(), nB.z(), nC.x(), nC.y(), nC.z() });
 
     float oreDensity = 0.0f;
     float oreType = 0.0f;
@@ -367,9 +372,10 @@ void TerrainTessellator::MeshBuilder::quadToward(
     const QVector3D& color,
     const QVector3D& toward,
     int cellOwner,
-    TriangleSurfaceRole role) {
-    triToward(Q0, Q1, Q2, color, toward, cellOwner, role);
-    triToward(Q0, Q2, Q3, color, toward, cellOwner, role);
+    TriangleSurfaceRole role,
+    NormalMode normalMode) {
+    triToward(Q0, Q1, Q2, color, toward, cellOwner, role, normalMode);
+    triToward(Q0, Q2, Q3, color, toward, cellOwner, role, normalMode);
 }
 
 void TerrainTessellator::buildInnerFan(MeshBuilder& mb, const Cell& c, const PreCell& pc) const {
@@ -377,7 +383,8 @@ void TerrainTessellator::buildInnerFan(MeshBuilder& mb, const Cell& c, const Pre
     for (int i = 0; i < deg; ++i) {
         const QVector3D& A = pc.inner[static_cast<size_t>(i)];
         const QVector3D& B = pc.inner[static_cast<size_t>((i + 1) % deg)];
-        mb.triToward(pc.center, A, B, pc.color, pc.center, c.id);
+        mb.triToward(pc.center, A, B, pc.color, pc.center, c.id,
+            TriangleSurfaceRole::Top, NormalMode::Radial);
     }
 }
 
@@ -393,7 +400,10 @@ void TerrainTessellator::buildBlades(
         const QVector3D O0 = liftUnit(td.sideL[static_cast<size_t>(i)], eh.edgeH[static_cast<size_t>(i)]);
         const QVector3D O1 = liftUnit(td.sideR[static_cast<size_t>(i)], eh.edgeH[static_cast<size_t>(i)]);
         const QVector3D toward = pc.inner[static_cast<size_t>(i)] + pc.inner[static_cast<size_t>(j)] + O0 + O1;
-        mb.quadToward(pc.inner[static_cast<size_t>(i)], pc.inner[static_cast<size_t>(j)], O1, O0, pc.color, toward, c.id);
+        const NormalMode normalMode = pc.h == eh.edgeH[static_cast<size_t>(i)]
+            ? NormalMode::Radial : NormalMode::Face;
+        mb.quadToward(pc.inner[static_cast<size_t>(i)], pc.inner[static_cast<size_t>(j)], O1, O0, pc.color, toward, c.id,
+            TriangleSurfaceRole::Top, normalMode);
         if (mb.beachTriCount && coastalBand && isBeachLikeCell(c) && ((coastalBand->shoreEdgeMask[static_cast<size_t>(c.id)] >> i) & 1u) != 0u) {
             *mb.beachTriCount += 2;
         }
@@ -414,8 +424,16 @@ void TerrainTessellator::buildCorners(
         const QVector3D Oprev = liftUnit(td.sideR[static_cast<size_t>(iPrev)], eh.edgeH[static_cast<size_t>(iPrev)]);
         const QVector3D Apex = liftUnit(td.apexU[static_cast<size_t>(i)], eh.apexH[static_cast<size_t>(i)]);
 
-        mb.triToward(I, Ocurr, Apex, pc.color, I + Ocurr + Apex, c.id);
-        mb.triToward(I, Oprev, Apex, pc.color, I + Oprev + Apex, c.id);
+        // Test each corner triangle independently: one side can be level while the other slopes.
+        const bool levelApex = pc.h == eh.apexH[static_cast<size_t>(i)];
+        const NormalMode currMode = levelApex && pc.h == eh.edgeH[static_cast<size_t>(i)]
+            ? NormalMode::Radial : NormalMode::Face;
+        const NormalMode prevMode = levelApex && pc.h == eh.edgeH[static_cast<size_t>(iPrev)]
+            ? NormalMode::Radial : NormalMode::Face;
+        mb.triToward(I, Ocurr, Apex, pc.color, I + Ocurr + Apex, c.id,
+            TriangleSurfaceRole::Top, currMode);
+        mb.triToward(I, Oprev, Apex, pc.color, I + Oprev + Apex, c.id,
+            TriangleSurfaceRole::Top, prevMode);
         if (mb.beachTriCount && coastalBand && isBeachLikeCell(c) && ((coastalBand->shoreVertexMask[static_cast<size_t>(c.id)] >> i) & 1u) != 0u) {
             *mb.beachTriCount += 2;
         }

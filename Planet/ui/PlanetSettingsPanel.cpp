@@ -46,7 +46,13 @@ PlanetSettingsPanel::PlanetSettingsPanel(QWidget* parent)
 
     const WaterParams defaultWaterParams = waterParamsForPreset(WaterPreset::Temperate);
 
+    wavesEnabledChk_ = new QCheckBox("Waves", this);
+    wavesEnabledChk_->setObjectName("waterWavesEnabled");
+    wavesEnabledChk_->setChecked(defaultWaterParams.wavesEnabled);
+    wavesEnabledChk_->setToolTip("Disable for smooth water without reflections or highlights.");
+
     waterPresetBox_ = new QComboBox(this);
+    waterPresetBox_->setObjectName("waterPreset");
     waterPresetBox_->addItem("Temperate", static_cast<int>(WaterPreset::Temperate));
     waterPresetBox_->addItem("Lagoon", static_cast<int>(WaterPreset::Lagoon));
     waterPresetBox_->addItem("Storm", static_cast<int>(WaterPreset::Storm));
@@ -168,11 +174,13 @@ PlanetSettingsPanel::PlanetSettingsPanel(QWidget* parent)
     waterSettingsContent_ = new QWidget(this);
     auto* waterContentLayout = new QVBoxLayout;
     waterContentLayout->setContentsMargins(0, 0, 0, 0);
+    waterContentLayout->addWidget(wavesEnabledChk_);
     waterContentLayout->addWidget(oceanGroup_);
     waterContentLayout->addWidget(waveGeometryGroup_);
     waterSettingsContent_->setLayout(waterContentLayout);
 
     waterSettingsGroup_ = new QGroupBox("Water settings");
+    waterSettingsGroup_->setObjectName("waterSettingsGroup");
     waterSettingsGroup_->setCheckable(true);
     waterSettingsGroup_->setChecked(false);
     auto* waterSettingsLayout = new QVBoxLayout;
@@ -239,6 +247,10 @@ PlanetSettingsPanel::PlanetSettingsPanel(QWidget* parent)
     auto emitWater = [this] {
         emitWaterParams();
     };
+    connect(wavesEnabledChk_, &QCheckBox::toggled, this, [this] {
+        updateWaveControls();
+        emitWaterParams();
+    });
     connect(waterPresetBox_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
         applyWaterPreset(static_cast<WaterPreset>(waterPresetBox_->currentData().toInt()));
     });
@@ -277,6 +289,8 @@ PlanetSettingsPanel::PlanetSettingsPanel(QWidget* parent)
 }
 
 void PlanetSettingsPanel::setContributorMode(bool enabled) {
+    contributorMode_ = enabled;
+    wavesEnabledChk_->setEnabled(!enabled);
     genBox_->setEnabled(!enabled);
     seedBox_->setEnabled(!enabled);
     seaBox_->setEnabled(!enabled);
@@ -303,6 +317,7 @@ void PlanetSettingsPanel::setContributorMode(bool enabled) {
     insetBox_->setEnabled(!enabled);
     outlineBox_->setEnabled(!enabled);
     regenBtn_->setEnabled(!enabled);
+    updateWaveControls();
 }
 
 TerrainParams PlanetSettingsPanel::currentTerrainParams() const {
@@ -316,6 +331,7 @@ TerrainParams PlanetSettingsPanel::currentTerrainParams() const {
 WaterParams PlanetSettingsPanel::currentWaterParams() const {
     const WaterPreset selectedPreset = static_cast<WaterPreset>(waterPresetBox_->currentData().toInt());
     WaterParams params = waterParamsForPreset(selectedPreset);
+    params.wavesEnabled = wavesEnabledChk_->isChecked();
     params.waveStrength = static_cast<float>(waveStrengthBox_->value());
     params.fresnelStrength = static_cast<float>(fresnelBox_->value());
     params.specularIntensity = static_cast<float>(specularBox_->value());
@@ -358,6 +374,15 @@ void PlanetSettingsPanel::emitVisuals() {
 
 void PlanetSettingsPanel::emitWaterParams() {
     emit waterParamsChanged(currentWaterParams());
+}
+
+void PlanetSettingsPanel::updateWaveControls() {
+    const bool enabled = !contributorMode_ && wavesEnabledChk_->isChecked();
+    const QList<QWidget*> controls = { waveStrengthBox_, fresnelBox_, specularBox_,
+        glintIntensityBox_, glintThresholdBox_, glintSharpnessBox_, foamIntensityBox_,
+        roughnessBox_, reflectionBox_, octaveDetailBox_, relativeHeightBox_,
+        primaryWaveDensityBox_, waveSpeedBox_ };
+    for (QWidget* control : controls) control->setEnabled(enabled);
 }
 
 void PlanetSettingsPanel::applyWaterPreset(WaterPreset preset) {

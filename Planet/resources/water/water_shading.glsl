@@ -64,3 +64,12 @@ vec4 shadeWaterOutput(
     float finalAlpha = clamp(alpha * uOpacity + fresnel * 0.03, 0.0, 1.0);
     return vec4(finalColor * finalAlpha, finalAlpha);
 }
+
+// No environment lookup, Fresnel, specular, glints, micro normals or foam.
+vec4 shadeFlatWaterOutput(const WaterHit hit, float opticalDepth01, float alpha) {
+    vec3 lightDir = safeNormalize(-uLightDir, vec3(0.0, 1.0, 0.0));
+    vec3 color = mix(uShallowColor, uDeepColor, opticalDepth01);
+    color *= 0.22 + 0.78 * saturateDot(hit.normal, lightDir);
+    float finalAlpha = clamp(alpha * uOpacity, 0.0, 1.0);
+    return vec4(color * finalAlpha, finalAlpha);
+}

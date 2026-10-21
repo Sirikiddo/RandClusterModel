@@ -1,8 +1,5 @@
 #include "DagSceneBackend.h"
 
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QSet>
 #include <QtDebug>
 
@@ -14,7 +11,7 @@
 #include <unordered_map>
 #include <utility>
 
-#include "TerrainSerialization.h"
+#include "InProcessDagPayloads.h"
 #include "generation/MeshGenerators/SelectionOutlineGenerator.h"
 
 #include <proc/ProcessDag.h>
@@ -22,21 +19,6 @@
 #include <proc/Logging.h>
 
 namespace {
-
-    QJsonArray serializeVec3(const QVector3D& value) {
-        return QJsonArray{ value.x(), value.y(), value.z() };
-    }
-
-    QVector3D deserializeVec3(const QJsonValue& value) {
-        const QJsonArray array = value.toArray();
-        if (array.size() != 3) {
-            return {};
-        }
-        return QVector3D(
-            static_cast<float>(array[0].toDouble()),
-            static_cast<float>(array[1].toDouble()),
-            static_cast<float>(array[2].toDouble()));
-    }
 
     std::string readStringField(
         const proc::RuntimeOperationRegistry::ReadHandleFn& readHandle,
@@ -46,59 +28,11 @@ namespace {
         return std::string(debugView.data(), debugView.size());
     }
 
-    QString compactJson(const QJsonObject& root) {
-        return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
-    }
-
-    QString compactJson(const QJsonArray& root) {
-        return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
-    }
-
-    std::vector<int> deserializeSelectedCells(const QString& encoded) {
-        const QJsonDocument doc = QJsonDocument::fromJson(encoded.toUtf8());
-        std::vector<int> result;
-        if (!doc.isArray()) {
-            return result;
-        }
-        const QJsonArray array = doc.array();
-        result.reserve(static_cast<size_t>(array.size()));
-        for (const auto& value : array) {
-            result.push_back(value.toInt());
-        }
-        return result;
-    }
-
-    QString serializeSelectedCells(const std::vector<int>& cells) {
-        QJsonArray array;
-        for (int cell : cells) {
-            array.push_back(cell);
-        }
-        return compactJson(array);
-    }
-
     struct VisualParams {
         float heightStep = 0.0f;
         float outlineBias = 0.0f;
         bool smoothOneStep = true;
     };
-
-    QString serializeVisualParams(const VisualParams& params) {
-        QJsonObject root;
-        root["heightStep"] = params.heightStep;
-        root["outlineBias"] = params.outlineBias;
-        root["smoothOneStep"] = params.smoothOneStep;
-        return compactJson(root);
-    }
-
-    VisualParams deserializeVisualParams(const QString& encoded) {
-        const QJsonDocument doc = QJsonDocument::fromJson(encoded.toUtf8());
-        const QJsonObject root = doc.object();
-        VisualParams params;
-        params.heightStep = static_cast<float>(root["heightStep"].toDouble());
-        params.outlineBias = static_cast<float>(root["outlineBias"].toDouble());
-        params.smoothOneStep = root["smoothOneStep"].toBool(true);
-        return params;
-    }
 
     HexSphereModel buildModelFromSnapshot(const TerrainSnapshot& snapshot) {
         IcosphereBuilder builder;
@@ -120,28 +54,6 @@ namespace {
         }
 
         return model;
-    }
-
-    QString serializeFloatArray(const std::vector<float>& values) {
-        QJsonArray array;
-        for (float value : values) {
-            array.push_back(value);
-        }
-        return compactJson(array);
-    }
-
-    std::vector<float> deserializeFloatArray(const QString& encoded) {
-        const QJsonDocument doc = QJsonDocument::fromJson(encoded.toUtf8());
-        std::vector<float> result;
-        if (!doc.isArray()) {
-            return result;
-        }
-        const QJsonArray array = doc.array();
-        result.reserve(static_cast<size_t>(array.size()));
-        for (const auto& value : array) {
-            result.push_back(static_cast<float>(value.toDouble()));
-        }
-        return result;
     }
 
     std::vector<float> buildSelectionOutline(
@@ -249,102 +161,6 @@ namespace {
         return placements;
     }
 
-    // ======================= SERIALIZATION =======================
-
-    QJsonObject serializeTreePlacement(const TreePlacement& placement) {
-        QJsonObject root;
-        root["cellId"] = placement.cellId;
-        root["triangleIdx"] = placement.triangleIdx;
-        root["baryU"] = placement.baryU;
-        root["baryV"] = placement.baryV;
-        root["baryW"] = placement.baryW;
-        root["scale"] = placement.scale;
-        root["rotation"] = placement.rotation;
-        root["placementMode"] = static_cast<int>(placement.placementMode);
-        root["worldPosition"] = serializeVec3(placement.worldPosition);
-        root["worldUp"] = serializeVec3(placement.worldUp);
-        root["worldYaw"] = placement.worldYaw;
-        root["worldScale"] = placement.worldScale;
-        return root;
-    }
-
-    TreePlacement deserializeTreePlacement(const QJsonObject& root) {
-        TreePlacement placement;
-        placement.cellId = root["cellId"].toInt(-1);
-        placement.triangleIdx = root["triangleIdx"].toInt();
-        placement.baryU = static_cast<float>(root["baryU"].toDouble(0.33));
-        placement.baryV = static_cast<float>(root["baryV"].toDouble(0.33));
-        placement.baryW = static_cast<float>(root["baryW"].toDouble(0.34));
-        placement.scale = static_cast<float>(root["scale"].toDouble(1.0));
-        placement.rotation = static_cast<float>(root["rotation"].toDouble());
-        placement.placementMode = static_cast<TreePlacement::PlacementMode>(
-            root["placementMode"].toInt());
-        placement.worldPosition = deserializeVec3(root["worldPosition"]);
-        placement.worldUp = deserializeVec3(root["worldUp"]);
-        placement.worldYaw = static_cast<float>(root["worldYaw"].toDouble());
-        placement.worldScale = static_cast<float>(root["worldScale"].toDouble(1.0));
-        return placement;
-    }
-
-    QString serializeTreePlacements(const std::vector<TreePlacement>& placements) {
-        QJsonArray array;
-        for (const auto& placement : placements) {
-            array.push_back(serializeTreePlacement(placement));
-        }
-        return compactJson(array);
-    }
-
-    std::vector<TreePlacement> deserializeTreePlacements(const QString& encoded) {
-        const QJsonDocument doc = QJsonDocument::fromJson(encoded.toUtf8());
-        std::vector<TreePlacement> result;
-        if (!doc.isArray()) {
-            return result;
-        }
-        const QJsonArray array = doc.array();
-        result.reserve(static_cast<size_t>(array.size()));
-        for (const auto& value : array) {
-            result.push_back(deserializeTreePlacement(value.toObject()));
-        }
-        return result;
-    }
-
-    // ======================= MODEL PLACEMENTS =======================
-
-    QString serializeModelRequests(const std::vector<ModelPlacementRequest>& requests) {
-        QJsonArray array;
-        for (const auto& request : requests) {
-            QJsonObject root;
-            root["entityId"] = request.entityId;
-            root["meshId"] = request.meshId;
-            root["cellId"] = request.cellId;
-            root["selected"] = request.selected;
-            root["surfaceOffset"] = request.surfaceOffset;
-            array.push_back(root);
-        }
-        return compactJson(array);
-    }
-
-    std::vector<ModelPlacementRequest> deserializeModelRequests(const QString& encoded) {
-        const QJsonDocument doc = QJsonDocument::fromJson(encoded.toUtf8());
-        std::vector<ModelPlacementRequest> result;
-        if (!doc.isArray()) {
-            return result;
-        }
-        const QJsonArray array = doc.array();
-        result.reserve(static_cast<size_t>(array.size()));
-        for (const auto& value : array) {
-            const QJsonObject root = value.toObject();
-            ModelPlacementRequest request;
-            request.entityId = root["entityId"].toInt(-1);
-            request.meshId = root["meshId"].toString();
-            request.cellId = root["cellId"].toInt(-1);
-            request.selected = root["selected"].toBool();
-            request.surfaceOffset = static_cast<float>(root["surfaceOffset"].toDouble());
-            result.push_back(request);
-        }
-        return result;
-    }
-
     std::vector<ModelPlacement> buildModelPlacements(
         const TerrainSnapshot& snapshot,
         const std::vector<ModelPlacementRequest>& requests,
@@ -373,47 +189,6 @@ namespace {
         }
         return result;
     }
-
-    QString serializeModelPlacements(const std::vector<ModelPlacement>& placements) {
-        QJsonArray array;
-        for (const auto& placement : placements) {
-            QJsonObject root;
-            root["entityId"] = placement.entityId;
-            root["meshId"] = placement.meshId;
-            root["cellId"] = placement.cellId;
-            root["selected"] = placement.selected;
-            root["valid"] = placement.valid;
-            root["position"] = serializeVec3(placement.position);
-            root["up"] = serializeVec3(placement.up);
-            array.push_back(root);
-        }
-        return compactJson(array);
-    }
-
-    std::vector<ModelPlacement> deserializeModelPlacements(const QString& encoded) {
-        const QJsonDocument doc = QJsonDocument::fromJson(encoded.toUtf8());
-        std::vector<ModelPlacement> result;
-        if (!doc.isArray()) {
-            return result;
-        }
-        const QJsonArray array = doc.array();
-        result.reserve(static_cast<size_t>(array.size()));
-        for (const auto& value : array) {
-            const QJsonObject root = value.toObject();
-            ModelPlacement placement;
-            placement.entityId = root["entityId"].toInt(-1);
-            placement.meshId = root["meshId"].toString();
-            placement.cellId = root["cellId"].toInt(-1);
-            placement.selected = root["selected"].toBool();
-            placement.valid = root["valid"].toBool();
-            placement.position = deserializeVec3(root["position"]);
-            placement.up = deserializeVec3(root["up"]);
-            result.push_back(placement);
-        }
-        return result;
-    }
-
-    // ======================= DAG SCHEMA =======================
 
     proc::OperationRegistry makeSceneOperationRegistry() {
         proc::OperationRegistry registry = proc::make_builtin_operation_registry();
@@ -508,9 +283,16 @@ struct DagSceneBackend::Impl {
         "modelCacheHit",
     };
 
-    std::unordered_map<std::string, std::string> selectionCache;
-    std::unordered_map<std::string, std::string> treeCache;
-    std::unordered_map<std::string, std::string> modelCache;
+    InProcessDagPayloads<TerrainSnapshot> terrainPayloads{"terrain"};
+    InProcessDagPayloads<std::vector<int>> selectionInputs{"selected"};
+    InProcessDagPayloads<VisualParams> visualInputs{"visual"};
+    InProcessDagPayloads<std::vector<ModelPlacementRequest>> modelInputs{"models"};
+    InProcessDagPayloads<std::vector<float>> selectionOutputs{"outline"};
+    InProcessDagPayloads<std::vector<TreePlacement>> treeOutputs{"trees"};
+    InProcessDagPayloads<std::vector<ModelPlacement>> modelOutputs{"placements"};
+    InProcessDagCache<std::vector<float>> selectionCache;
+    InProcessDagCache<std::vector<TreePlacement>> treeCache;
+    InProcessDagCache<std::vector<ModelPlacement>> modelCache;
     std::string lastSelectionKey;
     std::string lastTreeKey;
     std::string lastModelKey;
@@ -525,9 +307,9 @@ struct DagSceneBackend::Impl {
 
         proc::ValueStore init;
         init["terrainSnapshot"] = proc::make_value(std::string());
-        init["selectedCells"] = proc::make_value(std::string("[]"));
-        init["visualParams"] = proc::make_value(std::string("{}"));
-        init["modelRequests"] = proc::make_value(std::string("[]"));
+        init["selectedCells"] = proc::make_value(std::string());
+        init["visualParams"] = proc::make_value(std::string());
+        init["modelRequests"] = proc::make_value(std::string());
         init["selectionDirty"] = proc::make_value(std::string("0"));
         init["treeDirty"] = proc::make_value(std::string("0"));
         init["modelDirty"] = proc::make_value(std::string("0"));
@@ -593,28 +375,16 @@ struct DagSceneBackend::Impl {
                 const proc::RuntimeOperationRegistry::FieldNameFn&,
                 const proc::RuntimeOperationRegistry::DebugStringFn&) -> proc::Commit {
                     ++lastStats.executedNodes;
-                    const std::string terrainJson = readStringField(readHandle, terrainSlot);
-                    const std::string selectedJson = readStringField(readHandle, selectedSlot);
-                    const std::string visualJson = readStringField(readHandle, visualSlot);
-                    const std::string key = terrainJson + "|" + selectedJson + "|" + visualJson;
+                    const std::string terrainToken = readStringField(readHandle, terrainSlot);
+                    const std::string selectedToken = readStringField(readHandle, selectedSlot);
+                    const std::string visualToken = readStringField(readHandle, visualSlot);
+                    const std::string key = terrainToken + "|" + selectedToken + "|" + visualToken;
 
-                    bool cacheHit = false;
-                    std::string encoded;
-                    if (auto it = selectionCache.find(key); it != selectionCache.end()) {
-                        encoded = it->second;
-                        cacheHit = true;
-                    }
-                    else {
-                        const auto snapshot = deserializeTerrainSnapshot(QString::fromUtf8(terrainJson.data(), static_cast<int>(terrainJson.size())));
-                        if (snapshot) {
-                            const auto outline = buildSelectionOutline(
-                                *snapshot,
-                                deserializeSelectedCells(QString::fromUtf8(selectedJson.data(), static_cast<int>(selectedJson.size()))),
-                                deserializeVisualParams(QString::fromUtf8(visualJson.data(), static_cast<int>(visualJson.size()))));
-                            encoded = serializeFloatArray(outline).toStdString();
-                            selectionCache.emplace(key, encoded);
-                        }
-                    }
+                    const auto [value, cacheHit] = selectionCache.get(key, [&] {
+                        return buildSelectionOutline(*terrainPayloads.resolve(terrainToken),
+                            *selectionInputs.resolve(selectedToken), *visualInputs.resolve(visualToken));
+                    });
+                    const std::string encoded = selectionOutputs.put(value);
 
                     cacheHit ? ++lastStats.cacheHits : ++lastStats.cacheMisses;
                     proc::Commit commit;
@@ -634,22 +404,13 @@ struct DagSceneBackend::Impl {
                 const proc::RuntimeOperationRegistry::FieldNameFn&,
                 const proc::RuntimeOperationRegistry::DebugStringFn&) -> proc::Commit {
                     ++lastStats.executedNodes;
-                    const std::string terrainJson = readStringField(readHandle, terrainSlot);
-                    const std::string key = terrainJson;
+                    const std::string terrainToken = readStringField(readHandle, terrainSlot);
+                    const std::string key = terrainToken;
 
-                    bool cacheHit = false;
-                    std::string encoded;
-                    if (auto it = treeCache.find(key); it != treeCache.end()) {
-                        encoded = it->second;
-                        cacheHit = true;
-                    }
-                    else {
-                        const auto snapshot = deserializeTerrainSnapshot(QString::fromUtf8(terrainJson.data(), static_cast<int>(terrainJson.size())));
-                        if (snapshot) {
-                            encoded = serializeTreePlacements(buildTreePlacements(*snapshot)).toStdString();
-                            treeCache.emplace(key, encoded);
-                        }
-                    }
+                    const auto [value, cacheHit] = treeCache.get(key, [&] {
+                        return buildTreePlacements(*terrainPayloads.resolve(terrainToken));
+                    });
+                    const std::string encoded = treeOutputs.put(value);
 
                     cacheHit ? ++lastStats.cacheHits : ++lastStats.cacheMisses;
                     proc::Commit commit;
@@ -671,27 +432,16 @@ struct DagSceneBackend::Impl {
                 const proc::RuntimeOperationRegistry::FieldNameFn&,
                 const proc::RuntimeOperationRegistry::DebugStringFn&) -> proc::Commit {
                     ++lastStats.executedNodes;
-                    const std::string terrainJson = readStringField(readHandle, terrainSlot);
-                    const std::string visualJson = readStringField(readHandle, visualSlot);
-                    const std::string requestsJson = readStringField(readHandle, modelRequestsSlotLocal);
-                    const std::string key = terrainJson + "|" + visualJson + "|" + requestsJson;
+                    const std::string terrainToken = readStringField(readHandle, terrainSlot);
+                    const std::string visualToken = readStringField(readHandle, visualSlot);
+                    const std::string requestsToken = readStringField(readHandle, modelRequestsSlotLocal);
+                    const std::string key = terrainToken + "|" + visualToken + "|" + requestsToken;
 
-                    bool cacheHit = false;
-                    std::string encoded;
-                    if (auto it = modelCache.find(key); it != modelCache.end()) {
-                        encoded = it->second;
-                        cacheHit = true;
-                    }
-                    else {
-                        const auto snapshot = deserializeTerrainSnapshot(QString::fromUtf8(terrainJson.data(), static_cast<int>(terrainJson.size())));
-                        if (snapshot) {
-                            encoded = serializeModelPlacements(buildModelPlacements(
-                                *snapshot,
-                                deserializeModelRequests(QString::fromUtf8(requestsJson.data(), static_cast<int>(requestsJson.size()))),
-                                deserializeVisualParams(QString::fromUtf8(visualJson.data(), static_cast<int>(visualJson.size()))))).toStdString();
-                            modelCache.emplace(key, encoded);
-                        }
-                    }
+                    const auto [value, cacheHit] = modelCache.get(key, [&] {
+                        return buildModelPlacements(*terrainPayloads.resolve(terrainToken),
+                            *modelInputs.resolve(requestsToken), *visualInputs.resolve(visualToken));
+                    });
+                    const std::string encoded = modelOutputs.put(value);
 
                     cacheHit ? ++lastStats.cacheHits : ++lastStats.cacheMisses;
                     proc::Commit commit;
@@ -706,25 +456,30 @@ struct DagSceneBackend::Impl {
     SceneDagResult rebuild(const SceneDagRequest& request) {
         const std::size_t planCacheHitsBefore = engine.plan_cache_hits();
         const std::size_t planCacheMissesBefore = engine.plan_cache_misses();
-        const QString terrainJson = serializeTerrainSnapshot(request.terrain);
-        const QString selectedJson = serializeSelectedCells(request.selectedCells);
-        const QString visualJson = serializeVisualParams(VisualParams{
-            request.heightStep,
-            request.outlineBias,
-            request.smoothOneStep,
+        const std::string terrainToken = terrainPayloads.intern(request.terrain, sameTerrainSnapshot);
+        const std::string selectedToken = selectionInputs.intern(request.selectedCells,
+            [](const auto& a, const auto& b) { return a == b; });
+        const std::string visualToken = visualInputs.intern(
+            VisualParams{request.heightStep, request.outlineBias, request.smoothOneStep},
+            [](const auto& a, const auto& b) {
+                return a.heightStep == b.heightStep && a.outlineBias == b.outlineBias
+                    && a.smoothOneStep == b.smoothOneStep;
             });
-        const QString modelRequestsJson = serializeModelRequests(request.modelRequests);
-
-        const std::string selectionKey = terrainJson.toStdString() + "|" + selectedJson.toStdString() + "|" + visualJson.toStdString();
-        const std::string treeKey = terrainJson.toStdString();
-        const std::string modelKey = terrainJson.toStdString() + "|" + visualJson.toStdString() + "|" + modelRequestsJson.toStdString();
+        const std::string modelRequestsToken = modelInputs.intern(request.modelRequests,
+            [](const auto& a, const auto& b) {
+                return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(),
+                    [](const auto& x, const auto& y) {
+                        return x.entityId == y.entityId && x.meshId == y.meshId && x.cellId == y.cellId
+                            && x.selected == y.selected && x.surfaceOffset == y.surfaceOffset;
+                    });
+            });
+        const std::string selectionKey = terrainToken + "|" + selectedToken + "|" + visualToken;
+        const std::string treeKey = terrainToken;
+        const std::string modelKey = terrainToken + "|" + visualToken + "|" + modelRequestsToken;
 
         const bool selectionDirty = selectionKey != lastSelectionKey;
         const bool treeDirty = treeKey != lastTreeKey;
         const bool modelDirty = modelKey != lastModelKey;
-        lastSelectionKey = selectionKey;
-        lastTreeKey = treeKey;
-        lastModelKey = modelKey;
 
         lastStats = {};
         lastStats.skippedGuardNodes =
@@ -733,17 +488,17 @@ struct DagSceneBackend::Impl {
             (modelDirty ? 0 : 1);
 
         proc::Commit commit;
-        commit.set(terrainSnapshotSlot, terrainJson.toStdString(), proc::v2::WriteLifetime::Persistent, std::string(schema.field_name(terrainSnapshotSlot)));
-        commit.set(selectedCellsSlot, selectedJson.toStdString(), proc::v2::WriteLifetime::Persistent, std::string(schema.field_name(selectedCellsSlot)));
-        commit.set(visualParamsSlot, visualJson.toStdString(), proc::v2::WriteLifetime::Persistent, std::string(schema.field_name(visualParamsSlot)));
-        commit.set(modelRequestsSlot, modelRequestsJson.toStdString(), proc::v2::WriteLifetime::Persistent, std::string(schema.field_name(modelRequestsSlot)));
+        commit.set(terrainSnapshotSlot, terrainToken, proc::v2::WriteLifetime::Persistent, std::string(schema.field_name(terrainSnapshotSlot)));
+        commit.set(selectedCellsSlot, selectedToken, proc::v2::WriteLifetime::Persistent, std::string(schema.field_name(selectedCellsSlot)));
+        commit.set(visualParamsSlot, visualToken, proc::v2::WriteLifetime::Persistent, std::string(schema.field_name(visualParamsSlot)));
+        commit.set(modelRequestsSlot, modelRequestsToken, proc::v2::WriteLifetime::Persistent, std::string(schema.field_name(modelRequestsSlot)));
         commit.set(selectionDirtySlot, selectionDirty ? "1" : "0", proc::v2::WriteLifetime::Persistent, std::string(schema.field_name(selectionDirtySlot)));
         commit.set(treeDirtySlot, treeDirty ? "1" : "0", proc::v2::WriteLifetime::Persistent, std::string(schema.field_name(treeDirtySlot)));
         commit.set(modelDirtySlot, modelDirty ? "1" : "0", proc::v2::WriteLifetime::Persistent, std::string(schema.field_name(modelDirtySlot)));
         engine.push_input(commit);
 
         try {
-            engine.flush_prepare(outputs);
+            if (!engine.flush_prepare(outputs)) return {};
         }
         catch (const std::exception& e) {
             qWarning() << "DagSceneBackend::flush_prepare failed:" << e.what();
@@ -753,19 +508,22 @@ struct DagSceneBackend::Impl {
         const auto& prepared = engine.prepared_output_store();
         SceneDagResult result;
         if (auto value = proc::get_value_view(prepared, "selectionOutline")) {
-            result.selectionOutline.vertices = deserializeFloatArray(QString::fromUtf8(value->data(), static_cast<int>(value->size())));
+            result.selectionOutline.vertices = *selectionOutputs.resolve(*value);
         }
         if (auto value = proc::get_value_view(prepared, "treePlacements")) {
-            result.treePlacements = deserializeTreePlacements(QString::fromUtf8(value->data(), static_cast<int>(value->size())));
+            result.treePlacements = *treeOutputs.resolve(*value);
         }
         if (auto value = proc::get_value_view(prepared, "modelPlacements")) {
-            result.modelPlacements = deserializeModelPlacements(QString::fromUtf8(value->data(), static_cast<int>(value->size())));
+            result.modelPlacements = *modelOutputs.resolve(*value);
         }
 
         lastStats.planCacheHits = static_cast<int>(engine.plan_cache_hits() - planCacheHitsBefore);
         lastStats.planCacheMisses = static_cast<int>(engine.plan_cache_misses() - planCacheMissesBefore);
 
-        engine.ack_outputs();
+        if (!engine.ack_outputs()) return {};
+        lastSelectionKey = selectionKey;
+        lastTreeKey = treeKey;
+        lastModelKey = modelKey;
         return result;
     }
 };

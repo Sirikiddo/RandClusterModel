@@ -37,6 +37,8 @@ private:
     QDoubleSpinBox* scaleBox_ = nullptr;
 
     QComboBox* waterPresetBox_ = nullptr;
+    QCheckBox* wavesEnabledChk_ = nullptr;
+    bool contributorMode_ = false;
     QDoubleSpinBox* waveStrengthBox_ = nullptr;
     QDoubleSpinBox* fresnelBox_ = nullptr;
     QDoubleSpinBox* specularBox_ = nullptr;
@@ -70,4 +72,5 @@ private:
     void emitWaterParams();
     void emitVisuals();
     void applyWaterPreset(WaterPreset preset);
+    void updateWaveControls();
 };

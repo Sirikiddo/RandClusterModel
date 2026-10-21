@@ -1,0 +1,42 @@
+{
+  "before_exe": {
+    "path": "build/transport-all-json/Planet.exe",
+    "sha256": "dd15d1e0cddd69edf4a95e16879f65d36ac67196f40674c1eba3eef005dddfaa"
+  },
+  "after_exe": {
+    "path": "build/Planet/Release/Planet.exe",
+    "sha256": "0d31f3354a450bd057071f1a9bb160deefd4cc72674304f16ea39c32cf6db60f"
+  },
+  "terrain_before": {
+    "path": "build/transport-before/OriginalDagTerrainBackend.cpp",
+    "sha256": "fc94d14add110347ba4bf38f3113d93e60497dcf88c839cabe26bc4404245161"
+  },
+  "scene_before": {
+    "path": "build/transport-before/DagSceneBackend.cpp",
+    "sha256": "904cfac20e793c0683cd55cf7996f3e527621d8df18afd516c8170326b636e66"
+  },
+  "path_before": {
+    "path": "build/transport-before/DagPathBackend.cpp",
+    "sha256": "c6ec4b32fdb184ab0e117bd6c15f4559b6e35a1008e213f033417a6fd667f312"
+  },
+  "terrain_after": {
+    "path": "dag/DagTerrainBackend.cpp",
+    "sha256": "d0d1e88f309c5f30e6dc2c10f914348ef17b754149b62e839b287789085d1ec7"
+  },
+  "scene_after": {
+    "path": "dag/DagSceneBackend.cpp",
+    "sha256": "8c8071c2e710c921f34f31457355db025e942b420cb1173c1354c20178b911f9"
+  },
+  "path_after": {
+    "path": "dag/DagPathBackend.cpp",
+    "sha256": "f0ad9327df3da10fec3d29193e61f6cbbe0e1e7b1872f9eeec5d98ba80f59886"
+  },
+  "harness": {
+    "path": "tests/DagTransportBenchmark.cpp",
+    "sha256": "703faac01afccc013d21183d0be9816007a7c857074ad0b5437d16f43d5d0ce5"
+  },
+  "payloads": {
+    "path": "dag/InProcessDagPayloads.h",
+    "sha256": "4a933624de681d8a54d7f4f9e95bcf73a59f000a3a0b78ce74e6730884e8cea0"
+  }
+}

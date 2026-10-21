@@ -991,12 +991,10 @@ void InputController::updateBufferUsageStrategy(int subdivisionLevel) {
     const int L = subdivisionLevel;
     if (L >= 4) {
         uploadOptions_.terrainUsage = GL_DYNAMIC_DRAW;
-        uploadOptions_.wireUsage = GL_DYNAMIC_DRAW;
         uploadOptions_.useStaticBuffers = false;
     }
     else {
         uploadOptions_.terrainUsage = GL_STATIC_DRAW;
-        uploadOptions_.wireUsage = GL_STATIC_DRAW;
         uploadOptions_.useStaticBuffers = true;
     }
     qDebug() << "Buffer strategy:" << (uploadOptions_.useStaticBuffers ? "STATIC" : "DYNAMIC") << "for L =" << L;

@@ -160,7 +160,6 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (progFactory_) gl_->glDeleteProgram(progFactory_);
     if (progSteam_)   gl_->glDeleteProgram(progSteam_);
 
-    if (vaoWire_ != 0)     gl_->glDeleteVertexArrays(1, &vaoWire_);
     if (vaoSel_ != 0)      gl_->glDeleteVertexArrays(1, &vaoSel_);
     if (vaoWater_ != 0)    gl_->glDeleteVertexArrays(1, &vaoWater_);
     if (vaoPyramid_ != 0)  gl_->glDeleteVertexArrays(1, &vaoPyramid_);
@@ -170,7 +169,6 @@ HexSphereRenderer::~HexSphereRenderer() {
         vaoTerrain_.destroy();
     }
 
-    if (vboPositions_)   gl_->glDeleteBuffers(1, &vboPositions_);
     if (vboTerrainPos_)  gl_->glDeleteBuffers(1, &vboTerrainPos_);
     if (vboTerrainCol_)  gl_->glDeleteBuffers(1, &vboTerrainCol_);
     if (vboTerrainNorm_) gl_->glDeleteBuffers(1, &vboTerrainNorm_);
@@ -179,8 +177,6 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (vboSel_)         gl_->glDeleteBuffers(1, &vboSel_);
     if (vboPath_)        gl_->glDeleteBuffers(1, &vboPath_);
     if (vboPyramid_)     gl_->glDeleteBuffers(1, &vboPyramid_);
-    if (vboWaterPos_)    gl_->glDeleteBuffers(1, &vboWaterPos_);
-    if (iboWater_)       gl_->glDeleteBuffers(1, &iboWater_);
     if (envCubemap_) gl_->glDeleteTextures(1, &envCubemap_);
     if (sceneDepthTexture_) gl_->glDeleteTextures(1, &sceneDepthTexture_);
     if (sceneDepthFbo_) gl_->glDeleteFramebuffers(1, &sceneDepthFbo_);
@@ -344,8 +340,6 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
 
     gl_->glUseProgram(0);
 
-    gl_->glGenBuffers(1, &vboPositions_);
-    gl_->glGenVertexArrays(1, &vaoWire_);
     gl_->glGenBuffers(1, &vboTerrainPos_);
     gl_->glGenBuffers(1, &vboTerrainCol_);
     gl_->glGenBuffers(1, &vboTerrainNorm_);
@@ -355,15 +349,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
     gl_->glGenBuffers(1, &vboSel_);
     gl_->glGenVertexArrays(1, &vaoPath_);
     gl_->glGenBuffers(1, &vboPath_);
-    gl_->glGenBuffers(1, &vboWaterPos_);
-    gl_->glGenBuffers(1, &iboWater_);
     gl_->glGenVertexArrays(1, &vaoWater_);
-
-    gl_->glBindVertexArray(vaoWire_);
-    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboPositions_);
-    gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-    gl_->glEnableVertexAttribArray(0);
-    gl_->glBindVertexArray(0);
 
     gl_->glBindVertexArray(vaoSel_);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboSel_);
@@ -383,13 +369,6 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboRoad_);
     gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(0);
-    gl_->glBindVertexArray(0);
-
-    gl_->glBindVertexArray(vaoWater_);
-    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboWaterPos_);
-    gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-    gl_->glEnableVertexAttribArray(0);
-    gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboWater_);
     gl_->glBindVertexArray(0);
 
     initPyramidGeometry();
@@ -498,8 +477,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
 
     overlayRenderer_ = std::make_unique<OverlayRenderer>(
         gl_, progWire_, progSel_, uMVP_Wire_, uMVP_Sel_,
-        vaoWire_, vaoSel_, vaoPath_,
-        lineVertexCount_, selLineVertexCount_, pathVertexCount_);
+        vaoSel_, vaoPath_, selLineVertexCount_, pathVertexCount_);
 
     owner_->doneCurrent();
     glReady_ = true;
@@ -573,15 +551,6 @@ void HexSphereRenderer::withContext(const std::function<void()>& task) {
     owner_->makeCurrent();
     task();
     owner_->doneCurrent();
-}
-
-void HexSphereRenderer::uploadWireInternal(const std::vector<float>& vertices, GLenum usage) {
-    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboPositions_);
-    gl_->glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(vertices.size() * sizeof(float)), vertices.data(), usage);
-    lineVertexCount_ = GLsizei(vertices.size() / 3);
-    if (stats_) {
-        stats_->updateMemoryStats(lineVertexCount_, 0, 0);
-    }
 }
 
 void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum usage) {
@@ -774,24 +743,6 @@ void HexSphereRenderer::uploadPathInternal(const std::vector<QVector3D>& points)
     pathVertexCount_ = GLsizei(buffer.size() / 3);
 }
 
-void HexSphereRenderer::uploadWaterInternal(const WaterGeometryData& data) {
-    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboWaterPos_);
-    gl_->glBufferData(GL_ARRAY_BUFFER, data.positions.size() * sizeof(float), data.positions.empty() ? nullptr : data.positions.data(), GL_STATIC_DRAW);
-
-    gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboWater_);
-    gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER, data.indices.size() * sizeof(uint32_t), data.indices.empty() ? nullptr : data.indices.data(), GL_STATIC_DRAW);
-
-    gl_->glBindVertexArray(vaoWater_);
-    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboWaterPos_);
-    gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-    gl_->glEnableVertexAttribArray(0);
-
-    gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboWater_);
-    gl_->glBindVertexArray(0);
-
-    waterIndexCount_ = static_cast<GLsizei>(data.indices.size());
-}
-
 void HexSphereRenderer::rebuildPlanetSurfaceAtlas(
     const TerrainMesh& mesh,
     const HexSphereModel& model) {
@@ -800,10 +751,6 @@ void HexSphereRenderer::rebuildPlanetSurfaceAtlas(
     planetRadiusAtlas_ = surfaceAtlasPass_->radiusTexture();
     planetSurfaceKindAtlas_ = surfaceAtlasPass_->kindTexture();
     planetShoreDistanceAtlas_ = surfaceAtlasPass_->shoreDistanceTexture();
-}
-
-void HexSphereRenderer::uploadWire(const std::vector<float>& vertices, GLenum usage) {
-    withContext([&]() { uploadWireInternal(vertices, usage); });
 }
 
 void HexSphereRenderer::uploadTerrain(const TerrainMesh& mesh, GLenum usage) {
@@ -911,18 +858,13 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
     lastScene_ = const_cast<HexSphereSceneController*>(&scene);
 
     withContext([&]() {
-        uploadWireInternal(scene.buildWireVertices(), options.wireUsage);
         uploadTerrainInternal(scene.terrain(), options.terrainUsage);
         rebuildPlanetSurfaceAtlas(scene.terrain(), scene.model());
         uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
         uploadPathInternal({});
-        if (uploadedWaterProxyRevision_ != scene.waterProxyRevision()) {
-            uploadWaterInternal(scene.waterGeometry());
-            uploadedWaterProxyRevision_ = scene.waterProxyRevision();
-        }
         });
     qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
-        << "(terrain" << options.terrainUsage << ", wire" << options.wireUsage << ")";
+        << "(terrain" << options.terrainUsage << ")";
 }
 
 void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera& camera, const SceneLighting& lighting) {
@@ -979,7 +921,7 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     const WaterRenderer::Resources waterResources{
         envCubemap_, sceneDepthTexture_, planetRadiusAtlas_,
         planetSurfaceKindAtlas_, planetShoreDistanceAtlas_,
-        vaoWater_, waterIndexCount_ };
+        vaoWater_ };
     waterRenderer_->render(ctx, waterResources);
     entityRenderer_->renderEntities(ctx);
     overlayRenderer_->render(ctx);
@@ -1062,7 +1004,8 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
     if (placements.empty()) return;
 
     // ========== ГЛОБАЛЬНЫЙ МАСШТАБ ==========
-    constexpr float kTreeGlobalScale = 0.12f;
+    // Keep procedural trunks and foliage at the same scale as other scene models.
+    const float treeSceneScale = 0.12f * ctx.graph.scene.getModelScaleFactor();
 
     // ========== БЮДЖЕТ ЧАСТИЦ ==========
     constexpr size_t kMaxParticlesTotal = 60000;
@@ -1096,6 +1039,7 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
     infos.reserve(treeCount);
 
     hashCombine(static_cast<uint64_t>(treeCount));
+    hashCombine(quantizedHashFloat(treeSceneScale));
 
     for (size_t i = 0; i < treeCount; ++i) {
         const auto& placement = placements[i];
@@ -1160,7 +1104,7 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
 
             // Итоговый масштаб: реалистичный × глобальный × per-placement
             const float baseScale =
-                variant.realisticScale * kTreeGlobalScale;
+                variant.realisticScale * treeSceneScale;
             const float finalScale = baseScale * placements[
                 &info - infos.data()].scale;
 
@@ -1246,7 +1190,7 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
             proceduralTreeModelsBySpecies[info.speciesIdx][info.variantIdx];
         if (!model3d || !model3d->isInitialized()) continue;
 
-        const float baseScale = variant.realisticScale * kTreeGlobalScale;
+        const float baseScale = variant.realisticScale * treeSceneScale;
         const float finalScale = baseScale * placement.scale;
 
         QMatrix4x4 modelMat;

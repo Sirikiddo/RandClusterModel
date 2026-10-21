@@ -2,6 +2,7 @@
 
 out vec4 FragColor;
 
+uniform bool uWavesEnabled;
 uniform vec3 uLightDir;
 uniform vec3 uViewPos;
 uniform samplerCube uEnvMap;
@@ -88,6 +89,10 @@ void main() {
 
     float opticalDepth01 = 1.0 - exp(-hit.visibleThickness * uDepthOpticalDensity);
     float alpha = 1.0 - exp(-hit.visibleThickness * uDepthAlphaDensity);
+    if (!uWavesEnabled) {
+        FragColor = shadeFlatWaterOutput(hit, opticalDepth01, alpha);
+        return;
+    }
     float foamMask = computeFoamMask(hit, opticalDepth01);
 
     FragColor = shadeWaterOutput(hit, opticalDepth01, foamMask, alpha);

@@ -17,6 +17,7 @@
     <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">10.0</WindowsTargetPlatformVersion>
     <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">10.0</WindowsTargetPlatformVersion>
     <QtMsBuild Condition="'$(QtMsBuild)'=='' OR !Exists('$(QtMsBuild)\qt.targets')">$(MSBuildProjectDirectory)\QtMsBuild</QtMsBuild>
+    <QtMsBuild Condition="!Exists('$(QtMsBuild)\qt.targets') AND Exists('$(LocalAppData)\QtMsBuild\qt.targets')">$(LocalAppData)\QtMsBuild</QtMsBuild>
     <VcpkgXUseBuiltInApplocalDeps>true</VcpkgXUseBuiltInApplocalDeps>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -46,7 +47,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
     <QtInstall>6.8.0_msvc2022_64</QtInstall>
-    <QtModules>core;gui;widgets</QtModules>
+    <QtModules>core;gui;widgets;opengl;openglwidgets</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
   </PropertyGroup>
   <Target Name="QtMsBuildNotFound" BeforeTargets="CustomBuild;ClCompile" Condition="!Exists('$(QtMsBuild)\qt.targets') or !Exists('$(QtMsBuild)\qt.props')">
@@ -87,8 +88,8 @@
       <EnableModules>true</EnableModules>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>C:\Qt\6.8.0\msvc2022_64\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opengl32.lib;Qt6Widgetsd.lib;Qt6Cored.lib;Qt6OpenGLd.lib;Qt6OpenGLWidgetsd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
@@ -97,7 +98,7 @@
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)glm;$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -118,11 +119,12 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)glm;$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>false</GenerateDebugInformation>
+      <AdditionalDependencies>opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
@@ -177,6 +179,7 @@
     <ClInclude Include="dag\TerrainBackendContract.h" />
     <ClInclude Include="dag\TerrainBackendSelector.h" />
     <ClInclude Include="dag\TerrainBackendTypes.h" />
+    <ClInclude Include="dag\InProcessDagPayloads.h" />
     <ClInclude Include="dag\TerrainSerialization.h" />
     <ClInclude Include="generation\ClimateBiomeGenerator.h" />
     <ClInclude Include="generation\PerlinNoise.h" />
@@ -185,7 +188,6 @@
     <ClInclude Include="generation\MeshGenerators\SelectionOutlineGenerator.h" />
     <ClInclude Include="generation\MeshGenerators\TerrainMeshGenerator.h" />
     <ClInclude Include="generation\MeshGenerators\WaterMeshGenerator.h" />
-    <ClInclude Include="generation\MeshGenerators\WireMeshGenerator.h" />
     <ClInclude Include="model\CarModelHandler.h" />
     <ClInclude Include="model\FactoryModelHandler.h" />
     <ClInclude Include="model\MineModelHandler.h" />
@@ -203,11 +205,8 @@
     <ClInclude Include="renderers\TerrainTessellator.h" />
     <ClInclude Include="renderers\PlanetSurfaceAtlasPass.h" />
     <ClInclude Include="renderers\WaterRenderer.h" />
-    <ClInclude Include="ui\HexSphereWidget.h" />
-    <ClInclude Include="ui\MainWindow.h" />
     <ClInclude Include="ui\OverlayRenderer.h" />
     <ClInclude Include="ui\PerformanceStats.h" />
-    <ClInclude Include="ui\PlanetSettingsPanel.h" />
     <ClInclude Include="tests\WaterWaveModelTests.h" />
     <ClInclude Include="tests\ClimateBiomeGeneratorTests.h" />
     <ClInclude Include="ECS\Collider.h" />
@@ -257,8 +256,8 @@
     <ClCompile Include="generation\WaterWaveModel.cpp" />
     <ClCompile Include="generation\MeshGenerators\SelectionOutlineGenerator.cpp" />
     <ClCompile Include="generation\MeshGenerators\TerrainMeshGenerator.cpp" />
+    <!-- Historical mesh is linked as a reference for the water screen benchmark. -->
     <ClCompile Include="generation\MeshGenerators\WaterMeshGenerator.cpp" />
-    <ClCompile Include="generation\MeshGenerators\WireMeshGenerator.cpp" />
     <ClCompile Include="model\CarModelHandler.cpp" />
     <ClCompile Include="model\FactoryModelHandler.cpp" />
     <ClCompile Include="model\MineModelHandler.cpp" />
@@ -278,6 +277,10 @@
     <ClCompile Include="ui\PerformanceStats.cpp" />
     <ClCompile Include="ui\PlanetSettingsPanel.cpp" />
     <ClCompile Include="tests\WaterWaveModelTests.cpp" />
+    <ClCompile Include="tests\WaterScreenPassTests.cpp" />
+    <ClInclude Include="tests\WaterScreenPassTests.h" />
+    <ClCompile Include="tests\DagTransportBenchmark.cpp" />
+    <ClInclude Include="tests\DagTransportBenchmark.h" />
     <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp" />
     <ClCompile Include="ECS\ComponentStorage.cpp" />
     <ClCompile Include="scene\Entity.cpp" />
@@ -315,4 +318,71 @@
     <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.props'))" />
     <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.2.0.220531.1\build\native\Microsoft.Windows.CppWinRT.targets'))" />
   </Target>
+  <ItemGroup>
+    <ClCompile Include="contributor\TreeBuilder.cpp" />
+    <ClInclude Include="contributor\TreeBuilder.h" />
+    <ClInclude Include="core\DebugOverlay.h" />
+    <ClInclude Include="core\EngineFacade.h" />
+    <ClInclude Include="core\PlayerResources.h" />
+    <ClCompile Include="culling\TerrainCulling.cpp" />
+    <ClInclude Include="culling\TerrainCulling.h" />
+    <None Include="docs\knowledge-base\00 - Главная.md" />
+    <None Include="docs\knowledge-base\01 - Быстрый старт и runtime-карта.md" />
+    <None Include="docs\knowledge-base\Архитектура\Карта модулей.md" />
+    <None Include="docs\knowledge-base\Архитектура\Контракты и потоки данных.md" />
+    <None Include="docs\knowledge-base\Архитектура\Системная архитектура.md" />
+    <None Include="docs\knowledge-base\Архитектура\ECS и жизненный цикл сущностей.md" />
+    <None Include="docs\knowledge-base\Архитектура\Legacy и DAG бэкенды.md" />
+    <None Include="docs\knowledge-base\Взаимодействие\Ввод, picking и выделение клеток.md" />
+    <None Include="docs\knowledge-base\Взаимодействие\Поиск пути и анимация движения.md" />
+    <None Include="docs\knowledge-base\Взаимодействие\Постройки и сущности.md" />
+    <None Include="docs\knowledge-base\Планета\Меш рельефа, вода и culling.md" />
+    <None Include="docs\knowledge-base\Планета\Руда — старая и текущая реализация.md" />
+    <None Include="docs\knowledge-base\Планета\Топология и процедурная генерация.md" />
+    <None Include="docs\knowledge-base\Рендеринг\Каталог анимаций.md" />
+    <None Include="docs\knowledge-base\Рендеринг\Конвейер рендеринга.md" />
+    <None Include="docs\knowledge-base\Рендеринг\Машинка, деревья и модели.md" />
+    <None Include="docs\knowledge-base\Эксплуатация\Известные ограничения и техдолг.md" />
+    <None Include="docs\knowledge-base\Эксплуатация\Индекс исходников.md" />
+    <None Include="docs\knowledge-base\Эксплуатация\Сборка, запуск, тесты и benchmark.md" />
+    <None Include="docs\knowledge-base\README.md" />
+    <None Include="docs\planet_reorg_tasks.md" />
+    <None Include="docs\scene_example.md" />
+    <ClInclude Include="ECS\Animation.h" />
+    <ClCompile Include="generation\OreGenerator.cpp" />
+    <ClInclude Include="generation\OreGenerator.h" />
+    <ClCompile Include="tests\dag_backend_benchmark.cpp">
+      <ExcludedFromBuild>true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="tests\scene_integration.cpp">
+      <ExcludedFromBuild>true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="tools\converters\DataAdapters.cpp">
+      <ExcludedFromBuild>true</ExcludedFromBuild>
+    </ClCompile>
+    <ClInclude Include="tools\converters\DataAdapters.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="docs\benchmarks\2026-10-21-json-removal\after-1.csv" />
+    <None Include="docs\benchmarks\2026-10-21-json-removal\after-2.csv" />
+    <None Include="docs\benchmarks\2026-10-21-json-removal\after-3.csv" />
+    <None Include="docs\benchmarks\2026-10-21-json-removal\all-json-1.csv" />
+    <None Include="docs\benchmarks\2026-10-21-json-removal\all-json-2.csv" />
+    <None Include="docs\benchmarks\2026-10-21-json-removal\all-json-3.csv" />
+    <None Include="docs\benchmarks\2026-10-21-json-removal\hashes.json" />
+    <None Include="docs\benchmarks\2026-10-21-json-removal\machine.json" />
+    <None Include="docs\benchmarks\2026-10-21-json-removal\README.md" />
+    <None Include="docs\benchmarks\2026-10-21-json-removal\summary.csv" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="docs\benchmarks\2026-10-21-water-screen\memory-summary.csv" />
+    <None Include="docs\benchmarks\2026-10-21-water-screen\metadata.json" />
+    <None Include="docs\benchmarks\2026-10-21-water-screen\summary.csv" />
+    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run1-memory.csv" />
+    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run1-timing.csv" />
+    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run2-memory.csv" />
+    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run2-timing.csv" />
+    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run3-memory.csv" />
+    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run3-timing.csv" />
+  </ItemGroup>
 </Project>

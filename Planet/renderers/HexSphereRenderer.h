@@ -70,7 +70,6 @@ public:
 
     struct UploadOptions {
         GLenum terrainUsage = GL_STATIC_DRAW;
-        GLenum wireUsage = GL_STATIC_DRAW;
         bool useStaticBuffers = true;
     };
 
@@ -80,7 +79,6 @@ public:
     void initialize(QOpenGLWidget* owner, QOpenGLFunctions_3_3_Core* gl, PerformanceStats* stats);
     void resize(int w, int h, float devicePixelRatio, QMatrix4x4& proj);
 
-    void uploadWire(const std::vector<float>& vertices, GLenum usage);
     void uploadTerrain(const TerrainMesh& mesh, GLenum usage);
     void uploadSelectionOutline(const std::vector<float>& vertices);
     void uploadPath(const std::vector<QVector3D>& points);
@@ -119,11 +117,9 @@ private:
     void rebuildPlanetSurfaceAtlas(const TerrainMesh& mesh, const HexSphereModel& model);
     void initPyramidGeometry();
     void withContext(const std::function<void()>& task);
-    void uploadWireInternal(const std::vector<float>& vertices, GLenum usage);
     void uploadTerrainInternal(const TerrainMesh& mesh, GLenum usage);
     void uploadSelectionOutlineInternal(const std::vector<float>& vertices);
     void uploadPathInternal(const std::vector<QVector3D>& points);
-    void uploadWaterInternal(const WaterGeometryData& data);
     void loadContributorModel();
     void renderContributorModel(const RenderContext& ctx);
     void renderProceduralTreeParticles(const RenderContext& ctx);  // Твой метод
@@ -154,21 +150,18 @@ private:
     GLint uMVP_Factory_ = -1, uModel_Factory_ = -1, uLightDir_Factory_ = -1, uViewPos_Factory_ = -1, uColor_Factory_ = -1, uUseTexture_Factory_ = -1;
     GLint uMVP_Steam_ = -1, uModel_Steam_ = -1, uTime_Steam_ = -1, uViewPos_Steam_ = -1;
 
-    GLuint vaoWire_ = 0, vboPositions_ = 0;
     QOpenGLVertexArrayObject vaoTerrain_;
     GLuint vboTerrainPos_ = 0, vboTerrainCol_ = 0, vboTerrainNorm_ = 0, vboTerrainOre_ = 0, iboTerrain_ = 0;
     GLuint vaoSel_ = 0, vboSel_ = 0;
     GLuint vaoPath_ = 0, vboPath_ = 0;
     GLuint vaoPyramid_ = 0, vboPyramid_ = 0;
-    GLuint vaoWater_ = 0, vboWaterPos_ = 0, iboWater_ = 0;
+    // Core profile needs a VAO even when vertices come from gl_VertexID.
+    GLuint vaoWater_ = 0;
 
-    GLsizei lineVertexCount_ = 0;
     GLsizei terrainIndexCount_ = 0;
     GLsizei selLineVertexCount_ = 0;
     GLsizei pathVertexCount_ = 0;
     GLsizei pyramidVertexCount_ = 0;
-    GLsizei waterIndexCount_ = 0;
-    uint64_t uploadedWaterProxyRevision_ = 0;
 
     GLuint vaoRoad_ = 0;
     GLuint vboRoad_ = 0;

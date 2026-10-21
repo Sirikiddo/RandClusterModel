@@ -4,13 +4,13 @@
 
 #include <optional>
 #include <algorithm>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 
 #include "generation/TerrainGenerator.h"
 #include "generation/OreGenerator.h"
 #include "model/HexSphereModel.h"
-#include "TerrainSerialization.h"
 
 #include <proc/ProcessDag.h>
 #include <proc/Schema.h>
@@ -19,6 +19,28 @@
 #include <proc/ScenarioReader.h>
 
 namespace {
+// Temporary adapter handoff for one process and one downstream consumer per
+// snapshot. The DAG carries only a token; the consumer receives the immutable
+// structure through shared_ptr. This side channel is not a general transport
+// contract: replace it with typed DAG payloads before supporting other processes
+// or independent consumers. Never encode a raw pointer in the token.
+// A fresh handoff belongs to each DAG run, so failures and retries cannot expose
+// a previous run's snapshot, and no unbounded payload cache is retained.
+struct TerrainSnapshotHandoff {
+    using Snapshot = std::shared_ptr<const TerrainSnapshot>;
+    static constexpr std::string_view baseToken = "terrain:base";
+    static constexpr std::string_view finalToken = "terrain:final";
+
+    Snapshot base;
+    Snapshot final;
+
+    Snapshot resolve(std::string_view token) const {
+        if (token == baseToken) return base;
+        if (token == finalToken) return final;
+        return {};
+    }
+};
+
 TerrainSnapshot buildBaseTerrainSnapshot(int generatorIndex, int subdivisionLevel, const TerrainParams& params) {
     IcosphereBuilder builder;
     HexSphereModel model;
@@ -78,7 +100,6 @@ TerrainSnapshot generateOreField(TerrainSnapshot snapshot) {
 struct DagTerrainBackend::Impl {
     Impl() {
         schema = std::make_unique<proc::GraphSchema>(buildSchema());
-        runtimeRegistry = std::make_unique<proc::RuntimeOperationRegistry>(buildRuntimeRegistry(*schema));
         guardRegistry = std::make_unique<proc::GuardRegistry>(proc::make_builtin_guard_registry());
         outputs = std::make_unique<std::vector<proc::Field>>(std::initializer_list<proc::Field>{ "terrainSnapshot" });
     }
@@ -87,10 +108,9 @@ struct DagTerrainBackend::Impl {
     TerrainParams params = defaultTerrainParams();
     int generatorIndex = kDefaultTerrainGeneratorIndex;
     int subdivisionLevel = kDefaultTerrainSubdivisionLevel;
-    std::optional<TerrainSnapshot> currentSnapshot;
+    TerrainSnapshotHandoff::Snapshot currentSnapshot;
 
     std::unique_ptr<proc::GraphSchema> schema;
-    std::unique_ptr<proc::RuntimeOperationRegistry> runtimeRegistry;
     std::unique_ptr<proc::GuardRegistry> guardRegistry;
     std::unique_ptr<std::vector<proc::Field>> outputs;
 
@@ -174,15 +194,9 @@ struct DagTerrainBackend::Impl {
         return parsed;
     }
 
-    static std::string readStringField(
-        const proc::RuntimeOperationRegistry::ReadHandleFn& readHandle,
-        proc::v2::FieldSlot slot) {
-        const auto handle = readHandle(slot);
-        const auto view = proc::Commit::debug_view(handle);
-        return std::string(view.data(), view.size());
-    }
-
-    static proc::RuntimeOperationRegistry buildRuntimeRegistry(const proc::GraphSchema& schema) {
+    static proc::RuntimeOperationRegistry buildRuntimeRegistry(
+        const proc::GraphSchema& schema,
+        const std::shared_ptr<TerrainSnapshotHandoff>& handoff) {
         proc::RuntimeOperationRegistry registry(makeOperationRegistry());
         const auto nodeSlot = schema.find_node("TerrainBuild");
         const auto baseOutputSlot = schema.find_field("baseTerrainSnapshot");
@@ -201,7 +215,7 @@ struct DagTerrainBackend::Impl {
         registry.bind_executor(
             schema.op_of(*nodeSlot),
             *nodeSlot,
-            [schema, outputSlot = *baseOutputSlot, generatorSlot = *generatorSlot, seedSlot = *seedSlot,
+            [schema, handoff, outputSlot = *baseOutputSlot, generatorSlot = *generatorSlot, seedSlot = *seedSlot,
              seaLevelSlot = *seaLevelSlot, scaleSlot = *scaleSlot, subdivisionSlot = *subdivisionSlot](
                 const proc::RuntimeOperationRegistry::ReadHandleFn& readHandle,
                 const proc::RuntimeOperationRegistry::FieldNameFn& fieldName,
@@ -218,12 +232,13 @@ struct DagTerrainBackend::Impl {
                 const int subdivisionLevel = Impl::readIntField(
                     readHandle, fieldName, subdivisionSlot, kDefaultTerrainSubdivisionLevel);
 
-                const auto snapshot = buildBaseTerrainSnapshot(generatorIndex, subdivisionLevel, params);
+                handoff->base = std::make_shared<const TerrainSnapshot>(
+                    buildBaseTerrainSnapshot(generatorIndex, subdivisionLevel, params));
 
                 proc::Commit commit;
                 commit.set(
                     outputSlot,
-                    serializeTerrainSnapshot(snapshot).toStdString(),
+                    std::string(TerrainSnapshotHandoff::baseToken),
                     proc::v2::WriteLifetime::Persistent,
                     std::string(schema.field_name(outputSlot)));
                 return commit;
@@ -231,20 +246,20 @@ struct DagTerrainBackend::Impl {
         registry.bind_executor(
             schema.op_of(*oreNodeSlot),
             *oreNodeSlot,
-            [schema, baseSlot = *baseOutputSlot, outputSlot = *outputSlot](
+            [schema, handoff, baseSlot = *baseOutputSlot, outputSlot = *outputSlot](
                 const proc::RuntimeOperationRegistry::ReadHandleFn& readHandle,
                 const proc::RuntimeOperationRegistry::FieldNameFn&,
                 const proc::RuntimeOperationRegistry::DebugStringFn&) -> proc::Commit {
                 proc::Commit commit;
-                const auto encoded = Impl::readStringField(readHandle, baseSlot);
-                const auto snapshot = deserializeTerrainSnapshot(QString::fromUtf8(encoded.data(), static_cast<qsizetype>(encoded.size())));
+                const auto handle = readHandle(baseSlot);
+                const auto snapshot = handoff->resolve(proc::Commit::debug_view(handle));
                 if (!snapshot) {
-                    return commit;
+                    throw std::runtime_error("Missing terrain snapshot in this DAG run");
                 }
-                const TerrainSnapshot withOre = generateOreField(*snapshot);
+                handoff->final = std::make_shared<const TerrainSnapshot>(generateOreField(*snapshot));
                 commit.set(
                     outputSlot,
-                    serializeTerrainSnapshot(withOre).toStdString(),
+                    std::string(TerrainSnapshotHandoff::finalToken),
                     proc::v2::WriteLifetime::Persistent,
                     std::string(schema.field_name(outputSlot)));
                 return commit;
@@ -262,49 +277,51 @@ struct DagTerrainBackend::Impl {
         return init;
     }
 
-    std::optional<TerrainSnapshot> regenerateViaDag() const {
-        if (!schema || !runtimeRegistry || !guardRegistry || !outputs) {
+    TerrainSnapshotHandoff::Snapshot regenerateViaDag() const {
+        if (!schema || !guardRegistry || !outputs) {
             qWarning() << "DagTerrainBackend runtime is not initialized";
-            return std::nullopt;
+            return {};
         }
 
-        proc::DefaultDagEngine dag(*schema, *runtimeRegistry, *guardRegistry);
+        auto handoff = std::make_shared<TerrainSnapshotHandoff>();
+        proc::DefaultDagEngine dag(*schema, buildRuntimeRegistry(*schema, handoff), *guardRegistry);
         dag.init(makeInputStore());
         if (!dag.flush_prepare(*outputs)) {
             qWarning() << "DagTerrainBackend flush_prepare failed";
-            return std::nullopt;
+            return {};
         }
 
-        const auto encoded = proc::get_value_view(dag.prepared_output_store(), "terrainSnapshot");
-        if (!encoded) {
+        const auto token = proc::get_value_view(dag.prepared_output_store(), "terrainSnapshot");
+        if (!token) {
             qWarning() << "DagTerrainBackend produced no terrainSnapshot";
-            return std::nullopt;
+            return {};
         }
 
-        auto snapshot = deserializeTerrainSnapshot(QString::fromUtf8(encoded->data(), static_cast<qsizetype>(encoded->size())));
+        auto snapshot = handoff->resolve(*token);
         if (!snapshot) {
-            qWarning() << "DagTerrainBackend failed to decode terrain snapshot";
-            return std::nullopt;
+            qWarning() << "DagTerrainBackend failed to resolve terrain snapshot";
+            return {};
         }
 
         if (!dag.ack_outputs()) {
             qWarning() << "DagTerrainBackend ack_outputs failed";
+            return {};
         }
         return snapshot;
     }
 
-    void syncFromSnapshot(const TerrainSnapshot& snapshot) {
-        params = snapshot.params;
-        generatorIndex = normalizeTerrainGeneratorIndex(snapshot.generatorIndex);
-        subdivisionLevel = snapshot.subdivisionLevel;
-        currentSnapshot = snapshot;
+    void syncFromSnapshot(TerrainSnapshotHandoff::Snapshot snapshot) {
+        params = snapshot->params;
+        generatorIndex = normalizeTerrainGeneratorIndex(snapshot->generatorIndex);
+        subdivisionLevel = snapshot->subdivisionLevel;
+        currentSnapshot = std::move(snapshot);
     }
 
     void syncFromAdapter() {
         if (!bridge) {
             return;
         }
-        syncFromSnapshot(bridge->captureTerrainSnapshot());
+        syncFromSnapshot(std::make_shared<const TerrainSnapshot>(bridge->captureTerrainSnapshot()));
     }
 };
 
@@ -347,7 +364,7 @@ TerrainRegenerationResult DagTerrainBackend::regenerateTerrain() {
         return TerrainRegenerationResult::failure("DAG terrain regeneration failed");
     }
 
-    impl_->syncFromSnapshot(*snapshot);
+    impl_->syncFromSnapshot(snapshot);
     impl_->bridge->projectTerrainSnapshot(*snapshot);
     return TerrainRegenerationResult::success();
 }

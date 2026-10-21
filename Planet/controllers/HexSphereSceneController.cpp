@@ -7,7 +7,6 @@
 #include <utility>
 
 // �?обавляем н�?жн�?е include
-#include "generation/MeshGenerators/WireMeshGenerator.h"
 #include "generation/OreGenerator.h"
 #include "generation/MeshGenerators/SelectionOutlineGenerator.h"
 #include <QVector3D>
@@ -27,6 +26,7 @@ namespace {
 
     bool waterParamsEqual(const WaterParams& lhs, const WaterParams& rhs) {
         return waveInputsEqual(lhs, rhs)
+            && lhs.wavesEnabled == rhs.wavesEnabled
             && lhs.beachWidth == rhs.beachWidth
             && lhs.fresnelStrength == rhs.fresnelStrength
             && lhs.specularIntensity == rhs.specularIntensity
@@ -125,12 +125,6 @@ void HexSphereSceneController::rebuildTopology() {
     model_.setBaseRadius(HexSphereModel::kDefaultBaseRadius);
     model_.setHeightStep(autoHeightStep());
     model_.setWaterSurfaceLevel(HexSphereModel::kDefaultWaterSurfaceLevel);
-    rebuildWaterProxy();
-}
-
-void HexSphereSceneController::rebuildWaterProxy() {
-    waterCPU_ = WaterMeshGenerator::buildWaterGeometry(model_);
-    ++waterProxyRevision_;
 }
 
 void HexSphereSceneController::rebuildModel() {
@@ -186,7 +180,6 @@ void HexSphereSceneController::clearForShutdown() {
     cameraPos_ = QVector3D();
     lastCameraPos_ = QVector3D();
     terrainCPU_ = TerrainMesh{};
-    waterCPU_ = WaterGeometryData{};
     coastalBand_ = CoastalBandData{};
     model_ = HexSphereModel{};
     ico_ = IcoMesh{};
@@ -230,14 +223,6 @@ void HexSphereSceneController::setTreePlacements(std::vector<TreePlacement> plac
 std::vector<QVector3D> HexSphereSceneController::buildPathPolyline(const std::vector<int>& path) const {
     PathBuilder pb(model_, smoothOneStep_ ? 1 : 0);
     return pb.polylineOnSphere(path, /*segmentsPerEdge=*/8, pathBias_, heightStep_);
-}
-
-std::vector<float> HexSphereSceneController::buildWireVertices() const {
-    if (isContributorMode()) {
-        return {};
-    }
-    // WireMeshGenerator ожидае�? const HexSphereModel&
-    return WireMeshGenerator::buildWireVertices(model_);
 }
 
 std::vector<float> HexSphereSceneController::buildSelectionOutlineVertices() const {
@@ -325,7 +310,6 @@ float HexSphereSceneController::autoHeightStep() const {
 void HexSphereSceneController::updateTerrainMesh() {
     if (isContributorMode()) {
         terrainCPU_ = TerrainMesh{};
-        waterCPU_ = WaterGeometryData{};
         coastalBand_ = CoastalBandData{};
         cacheValid_ = false;
         triangleCache_.clear();

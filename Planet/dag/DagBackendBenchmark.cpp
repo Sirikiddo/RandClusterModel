@@ -239,14 +239,19 @@ bool snapshotsCompatible(const TerrainSnapshot* lhs, const TerrainSnapshot* rhs)
     }
     if (lhs->subdivisionLevel != rhs->subdivisionLevel ||
         lhs->generatorIndex != rhs->generatorIndex ||
+        lhs->params.seed != rhs->params.seed ||
+        lhs->params.seaLevel != rhs->params.seaLevel ||
+        lhs->params.scale != rhs->params.scale ||
         lhs->cells.size() != rhs->cells.size()) {
         return false;
     }
 
-    const size_t probeCount = std::min<size_t>(lhs->cells.size(), 32);
-    for (size_t i = 0; i < probeCount; ++i) {
+    for (size_t i = 0; i < lhs->cells.size(); ++i) {
         if (lhs->cells[i].height != rhs->cells[i].height
             || lhs->cells[i].biome != rhs->cells[i].biome
+            || lhs->cells[i].temperature != rhs->cells[i].temperature
+            || lhs->cells[i].humidity != rhs->cells[i].humidity
+            || lhs->cells[i].pressure != rhs->cells[i].pressure
             || lhs->cells[i].oreDensity != rhs->cells[i].oreDensity
             || lhs->cells[i].oreType != rhs->cells[i].oreType) {
             return false;

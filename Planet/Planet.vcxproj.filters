@@ -180,9 +180,6 @@
     <ClCompile Include="generation\MeshGenerators\WaterMeshGenerator.cpp">
       <Filter>generation\MeshGenerators</Filter>
     </ClCompile>
-    <ClCompile Include="generation\MeshGenerators\WireMeshGenerator.cpp">
-      <Filter>generation\MeshGenerators</Filter>
-    </ClCompile>
     <ClCompile Include="model\CarModelHandler.cpp">
       <Filter>model</Filter>
     </ClCompile>
@@ -323,9 +320,6 @@
     <ClInclude Include="generation\MeshGenerators\WaterMeshGenerator.h">
       <Filter>generation\MeshGenerators</Filter>
     </ClInclude>
-    <ClInclude Include="generation\MeshGenerators\WireMeshGenerator.h">
-      <Filter>generation\MeshGenerators</Filter>
-    </ClInclude>
     <ClInclude Include="model\CarModelHandler.h">
       <Filter>model</Filter>
     </ClInclude>
@@ -374,21 +368,21 @@
     <ClInclude Include="renderers\WaterRenderer.h">
       <Filter>renderers</Filter>
     </ClInclude>
-    <ClInclude Include="ui\HexSphereWidget.h">
+    <QtMoc Include="ui\HexSphereWidget.h">
       <Filter>ui</Filter>
-    </ClInclude>
-    <ClInclude Include="ui\MainWindow.h">
+    </QtMoc>
+    <QtMoc Include="ui\MainWindow.h">
       <Filter>ui</Filter>
-    </ClInclude>
+    </QtMoc>
     <ClInclude Include="ui\OverlayRenderer.h">
       <Filter>ui</Filter>
     </ClInclude>
     <ClInclude Include="ui\PerformanceStats.h">
       <Filter>ui</Filter>
     </ClInclude>
-    <ClInclude Include="ui\PlanetSettingsPanel.h">
+    <QtMoc Include="ui\PlanetSettingsPanel.h">
       <Filter>ui</Filter>
-    </ClInclude>
+    </QtMoc>
     <ClInclude Include="tests\WaterWaveModelTests.h">
       <Filter>tests</Filter>
     </ClInclude>
@@ -558,8 +552,196 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <QtMoc Include="ui\HexSphereWidget.h" />
-    <QtMoc Include="ui\MainWindow.h" />
-    <QtMoc Include="ui\PlanetSettingsPanel.h" />
+    <Filter Include="culling">
+      <UniqueIdentifier>{AD51752B-0D93-4C3F-A6CC-CBDF53E3C808}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="docs\knowledge-base">
+      <UniqueIdentifier>{D72AAB11-AC5B-418D-97BF-0486A5549DD5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="docs\knowledge-base\Архитектура">
+      <UniqueIdentifier>{3CB47CE7-9202-4585-86C4-7A63E3A7785C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="docs\knowledge-base\Взаимодействие">
+      <UniqueIdentifier>{E916FDDE-6311-4064-8C3B-36E2E06CFAE9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="docs\knowledge-base\Планета">
+      <UniqueIdentifier>{F24B7AE1-C649-4CCE-B685-1B64CB0EBB03}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="docs\knowledge-base\Рендеринг">
+      <UniqueIdentifier>{6E54F072-9D24-4565-B01A-CCAC1542891C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="docs\knowledge-base\Эксплуатация">
+      <UniqueIdentifier>{E107B703-CF13-4E25-BE23-1751012B56D1}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="contributor\TreeBuilder.cpp">
+      <Filter>contributor</Filter>
+    </ClCompile>
+    <ClInclude Include="contributor\TreeBuilder.h">
+      <Filter>contributor</Filter>
+    </ClInclude>
+    <ClInclude Include="core\DebugOverlay.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\EngineFacade.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\PlayerResources.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClCompile Include="culling\TerrainCulling.cpp">
+      <Filter>culling</Filter>
+    </ClCompile>
+    <ClInclude Include="culling\TerrainCulling.h">
+      <Filter>culling</Filter>
+    </ClInclude>
+    <None Include="docs\knowledge-base\00 - Главная.md">
+      <Filter>docs\knowledge-base</Filter>
+    </None>
+    <None Include="docs\knowledge-base\01 - Быстрый старт и runtime-карта.md">
+      <Filter>docs\knowledge-base</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Архитектура\Карта модулей.md">
+      <Filter>docs\knowledge-base\Архитектура</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Архитектура\Контракты и потоки данных.md">
+      <Filter>docs\knowledge-base\Архитектура</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Архитектура\Системная архитектура.md">
+      <Filter>docs\knowledge-base\Архитектура</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Архитектура\ECS и жизненный цикл сущностей.md">
+      <Filter>docs\knowledge-base\Архитектура</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Архитектура\Legacy и DAG бэкенды.md">
+      <Filter>docs\knowledge-base\Архитектура</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Взаимодействие\Ввод, picking и выделение клеток.md">
+      <Filter>docs\knowledge-base\Взаимодействие</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Взаимодействие\Поиск пути и анимация движения.md">
+      <Filter>docs\knowledge-base\Взаимодействие</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Взаимодействие\Постройки и сущности.md">
+      <Filter>docs\knowledge-base\Взаимодействие</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Планета\Меш рельефа, вода и culling.md">
+      <Filter>docs\knowledge-base\Планета</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Планета\Руда — старая и текущая реализация.md">
+      <Filter>docs\knowledge-base\Планета</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Планета\Топология и процедурная генерация.md">
+      <Filter>docs\knowledge-base\Планета</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Рендеринг\Каталог анимаций.md">
+      <Filter>docs\knowledge-base\Рендеринг</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Рендеринг\Конвейер рендеринга.md">
+      <Filter>docs\knowledge-base\Рендеринг</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Рендеринг\Машинка, деревья и модели.md">
+      <Filter>docs\knowledge-base\Рендеринг</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Эксплуатация\Известные ограничения и техдолг.md">
+      <Filter>docs\knowledge-base\Эксплуатация</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Эксплуатация\Индекс исходников.md">
+      <Filter>docs\knowledge-base\Эксплуатация</Filter>
+    </None>
+    <None Include="docs\knowledge-base\Эксплуатация\Сборка, запуск, тесты и benchmark.md">
+      <Filter>docs\knowledge-base\Эксплуатация</Filter>
+    </None>
+    <None Include="docs\knowledge-base\README.md">
+      <Filter>docs\knowledge-base</Filter>
+    </None>
+    <None Include="docs\planet_reorg_tasks.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\scene_example.md">
+      <Filter>docs</Filter>
+    </None>
+    <ClInclude Include="ECS\Animation.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClCompile Include="generation\OreGenerator.cpp">
+      <Filter>generation</Filter>
+    </ClCompile>
+    <ClInclude Include="generation\OreGenerator.h">
+      <Filter>generation</Filter>
+    </ClInclude>
+    <ClCompile Include="tests\dag_backend_benchmark.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\scene_integration.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClCompile Include="tools\converters\DataAdapters.cpp">
+      <Filter>tools\converters</Filter>
+    </ClCompile>
+    <ClInclude Include="tools\converters\DataAdapters.h">
+      <Filter>tools\converters</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="tests\DagTransportBenchmark.cpp"><Filter>tests</Filter></ClCompile>
+    <ClInclude Include="tests\DagTransportBenchmark.h"><Filter>tests</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="dag\InProcessDagPayloads.h"><Filter>dag</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="docs\benchmarks"><UniqueIdentifier>{96D0AFC7-16CF-4F34-9777-F1916B105C54}</UniqueIdentifier></Filter>
+    <Filter Include="docs\benchmarks\2026-10-21-json-removal"><UniqueIdentifier>{C1DD2202-9EC8-4968-80D6-F57BFB897C52}</UniqueIdentifier></Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="docs\benchmarks\2026-10-21-json-removal\after-1.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
+    <None Include="docs\benchmarks\2026-10-21-json-removal\after-2.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
+    <None Include="docs\benchmarks\2026-10-21-json-removal\after-3.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
+    <None Include="docs\benchmarks\2026-10-21-json-removal\all-json-1.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
+    <None Include="docs\benchmarks\2026-10-21-json-removal\all-json-2.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
+    <None Include="docs\benchmarks\2026-10-21-json-removal\all-json-3.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
+    <None Include="docs\benchmarks\2026-10-21-json-removal\hashes.json"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
+    <None Include="docs\benchmarks\2026-10-21-json-removal\machine.json"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
+    <None Include="docs\benchmarks\2026-10-21-json-removal\README.md"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
+    <None Include="docs\benchmarks\2026-10-21-json-removal\summary.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="tests\WaterScreenPassTests.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+    <ClInclude Include="tests\WaterScreenPassTests.h">
+      <Filter>tests</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="docs\benchmarks\2026-10-21-water-screen\memory-summary.csv">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\benchmarks\2026-10-21-water-screen\metadata.json">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\benchmarks\2026-10-21-water-screen\summary.csv">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run1-memory.csv">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run1-timing.csv">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run2-memory.csv">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run2-timing.csv">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run3-memory.csv">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run3-timing.csv">
+      <Filter>docs</Filter>
+    </None>
   </ItemGroup>
 </Project>

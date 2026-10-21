@@ -1,8 +1,5 @@
-﻿#include "DagPathBackend.h"
+#include "DagPathBackend.h"
 
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QtDebug>
 
 #include <algorithm>
@@ -12,7 +9,7 @@
 
 #include "model/HexSphereModel.h"
 #include "controllers/PathBuilder.h"
-#include "TerrainSerialization.h"
+#include "InProcessDagPayloads.h"
 #include "TerrainBackendTypes.h"
 
 #include <proc/ProcessDag.h>
@@ -20,6 +17,11 @@
 #include <proc/Logging.h>
 
 namespace {
+    struct PathPayloads {
+        InProcessDagPayloads<TerrainSnapshot> terrain{"path-terrain"};
+        InProcessDagPayloads<PathResult> results{"path-result"};
+    };
+
 
     // ============================================================
     // ПОСТРОЕНИЕ МОДЕЛИ ИЗ СНАПШОТА
@@ -95,17 +97,10 @@ namespace {
         proc::v2::FieldSlot startCellSlot,
         proc::v2::FieldSlot goalCellSlot,
         proc::v2::FieldSlot pathResultSlot,
-        const proc::GraphSchema& schema) {
+        const proc::GraphSchema& schema,
+        const std::shared_ptr<PathPayloads>& payloads) {
 
-        // Читаем входы
-        const std::string snapshotJson = readStringField(readHandle, terrainSnapshotSlot);
-        auto snapshot = deserializeTerrainSnapshot(
-            QString::fromUtf8(snapshotJson.data(), static_cast<int>(snapshotJson.size())));
-
-        if (!snapshot) {
-            qWarning() << "DagPathBackend: failed to parse terrain snapshot";
-            return proc::Commit{};
-        }
+        const auto snapshot = payloads->terrain.resolve(readStringField(readHandle, terrainSnapshotSlot));
 
         const int smoothMaxDelta = readIntField(readHandle, fieldName, smoothMaxDeltaSlot, 1);
         const int startId = readIntField(readHandle, fieldName, startCellSlot, 0);
@@ -119,30 +114,19 @@ namespace {
         builder.build();
         std::vector<int> path = builder.astar(startId, goalId);
 
-        // Формируем результат как JSON
-        QJsonObject resultJson;
-        resultJson["found"] = !path.empty();
-
-        if (!path.empty()) {
-            QJsonArray pathArray;
-            for (int id : path) {
-                pathArray.append(id);
-            }
-            resultJson["path"] = pathArray;
-
-            float length = 0.0f;
-            const auto& cells = model.cells();
-            for (size_t i = 0; i + 1 < path.size(); ++i) {
-                length += PathBuilder::edgeAngularDistance(
-                    cells[path[i]], cells[path[i + 1]]);
-            }
-            resultJson["length"] = length;
+        PathResult result;
+        result.found = !path.empty();
+        result.cellIds = std::move(path);
+        const auto& cells = model.cells();
+        for (size_t i = 1; i < result.cellIds.size(); ++i) {
+            result.length += PathBuilder::edgeAngularDistance(
+                cells[result.cellIds[i - 1]], cells[result.cellIds[i]]);
         }
 
         proc::Commit commit;
         commit.set(
             pathResultSlot,
-            QString::fromUtf8(QJsonDocument(resultJson).toJson(QJsonDocument::Compact)).toStdString(),
+            payloads->results.put(std::move(result)),
             proc::v2::WriteLifetime::Persistent,
             std::string(schema.field_name(pathResultSlot)));
 
@@ -200,7 +184,7 @@ namespace {
     // ПОСТРОЕНИЕ РЕЕСТРА ИСПОЛНИТЕЛЕЙ
     // ============================================================
 
-    proc::RuntimeOperationRegistry buildPathRuntimeRegistry(const proc::GraphSchema& schema) {
+    proc::RuntimeOperationRegistry buildPathRuntimeRegistry(const proc::GraphSchema& schema, const std::shared_ptr<PathPayloads>& payloads) {
         proc::RuntimeOperationRegistry registry(makePathOperationRegistry());
 
         const auto findNodeSlot = schema.find_node("FindPath");
@@ -220,7 +204,7 @@ namespace {
         registry.bind_executor(
             schema.op_of(*findNodeSlot),
             *findNodeSlot,
-            [&schema,
+            [&schema, payloads,
             tsSlot = *terrainSnapshotSlot,
             smdSlot = *smoothMaxDeltaSlot,
             scSlot = *startCellSlot,
@@ -232,7 +216,7 @@ namespace {
 
                     return executeFindPath(
                         readHandle, fieldName, debugString,
-                        tsSlot, smdSlot, scSlot, gcSlot, prSlot, schema);
+                        tsSlot, smdSlot, scSlot, gcSlot, prSlot, schema, payloads);
             });
 
         return registry;
@@ -245,6 +229,7 @@ namespace {
 // ============================================================
 
 struct DagPathBackend::Impl {
+    std::shared_ptr<PathPayloads> payloads = std::make_shared<PathPayloads>();
     int smoothMaxDelta = 1;
     PathResult lastResult;
     proc::GraphSchema schema;
@@ -261,7 +246,7 @@ struct DagPathBackend::Impl {
 
     Impl()
         : schema(buildPathSchema())
-        , runtimeRegistry(buildPathRuntimeRegistry(schema))
+        , runtimeRegistry(buildPathRuntimeRegistry(schema, payloads))
         , guardRegistry(proc::make_builtin_guard_registry())
         , engine(schema, runtimeRegistry, guardRegistry)
     {
@@ -291,7 +276,7 @@ struct DagPathBackend::Impl {
         proc::Commit c;
         c.set(
             terrainSnapshotSlot,                               // ← ИСПОЛЬЗУЕМ СЛОТ
-            serializeTerrainSnapshot(snapshot).toStdString(),
+            payloads->terrain.intern(snapshot, sameTerrainSnapshot),
             proc::v2::WriteLifetime::Persistent,
             std::string(schema.field_name(terrainSnapshotSlot)));
         engine.push_input(c);
@@ -323,7 +308,7 @@ struct DagPathBackend::Impl {
         engine.push_input(c);
 
         try {
-            engine.flush_prepare(outputs);
+            if (!engine.flush_prepare(outputs)) return {};
         }
         catch (const std::exception& e) {
             qWarning() << "DagPathBackend::flush_prepare failed:" << e.what();
@@ -334,27 +319,9 @@ struct DagPathBackend::Impl {
 
         PathResult result;
         auto pathView = proc::get_value_view(prepared, "pathResult");
-        if (pathView) {
-            std::string pathJson(pathView->data(), pathView->size());
-            QJsonDocument doc = QJsonDocument::fromJson(
-                QString::fromUtf8(pathJson.data(), static_cast<int>(pathJson.size())).toUtf8());
-
-            if (doc.isObject()) {
-                QJsonObject obj = doc.object();
-                result.found = obj["found"].toBool();
-
-                if (result.found) {
-                    QJsonArray pathArray = obj["path"].toArray();
-                    result.cellIds.reserve(pathArray.size());
-                    for (const auto& val : pathArray) {
-                        result.cellIds.push_back(val.toInt());
-                    }
-                    result.length = static_cast<float>(obj["length"].toDouble());
-                }
-            }
-        }
-
-        engine.ack_outputs();
+        if (!pathView) return {};
+        result = *payloads->results.resolve(*pathView);
+        if (!engine.ack_outputs()) return {};
 
         lastResult = result;
         return result;

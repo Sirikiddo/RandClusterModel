@@ -9,7 +9,9 @@
 #include "dag/DagBackendBenchmark.h"
 #include "ui/MainWindow.h"
 #include "tests/WaterWaveModelTests.h"
+#include "tests/WaterScreenPassTests.h"
 #include "tests/ClimateBiomeGeneratorTests.h"
+#include "tests/DagTransportBenchmark.h"
 
 extern "C" {
     __declspec(dllexport) DWORD NvOptimusEnablement = 1;
@@ -17,6 +19,14 @@ extern "C" {
 }
 
 int main(int argc, char** argv) {
+    for (int i = 1; i < argc; ++i) {
+        if (QString::fromLocal8Bit(argv[i]) == "--dag-transport-benchmark") {
+            QCoreApplication app(argc, argv);
+            const QString path = i + 1 < argc ? QString::fromLocal8Bit(argv[i + 1])
+                : QDir::current().filePath("dag_transport_benchmark.csv");
+            return runDagTransportBenchmark(path) ? 0 : 4;
+        }
+    }
     bool runBenchmark = false;
     bool runWaterTests = false;
     bool runClimateTests = false;
@@ -62,6 +72,15 @@ int main(int argc, char** argv) {
     }
 
     QApplication app(argc, argv);
+    if (app.arguments().contains("--water-screen-benchmark")) {
+        const int index = app.arguments().indexOf("--water-screen-benchmark");
+        const QString prefix = index + 1 < app.arguments().size() ? app.arguments().at(index + 1)
+            : QStringLiteral("build/Planet/water-screen");
+        return runWaterScreenPassBenchmark(prefix) ? 0 : 6;
+    }
+    if (app.arguments().contains("--water-screen-tests")) {
+        return runWaterScreenPassTests() ? 0 : 5;
+    }
     const AppViewConfig viewConfig = defaultAppViewConfig();
     MainWindow w(viewConfig);
 

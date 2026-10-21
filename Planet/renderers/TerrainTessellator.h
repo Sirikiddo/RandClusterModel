@@ -115,6 +115,8 @@ public:
     };
     EdgeHeights makeHeights(const Cell& c, const PreCell& pc, const std::vector<Cell>& cells) const;
 
+    enum class NormalMode { Face, Radial };
+
     struct MeshBuilder {
         std::vector<float>& pos;
         std::vector<float>& col;
@@ -133,7 +135,8 @@ public:
             const QVector3D& color,
             const QVector3D& toward,
             int cellOwner,
-            TriangleSurfaceRole role = TriangleSurfaceRole::Top);
+            TriangleSurfaceRole role = TriangleSurfaceRole::Top,
+            NormalMode normalMode = NormalMode::Face);
         void quadToward(
             const QVector3D& Q0,
             const QVector3D& Q1,
@@ -142,7 +145,8 @@ public:
             const QVector3D& color,
             const QVector3D& toward,
             int cellOwner,
-            TriangleSurfaceRole role = TriangleSurfaceRole::Top);
+            TriangleSurfaceRole role = TriangleSurfaceRole::Top,
+            NormalMode normalMode = NormalMode::Face);
     };
 
     void buildInnerFan(MeshBuilder& mb, const Cell& c, const PreCell& pc) const;

@@ -14,7 +14,6 @@ public:
         GLuint planetSurfaceKindAtlas = 0;
         GLuint planetShoreDistanceAtlas = 0;
         GLuint vao = 0;
-        GLsizei indexCount = 0;
     };
 
     WaterRenderer(QOpenGLFunctions_3_3_Core* gl, GLuint program);
@@ -27,7 +26,7 @@ private:
     QOpenGLFunctions_3_3_Core* gl_ = nullptr;
     GLuint program_ = 0;
 
-    GLint uMvp_ = -1;
+    GLint uWavesEnabled_ = -1;
     GLint uLightDir_ = -1;
     GLint uViewPos_ = -1;
     GLint uInvViewProjection_ = -1;

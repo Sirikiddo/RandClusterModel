@@ -1,0 +1,10 @@
+{
+  "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+  "physicalCores": 14,
+  "logicalProcessors": 20,
+  "ramGiB": 15.63,
+  "configuration": "Release x64",
+  "compiler": "MSVC 14.44.35207",
+  "qt": "6.8.0",
+  "qhashSeed": 0
+}

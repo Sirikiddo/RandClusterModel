@@ -56,9 +56,11 @@ Executor:
 3. запускает выбранный terrain generator;
 4. превращает клетки в base snapshot;
 5. второй node восстанавливает topology и запускает `OreGenerator`;
-6. сериализует финальный snapshot в compact JSON commit.
+6. публикует финальный snapshot как `shared_ptr<const TerrainSnapshot>` в адаптере текущего запуска; commit содержит только короткий токен.
 
-Backend создаёт `DefaultDagEngine` на regeneration, `init` inputs → `flush_prepare` → читает output → deserialization → `ack_outputs` → project через bridge. Setter-ы только меняют staged state backend, не живую сцену.
+Backend создаёт `DefaultDagEngine` и отдельный адаптер на regeneration, `init` inputs → `flush_prepare` → разрешает токен `terrainSnapshot` в общую ссылку → `ack_outputs` → project через bridge. Setter-ы только меняют staged state backend, не живую сцену.
+
+Это временная передача внутри одного процесса с одним следующим потребителем каждого снимка. ProcessDAG по-прежнему хранит строки; адаптер живёт в пределах запуска, а готовый снимок удерживается backend через общую ссылку. Для нескольких процессов или независимых потребителей нужен явный контракт typed payloads. JSON-сериализация снимков сохранена как отдельный формат и в проверках его совместимости, но больше не используется для передачи данных в Terrain/Scene/Path DAG. Повторное построение topology и копия base snapshot для расчёта руды этим изменением не устранены.
 
 > [!important] Runtime
 > В обычном Planet mode именно этот путь активен. После projection `HexSphereSceneController` заново строит topology, копирует cell fields, перестраивает terrain mesh и деревья.
@@ -66,6 +68,8 @@ Backend создаёт `DefaultDagEngine` на regeneration, `init` inputs → `
 ## DagPathBackend
 
 Это отдельный долгоживущий DAG engine с inputs snapshot, `smoothMaxDelta`, start и goal; node `FindPath` реконструирует модель и вызывает обычный `PathBuilder`. DAG здесь orchestration/cache boundary, сам алгоритм A* остаётся legacy C++ классом.
+
+Снимок и `PathResult` хранятся в `InProcessDagPayloads<T>` через `shared_ptr<const T>`. В DAG остаются прежние ключи `terrainSnapshot` и `pathResult`, их значения — короткие токены. Повторная передача неизменного снимка сравнивает поля структуры и переиспользует токен без JSON. Это не кэш готового навигационного графа: выполняющийся узел по-прежнему строит модель и граф заново.
 
 ## DagSceneBackend
 
@@ -77,7 +81,9 @@ Backend создаёт `DefaultDagEngine` на regeneration, `init` inputs → `
 | `BuildTreePlacements` | terrain | placements деревьев |
 | `BuildModelPlacements` | terrain + visual + ECS requests | позиция/up сущностей |
 
-Dirty определяется сравнением строковых ключей с предыдущим запросом. Внутри каждого executor есть `unordered_map` cache по полному ключу. Дополнительно ProcessDAG ведёт plan cache. Статистика попадает в нижний overlay.
+Снимки, selection, visual params, model requests и результаты передаются как типизированные неизменяемые структуры через адаптер. Dirty определяется по компактным токенам входов. Для поиска уже известного входа адаптер сравнивает все поля структуры; хеши и адреса памяти не используются как доказательство равенства.
+
+Каждое хранилище входов/выходов и каждый кэш результатов удерживают максимум восемь записей с вытеснением давно не использованных значений (выходные токены — в порядке публикации). Возврат к недавнему входу переиспользует результат; вытесненный вход получает новый токен и пересчитывается. Это лимит числа записей, а не размера в байтах. ProcessDAG дополнительно ведёт plan cache. Статистика попадает в нижний overlay. Адаптер рассчитан на синхронные вызовы одного backend; при расширении на независимых потребителей, процессы или асинхронное исполнение нужен другой контракт владения.
 
 > [!warning] Неполная интеграция
 > `InputController::refreshSceneDagOutputs()` применяет selection outline и tree placements, но игнорирует `result.modelPlacements`. Позиции ECS всё ещё рассчитываются напрямую через `computeSurfacePoint`.

@@ -28,6 +28,7 @@ enum class WaterPreset : int {
 
 struct WaterParams {
     WaterPreset preset = WaterPreset::Temperate;
+    bool wavesEnabled = true;
     float waveStrength = 0.85f;
     int beachWidth = 1;
     float shellWaveAmplitude = 0.84f;

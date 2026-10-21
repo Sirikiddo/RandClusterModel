@@ -128,50 +128,63 @@ WaterHit traceWater(vec2 screenUv) {
 
     vec3 ro = uViewPos;
     vec3 rd = safeNormalize(reconstructWorldPosition(screenUv, 1.0) - ro, vec3(0.0, 0.0, -1.0));
-    SphereHit outerHit = intersectSphere(ro, rd, uWaterShellOuterRadius);
-    if (!outerHit.hit || outerHit.t1 <= 0.0) return hit;
-
-    float tStart = max(outerHit.t0, 0.0);
-    float tClosest = max(-dot(ro, rd), tStart);
-    SphereHit innerHit = intersectSphere(ro, rd, uWaterShellInnerRadius);
-    float tEnd = tClosest;
-    if (innerHit.hit && innerHit.t0 > tStart && innerHit.t0 < tClosest) tEnd = innerHit.t0;
-    if (tEnd <= tStart) return hit;
-
-    hit.shellStart = tStart;
-    hit.shellEnd = tEnd;
-    hit.visibleEnd = tEnd;
-    hit.position = ro + rd * tStart;
-    hit.dir = safeNormalize(hit.position, vec3(0.0, 1.0, 0.0));
-
-    WaterSurfaceSample startSurface;
-    hit.fStart = waterSignedDistance(ro, rd, tStart, startSurface);
-    hit.surface = startSurface;
-    if (hit.fStart <= uBoundEpsilon) {
-        hit.reason = WATER_REASON_BOUNDS_VIOLATION;
-        return hit;
-    }
-
     WaterSurfaceSample surfaceHit;
     float tFront = 0.0;
-    bool unresolved = false;
-    if (!scanFirstWaterRoot(
-            ro, rd, tStart, tEnd, tFront, surfaceHit,
-            hit.scanSteps, hit.fStart, hit.fEnd, unresolved)) {
-        if (unresolved) {
-            hit.reason = WATER_REASON_UNRESOLVED_INTERVAL;
-        } else if (hit.fEnd <= 0.0) {
-            hit.reason = WATER_REASON_RAYMARCH_MISS_ON_SEA;
-        } else {
-            hit.reason = WATER_REASON_NO_SURFACE_CROSSING;
-        }
-        return hit;
-    }
+    if (uWavesEnabled) {
+        SphereHit outerHit = intersectSphere(ro, rd, uWaterShellOuterRadius);
+        if (!outerHit.hit || outerHit.t1 <= 0.0) return hit;
 
-    hit.tFront = tFront;
-    hit.position = ro + rd * tFront;
-    hit.dir = safeNormalize(hit.position, vec3(0.0, 1.0, 0.0));
-    hit.surface = surfaceHit;
+        float tStart = max(outerHit.t0, 0.0);
+        float tClosest = max(-dot(ro, rd), tStart);
+        SphereHit innerHit = intersectSphere(ro, rd, uWaterShellInnerRadius);
+        float tEnd = tClosest;
+        if (innerHit.hit && innerHit.t0 > tStart && innerHit.t0 < tClosest) tEnd = innerHit.t0;
+        if (tEnd <= tStart) return hit;
+
+        hit.shellStart = tStart;
+        hit.shellEnd = tEnd;
+        hit.visibleEnd = tEnd;
+        hit.position = ro + rd * tStart;
+        hit.dir = safeNormalize(hit.position, vec3(0.0, 1.0, 0.0));
+
+        WaterSurfaceSample startSurface;
+        hit.fStart = waterSignedDistance(ro, rd, tStart, startSurface);
+        hit.surface = startSurface;
+        if (hit.fStart <= uBoundEpsilon) {
+            hit.reason = WATER_REASON_BOUNDS_VIOLATION;
+            return hit;
+        }
+
+        bool unresolved = false;
+        if (!scanFirstWaterRoot(
+                ro, rd, tStart, tEnd, tFront, surfaceHit,
+                hit.scanSteps, hit.fStart, hit.fEnd, unresolved)) {
+            if (unresolved) {
+                hit.reason = WATER_REASON_UNRESOLVED_INTERVAL;
+            } else if (hit.fEnd <= 0.0) {
+                hit.reason = WATER_REASON_RAYMARCH_MISS_ON_SEA;
+            } else {
+                hit.reason = WATER_REASON_NO_SURFACE_CROSSING;
+            }
+            return hit;
+        }
+
+        hit.tFront = tFront;
+        hit.position = ro + rd * tFront;
+        hit.dir = safeNormalize(hit.position, vec3(0.0, 1.0, 0.0));
+        hit.surface = surfaceHit;
+    } else {
+        // Smooth water is the mean sea sphere, with no wave field evaluations.
+        SphereHit seaHit = intersectSphere(ro, rd, uWaterSurfaceRadius);
+        if (!seaHit.hit || seaHit.t0 <= 0.0) return hit;
+        tFront = seaHit.t0;
+        hit.tFront = tFront;
+        hit.position = ro + rd * tFront;
+        hit.dir = safeNormalize(hit.position, vec3(0.0, 1.0, 0.0));
+        surfaceHit.terrain = sampleTerrainAtlas(hit.dir);
+        surfaceHit.radius = uWaterSurfaceRadius;
+        hit.surface = surfaceHit;
+    }
     if (surfaceHit.terrain.radius <= 0.0 || surfaceHit.terrain.kind == SURFACE_INVALID) {
         hit.reason = WATER_REASON_INVALID_ATLAS;
         return hit;
@@ -183,8 +196,10 @@ WaterHit traceWater(vec2 screenUv) {
 
     // The scan/refinement path evaluates height only. Derivatives and cosine
     // terms are paid once, after the semantic Sea/Land classification.
-    hit.surface = sampleWaterSurfaceWithGradient(hit.dir);
-    surfaceHit = hit.surface;
+    if (uWavesEnabled) {
+        hit.surface = sampleWaterSurfaceWithGradient(hit.dir);
+        surfaceHit = hit.surface;
+    }
     hit.sceneDistance = sceneDistanceAtUv(screenUv);
     if (hit.sceneDistance < tFront - uTerrainContactEpsilon) {
         hit.reason = WATER_REASON_TERRAIN_OCCLUDED;
@@ -200,7 +215,8 @@ WaterHit traceWater(vec2 screenUv) {
         hit.thicknessFallback = true;
     }
 
-    hit.normal = reconstructWaterNormal(hit.dir, surfaceHit, hit.position);
+    hit.normal = uWavesEnabled
+        ? reconstructWaterNormal(hit.dir, surfaceHit, hit.position) : hit.dir;
     hit.reason = WATER_REASON_WATER;
     hit.hit = true;
     return hit;
