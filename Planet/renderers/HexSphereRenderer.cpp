@@ -1008,11 +1008,12 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
     const float treeSceneScale = 0.12f * ctx.graph.scene.getModelScaleFactor();
 
     // ========== БЮДЖЕТ ЧАСТИЦ ==========
-    constexpr size_t kMaxParticlesTotal = 60000;
-    constexpr size_t kMinParticlesPerTree = 1000;
+    constexpr size_t kMaxRenderedTrees = 96;
+    constexpr size_t kMaxParticlesTotal = 30000;
+    constexpr size_t kMinParticlesPerTree = 1;
     constexpr size_t kMaxParticlesPerTree = 5000;
 
-    const size_t treeCount = placements.size();
+    const size_t treeCount = std::min(placements.size(), kMaxRenderedTrees);
     const size_t computedPerTree = kMaxParticlesTotal / std::max<size_t>(treeCount, 1);
     const size_t particlesPerTreeBudget = std::clamp<size_t>(
         computedPerTree, kMinParticlesPerTree, kMaxParticlesPerTree);

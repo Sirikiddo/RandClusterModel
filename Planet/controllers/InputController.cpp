@@ -17,6 +17,7 @@
 #include "controllers/PathBuilder.h"
 #include "dag/EngineFacade.h"
 #include "ECS/Transform.h"
+#include "generation/MeshGenerators/SelectionOutlineGenerator.h"
 #include "model/SurfacePlacement.h"
 #include "core/PlayerResources.h"
 
@@ -836,12 +837,27 @@ void InputController::rebuildDerivedGeometry(Response& response) {
 }
 
 void InputController::uploadSelection() {
-    refreshSceneDagOutputs();
+    if (isBuildingPlacementMode()) {
+        if (renderer_) {
+            renderer_->uploadSelectionOutline(
+                scene_.buildOutlineVerticesForCells(buildPreviewCells_));
+        }
+        return;
+    }
+
+    // Selection depends only on the few edges of the selected cells. Sending the
+    // complete terrain snapshot through Scene DAG rebuilt the whole L4 topology
+    // for every click.
+    auto vertices = SelectionOutlineGenerator::buildSelectionOutlineVertices(
+        scene_.model(),
+        scene_.selectedCells(),
+        scene_.heightStep(),
+        scene_.outlineBias(),
+        scene_.smoothOneStep());
+    scene_.setSelectionOutlineVertices(std::move(vertices));
+
     if (renderer_) {
-        const auto vertices = isBuildingPlacementMode()
-            ? scene_.buildOutlineVerticesForCells(buildPreviewCells_)
-            : scene_.buildSelectionOutlineVertices();
-        renderer_->uploadSelectionOutline(vertices);
+        renderer_->uploadSelectionOutline(scene_.buildSelectionOutlineVertices());
     }
 }
 
