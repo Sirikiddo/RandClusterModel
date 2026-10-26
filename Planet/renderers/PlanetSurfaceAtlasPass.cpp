@@ -1,24 +1,15 @@
 #include "renderers/PlanetSurfaceAtlasPass.h"
 
 #include <QByteArray>
+#include <QElapsedTimer>
 #include <QtDebug>
 
-#include <algorithm>
 #include <array>
-#include <cmath>
 
 #include "controllers/HexSphereSceneController.h"
+#include "renderers/SurfaceAtlasMeshBuilder.h"
 
 namespace {
-
-constexpr float kPi = 3.14159265358979323846f;
-
-struct ShoreArc {
-    QVector3D a;
-    QVector3D b;
-    QVector3D normal;
-    float length = 0.0f;
-};
 
 constexpr const char* kAtlasVs = R"GLSL(
 #version 330 core
@@ -56,68 +47,6 @@ void main() {
     outShoreDistance = vShoreDistance;
 }
 )GLSL";
-
-QVector3D loadVec3(const std::vector<float>& data, uint32_t index) {
-    const size_t base = static_cast<size_t>(index) * 3u;
-    return QVector3D(data[base], data[base + 1u], data[base + 2u]);
-}
-
-float classifySurfaceKind(const HexSphereModel& model, int cellId) {
-    if (cellId < 0 || cellId >= static_cast<int>(model.cells().size())) {
-        return 0.0f;
-    }
-    return model.cells()[static_cast<size_t>(cellId)].biome == Biome::Sea ? 3.0f : 1.0f;
-}
-
-float clampedAcos(float value) {
-    return std::acos(std::clamp(value, -1.0f, 1.0f));
-}
-
-float angularDistanceToArc(const QVector3D& direction, const ShoreArc& arc) {
-    const QVector3D p = direction.normalized();
-    QVector3D projected = p - arc.normal * QVector3D::dotProduct(p, arc.normal);
-    if (!projected.isNull()) {
-        projected.normalize();
-        if (QVector3D::dotProduct(projected, p) < 0.0f) {
-            projected = -projected;
-        }
-        const float aToProjection = clampedAcos(QVector3D::dotProduct(arc.a, projected));
-        const float projectionToB = clampedAcos(QVector3D::dotProduct(projected, arc.b));
-        if (aToProjection + projectionToB <= arc.length + 2e-4f) {
-            return clampedAcos(QVector3D::dotProduct(p, projected));
-        }
-    }
-    return std::min(
-        clampedAcos(QVector3D::dotProduct(p, arc.a)),
-        clampedAcos(QVector3D::dotProduct(p, arc.b)));
-}
-
-std::vector<ShoreArc> buildShoreArcs(const HexSphereModel& model) {
-    std::vector<ShoreArc> arcs;
-    const auto& cells = model.cells();
-    const auto& dual = model.dualVerts();
-    for (const Cell& cell : cells) {
-        const size_t edgeCount = std::min(cell.poly.size(), cell.neighbors.size());
-        for (size_t edge = 0; edge < edgeCount; ++edge) {
-            const int neighborId = cell.neighbors[edge];
-            if (neighborId < 0 || neighborId >= static_cast<int>(cells.size()) || cell.id > neighborId) {
-                continue;
-            }
-            if ((cell.biome == Biome::Sea) == (cells[static_cast<size_t>(neighborId)].biome == Biome::Sea)) {
-                continue;
-            }
-            ShoreArc arc;
-            arc.a = dual[static_cast<size_t>(cell.poly[edge])].normalized();
-            arc.b = dual[static_cast<size_t>(cell.poly[(edge + 1u) % cell.poly.size()])].normalized();
-            arc.normal = QVector3D::crossProduct(arc.a, arc.b).normalized();
-            arc.length = clampedAcos(QVector3D::dotProduct(arc.a, arc.b));
-            if (!arc.normal.isNull() && arc.length > 1e-6f) {
-                arcs.push_back(arc);
-            }
-        }
-    }
-    return arcs;
-}
 
 } // namespace
 
@@ -344,74 +273,48 @@ void PlanetSurfaceAtlasPass::updateMesh(const TerrainMesh& mesh, const HexSphere
         return;
     }
 
-    std::vector<float> positions;
-    std::vector<float> kinds;
-    std::vector<float> shoreDistances;
-    positions.reserve(mesh.idx.size() * 3u);
-    kinds.reserve(mesh.idx.size());
-    shoreDistances.reserve(mesh.idx.size());
-
-    stats_ = {};
-    const std::vector<ShoreArc> shoreline = buildShoreArcs(model);
-    stats_.shorelineArcCount = static_cast<int>(shoreline.size());
-    const float waterRadius = model.waterSurfaceRadius();
-    for (const Cell& cell : model.cells()) {
-        if (cell.biome == Biome::Sea) {
-            stats_.maximumSeaDepth = std::max(
-                stats_.maximumSeaDepth,
-                waterRadius - model.radiusForHeight(static_cast<float>(cell.height)));
-        }
-    }
+    QElapsedTimer totalTimer;
+    totalTimer.start();
     const size_t triangleCount = mesh.idx.size() / 3u;
-    for (size_t tri = 0; tri < triangleCount; ++tri) {
-        const uint32_t ia = mesh.idx[tri * 3u + 0u];
-        const uint32_t ib = mesh.idx[tri * 3u + 1u];
-        const uint32_t ic = mesh.idx[tri * 3u + 2u];
-        const QVector3D a = loadVec3(mesh.pos, ia);
-        const QVector3D b = loadVec3(mesh.pos, ib);
-        const QVector3D c = loadVec3(mesh.pos, ic);
-        const TriangleSurfaceRole role = tri < mesh.triSurfaceRole.size()
-            ? mesh.triSurfaceRole[tri]
-            : TriangleSurfaceRole::Cliff;
-        if (role != TriangleSurfaceRole::Top) {
-            ++stats_.culledTriangles;
-            continue;
-        }
+    SurfaceAtlasMeshData atlas = SurfaceAtlasMeshBuilder::build(mesh, model);
+    stats_ = atlas.stats;
+    vertexCount_ = static_cast<GLsizei>(atlas.positions.size() / 3u);
 
-        const int owner = tri < mesh.triOwner.size() ? mesh.triOwner[tri] : -1;
-        const float surfaceKind = classifySurfaceKind(model, owner);
-        const float shoreSign = surfaceKind == 3.0f ? 1.0f : -1.0f;
-
-        auto appendVertex = [&](const QVector3D& p) {
-            positions.push_back(p.x());
-            positions.push_back(p.y());
-            positions.push_back(p.z());
-            kinds.push_back(surfaceKind);
-            float angularDistance = kPi;
-            for (const ShoreArc& arc : shoreline) {
-                angularDistance = std::min(angularDistance, angularDistanceToArc(p, arc));
-            }
-            shoreDistances.push_back(shoreSign * angularDistance * waterRadius);
-        };
-
-        appendVertex(a);
-        appendVertex(b);
-        appendVertex(c);
-        ++stats_.keptTriangles;
-    }
-
-    vertexCount_ = static_cast<GLsizei>(positions.size() / 3u);
-
+    QElapsedTimer stageTimer;
+    stageTimer.start();
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboPos_);
-    gl_->glBufferData(GL_ARRAY_BUFFER, positions.size() * sizeof(float), positions.empty() ? nullptr : positions.data(), GL_STATIC_DRAW);
+    gl_->glBufferData(GL_ARRAY_BUFFER, atlas.positions.size() * sizeof(float), atlas.positions.empty() ? nullptr : atlas.positions.data(), GL_STATIC_DRAW);
 
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboKind_);
-    gl_->glBufferData(GL_ARRAY_BUFFER, kinds.size() * sizeof(float), kinds.empty() ? nullptr : kinds.data(), GL_STATIC_DRAW);
+    gl_->glBufferData(GL_ARRAY_BUFFER, atlas.kinds.size() * sizeof(float), atlas.kinds.empty() ? nullptr : atlas.kinds.data(), GL_STATIC_DRAW);
 
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboShoreDistance_);
-    gl_->glBufferData(GL_ARRAY_BUFFER, shoreDistances.size() * sizeof(float), shoreDistances.empty() ? nullptr : shoreDistances.data(), GL_STATIC_DRAW);
+    gl_->glBufferData(GL_ARRAY_BUFFER, atlas.shoreDistances.size() * sizeof(float), atlas.shoreDistances.empty() ? nullptr : atlas.shoreDistances.data(), GL_STATIC_DRAW);
+    const double gpuUploadMs = stageTimer.nsecsElapsed() / 1000000.0;
 
     dirty_ = true;
+    qInfo().nospace()
+        << "[Perf][Generation] stage=surface_atlas_update"
+        << " input_triangles=" << triangleCount
+        << " kept_triangles=" << stats_.keptTriangles
+        << " culled_triangles=" << stats_.culledTriangles
+        << " shoreline_arcs=" << stats_.shorelineArcCount
+        << " atlas_vertices=" << stats_.atlasVertices
+        << " unique_directions=" << stats_.uniqueDirections
+        << " cache_hits=" << stats_.cacheHits
+        << " bvh_nodes=" << stats_.bvhNodes
+        << " bvh_node_visits=" << stats_.bvhNodeVisits
+        << " candidate_arcs=" << stats_.candidateArcs
+        << " exact_distance_tests=" << stats_.exactDistanceTests
+        << " distance_tests=" << stats_.exactDistanceTests
+        << " brute_force_tests=" << stats_.bruteForceTests
+        << " workers=" << stats_.workers
+        << " shoreline_ms=" << stats_.shorelineMs
+        << " index_build_ms=" << stats_.indexBuildMs
+        << " distance_query_ms=" << stats_.distanceQueryMs
+        << " distance_field_ms=" << stats_.distanceQueryMs
+        << " gpu_upload_ms=" << gpuUploadMs
+        << " total_ms=" << totalTimer.nsecsElapsed() / 1000000.0;
 }
 
 void PlanetSurfaceAtlasPass::renderIfDirty() {
@@ -420,6 +323,8 @@ void PlanetSurfaceAtlasPass::renderIfDirty() {
         return;
     }
 
+    QElapsedTimer timer;
+    timer.start();
     GLint previousFbo = 0;
     GLint previousViewport[4] = { 0, 0, 0, 0 };
     GLboolean blendEnabled = gl_->glIsEnabled(GL_BLEND);
@@ -494,4 +399,9 @@ void PlanetSurfaceAtlasPass::renderIfDirty() {
     gl_->glClearDepth(previousClearDepth);
 
     dirty_ = false;
+    qInfo().nospace()
+        << "[Perf][Generation] stage=surface_atlas_render_submit"
+        << " vertices=" << vertexCount_
+        << " cubemap_faces=6"
+        << " cpu_submit_ms=" << timer.nsecsElapsed() / 1000000.0;
 }

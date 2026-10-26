@@ -143,7 +143,7 @@ $paragraphs += New-ParagraphXml -Runs @(
 ) -SpacingAfter
 
 $paragraphs += New-ParagraphXml -Runs @(
-    (New-RunXml -Text "В тестовых сценариях terrain сравниваются одинаковые параметры генерации, чтобы проверить совместимость снимков данных и оценить абсолютное время полной регенерации. В сценовых сценариях добавлены операции baseline, repeat_same, selection_change, selection_revert, visual_change, visual_revert, terrain_edit и terrain_revert. Это позволяет увидеть не только чистое время, но и эффект selective recomputation, guard-пропуска и cache reuse.")
+    (New-RunXml -Text "В тестовых сценариях terrain сравниваются одинаковые параметры генерации, чтобы проверить совместимость снимков данных и оценить абсолютное время полной регенерации. Scene-derived содержит baseline, repeat_same, terrain_edit и terrain_revert для trees/models. Selection-derived отдельно измеряет L2/L4 сценарии empty, pentagon, hexagon, two_cells, repeat, selection change/revert, bias, smooth и height change, включая input bytes, output vertices, executed/skipped nodes и elapsed time.")
 ) -SpacingAfter
 
 $paragraphs += New-ParagraphXml -Runs @(

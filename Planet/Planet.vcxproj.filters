@@ -744,4 +744,8 @@
       <Filter>docs</Filter>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="renderers\SurfaceAtlasMeshBuilder.cpp"><Filter>renderers</Filter></ClCompile>
+    <ClInclude Include="renderers\SurfaceAtlasMeshBuilder.h"><Filter>renderers</Filter></ClInclude>
+  </ItemGroup>
 </Project>

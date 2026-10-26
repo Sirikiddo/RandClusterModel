@@ -454,6 +454,22 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="contributor\TreeBuilder.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="model\OreSystem.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="renderers\SurfaceAtlasMeshBuilder.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="tests\DagTransportBenchmark.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="tests\WaterScreenPassTests.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClInclude Include="contributor\TreeBuilder.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="core\DebugOverlay.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="core\EngineFacade.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="core\PlayerResources.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="dag\InProcessDagPayloads.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="model\OreSystem.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="renderers\SurfaceAtlasMeshBuilder.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="tests\DagTransportBenchmark.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="tests\WaterScreenPassTests.h"><Filter>Header Files</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
     <None Include="resources\water\water_common.glsl">
       <Filter>Resource Files</Filter>
     </None>

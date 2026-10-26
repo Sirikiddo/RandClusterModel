@@ -25,6 +25,7 @@ def load_data() -> pd.DataFrame:
         "skipped_guard_nodes",
         "cache_hits",
         "cache_misses",
+        "input_bytes",
     ]
     for column in numeric_columns:
         if column in df.columns:
@@ -71,10 +72,6 @@ def plot_scene_operations(df: pd.DataFrame) -> None:
     operations_order = [
         "baseline",
         "repeat_same",
-        "selection_change",
-        "selection_revert",
-        "visual_change",
-        "visual_revert",
         "terrain_edit",
         "terrain_revert",
     ]
@@ -153,10 +150,6 @@ def plot_scene_speedup(df: pd.DataFrame) -> None:
     operations_order = [
         "baseline",
         "repeat_same",
-        "selection_change",
-        "selection_revert",
-        "visual_change",
-        "visual_revert",
         "terrain_edit",
         "terrain_revert",
     ]
@@ -179,6 +172,36 @@ def plot_scene_speedup(df: pd.DataFrame) -> None:
     save_figure(fig, "scene_benchmark_speedup.png")
 
 
+def plot_selection_pipeline(df: pd.DataFrame) -> None:
+    selection = df[
+        (df["category"] == "selection-derived") & (df["backend"] == "DAG selection")
+    ].copy()
+    operations_order = [
+        "empty", "pentagon", "hexagon", "two_cells", "repeat",
+        "selection_change", "selection_revert", "bias_change", "smooth_change", "height_change",
+    ]
+    selection["operation"] = pd.Categorical(
+        selection["operation"], categories=operations_order, ordered=True
+    )
+    selection = selection.sort_values(["scenario", "operation"])
+
+    fig, axes = plt.subplots(2, 1, figsize=(13, 9), sharex=True)
+    labels = [f"{scenario}\n{operation}" for scenario, operation in zip(selection["scenario"], selection["operation"])]
+    axes[0].bar(labels, selection["elapsed_ms"], color="#2563EB")
+    axes[0].set_ylabel("Elapsed (ms)")
+    axes[0].set_title("Lightweight Selection DAG: L2/L4")
+    axes[0].grid(axis="y", linestyle="--", alpha=0.35)
+
+    axes[1].bar(labels, selection["input_bytes"], color="#0F766E", label="Input bytes")
+    axes[1].plot(labels, selection["executed_nodes"], color="#B91C1C", marker="o", label="Executed nodes")
+    axes[1].plot(labels, selection["skipped_guard_nodes"], color="#D97706", marker="o", label="Skipped nodes")
+    axes[1].set_ylabel("Bytes / node count")
+    axes[1].tick_params(axis="x", rotation=45)
+    axes[1].grid(axis="y", linestyle="--", alpha=0.35)
+    axes[1].legend()
+    save_figure(fig, "selection_benchmark_pipeline.png")
+
+
 def main() -> None:
     ensure_output_dir()
     df = load_data()
@@ -186,6 +209,7 @@ def main() -> None:
     plot_scene_operations(df)
     plot_dag_metrics(df)
     plot_scene_speedup(df)
+    plot_selection_pipeline(df)
     print(f"Charts will be written to: {OUT_DIR}")
 
 

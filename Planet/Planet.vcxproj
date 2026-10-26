@@ -204,6 +204,7 @@
     <ClInclude Include="renderers\TerrainRenderer.h" />
     <ClInclude Include="renderers\TerrainTessellator.h" />
     <ClInclude Include="renderers\PlanetSurfaceAtlasPass.h" />
+    <ClInclude Include="renderers\SurfaceAtlasMeshBuilder.h" />
     <ClInclude Include="renderers\WaterRenderer.h" />
     <ClInclude Include="ui\OverlayRenderer.h" />
     <ClInclude Include="ui\PerformanceStats.h" />
@@ -270,6 +271,7 @@
     <ClCompile Include="renderers\TerrainRenderer.cpp" />
     <ClCompile Include="renderers\TerrainTessellator.cpp" />
     <ClCompile Include="renderers\PlanetSurfaceAtlasPass.cpp" />
+    <ClCompile Include="renderers\SurfaceAtlasMeshBuilder.cpp" />
     <ClCompile Include="renderers\WaterRenderer.cpp" />
     <ClCompile Include="ui\HexSphereWidget.cpp" />
     <ClCompile Include="ui\MainWindow.cpp" />
