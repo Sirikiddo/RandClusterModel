@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <UI version="4.0" >
- <class>GameNewClass</class>
- <widget class="QMainWindow" name="GameNewClass" >
+ <class>PlanetClass</class>
+ <widget class="QMainWindow" name="PlanetClass" >
   <property name="objectName" >
-   <string notr="true">GameNewClass</string>
+   <string notr="true">PlanetClass</string>
   </property>
   <property name="geometry" >
    <rect>
@@ -14,7 +14,7 @@
    </rect>
   </property>
   <property name="windowTitle" >
-   <string>GameNew</string>
+   <string>Planet</string>
   </property>  <widget class="QMenuBar" name="menuBar" />
   <widget class="QToolBar" name="mainToolBar" />
   <widget class="QWidget" name="centralWidget" />
@@ -23,7 +23,7 @@
  <layoutDefault spacing="6" margin="11" />
  <pixmapfunction></pixmapfunction>
  <resources>
-   <include location="GameNew.qrc"/>
+   <include location="Planet.qrc"/>
  </resources>
  <connections/>
 </UI>

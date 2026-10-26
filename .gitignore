@@ -179,5 +179,4 @@ Planet/third_party/ProcessDAG/x64/
 packages/
 
 
-# Local Visual Studio solution
-Planet.sln
+# The canonical Visual Studio solution is tracked at Planet/Planet.sln.

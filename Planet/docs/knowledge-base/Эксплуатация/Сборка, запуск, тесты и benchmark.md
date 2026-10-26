@@ -6,9 +6,9 @@ tags: [gamenew, build, tests, benchmark]
 
 ## Solution и project
 
-- Основной solution: `Planet.sln` в корне репозитория, на уровень выше этого каталога.
+- Основной solution: `Planet/Planet.sln`.
 - Основной project: `Planet/Planet.vcxproj`, конфигурации Debug/Release x64, MSVC v143 и Qt 6.8.
-- `GameNew.sln` и `GameNew.vcxproj` сохранены как историческая альтернативная конфигурация. Новые исходники и ресурсы добавлять в `Planet.vcxproj` и `Planet.vcxproj.filters`.
+- Исходники и ресурсы регистрируются в `Planet.vcxproj` и `Planet.vcxproj.filters`.
 - Include paths: project root, `glm`, `include`, `third_party/ProcessDAG/include`.
 - Libraries: `glew32`, `glfw3dll`, `opengl32`, `freetype`; UI использует Qt/MSBuild integration.
 

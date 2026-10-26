@@ -1,82 +1,31 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>qml;cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
     <Filter Include="Resource Files">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>qrc;rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="core">
-      <UniqueIdentifier>{1C0B8D1F-6F7D-4D65-B7E6-7F1D0D1CFA0A}</UniqueIdentifier>
+    <Filter Include="Form Files">
+      <UniqueIdentifier>{99349809-55BA-4b9d-BF79-8FDBB0286EB3}</UniqueIdentifier>
+      <Extensions>ui</Extensions>
     </Filter>
-    <Filter Include="contributor">
-      <UniqueIdentifier>{9CD049C3-2670-4A8B-9274-10A0BEBA3028}</UniqueIdentifier>
+    <Filter Include="Translation Files">
+      <UniqueIdentifier>{639EADAA-A684-42e4-A9AD-28FC9BCB8F7C}</UniqueIdentifier>
+      <Extensions>ts</Extensions>
     </Filter>
-    <Filter Include="controllers">
-      <UniqueIdentifier>{4C5AD050-5C91-44F9-9D7B-6B9D2D4D310E}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="ui">
-      <UniqueIdentifier>{6D5A7D60-9C7F-4E9E-B2B1-AD5F5E24D8BA}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="renderers">
-      <UniqueIdentifier>{A2D9F7D2-AD6A-4D1E-9E1F-52176B67DC2B}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="generation">
-      <UniqueIdentifier>{0F9D2056-2406-4B45-9EDE-5A8E2F3B2FBC}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="generation\MeshGenerators">
-      <UniqueIdentifier>{ACF2E18C-1BF3-4D0A-9D89-2DD1D0E80F2B}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="model">
-      <UniqueIdentifier>{CB7F9A11-ED4F-4E1C-9A69-9D8C0D6C7E22}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="resources">
-      <UniqueIdentifier>{4B660D4E-5C18-468F-AC33-DC0A5C641125}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="resources\water">
-      <UniqueIdentifier>{018E98B5-D516-4A62-A138-999BB7888F50}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="tools">
-      <UniqueIdentifier>{A1D8B7BA-57E7-4D5E-B099-1E4A1CDBB361}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="tools\converters">
-      <UniqueIdentifier>{99bd33bc-903b-468c-91e6-ce15f19cd9e9}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="ECS">
-      <UniqueIdentifier>{0e25f6f5-2a9f-4f6f-9e05-0e7c1b9e8d42}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="scene">
-      <UniqueIdentifier>{4f6fe7fd-5d6b-44ac-bd33-3b2397333bc8}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="docs">
-      <UniqueIdentifier>{abf60fe6-6894-4c35-80cc-3ec33692449e}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="tests">
-      <UniqueIdentifier>{66922ee6-bff0-415e-996a-f4b02002e8e4}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="dag">
-      <UniqueIdentifier>{6A5F233F-F1A3-4F65-9671-5B3435B61A59}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="ProcessDAG">
-      <UniqueIdentifier>{2D8102F4-B3EA-4BFD-940C-B01C1F5E9225}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="ProcessDAG\boundary">
-      <UniqueIdentifier>{56FE4F77-C3B1-42A2-9CE0-FD164BAF5820}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="ProcessDAG\core">
-      <UniqueIdentifier>{0D7B611D-4D65-4A89-A758-E17110AE1680}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="ProcessDAG\DAG">
-      <UniqueIdentifier>{8245E20C-BA2E-4BF4-BCE8-7901780F6588}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="ProcessDAG\include">
-      <UniqueIdentifier>{D883E0D9-B293-4A65-8A09-11D8C051B9AA}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="ProcessDAG\include\proc">
-      <UniqueIdentifier>{6834F100-F38D-4C3C-B3D1-410A53F04C39}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="ProcessDAG\proc">
-      <UniqueIdentifier>{E20C0472-7567-4218-BE26-B299D3A64A1D}</UniqueIdentifier>
-    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <QtUic Include="Planet.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="resources\Planet.qrc">
@@ -84,668 +33,471 @@
     </QtRcc>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="core\main.cpp">
-      <Filter>core</Filter>
-    </ClCompile>
     <ClCompile Include="contributor\ContributorAsset.cpp">
-      <Filter>contributor</Filter>
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="contributor\ContributorParticles.cpp">
-      <Filter>contributor</Filter>
-    </ClCompile>
-    <ClCompile Include="dag\DagTerrainBackend.cpp">
-      <Filter>dag</Filter>
-    </ClCompile>
-    <ClCompile Include="dag\DagBackendBenchmark.cpp">
-      <Filter>dag</Filter>
-    </ClCompile>
-    <ClCompile Include="dag\DagPathBackend.cpp">
-      <Filter>dag</Filter>
-    </ClCompile>
-    <ClCompile Include="dag\DagSceneBackend.cpp">
-      <Filter>dag</Filter>
-    </ClCompile>
-    <ClCompile Include="dag\TerrainSerialization.cpp">
-      <Filter>dag</Filter>
-    </ClCompile>
-    <ClCompile Include="dag\ProcessDagSmoke.cpp">
-      <Filter>dag</Filter>
-    </ClCompile>
-    <ClCompile Include="third_party\ProcessDAG\proc\Proc.ixx">
-      <Filter>ProcessDAG\proc</Filter>
-    </ClCompile>
-    <ClCompile Include="third_party\ProcessDAG\proc\Proc.Core.ixx">
-      <Filter>ProcessDAG\proc</Filter>
-    </ClCompile>
-    <ClCompile Include="third_party\ProcessDAG\proc\Proc.Schema.ixx">
-      <Filter>ProcessDAG\proc</Filter>
-    </ClCompile>
-    <ClCompile Include="third_party\ProcessDAG\core\DataSpecV2.cpp">
-      <Filter>ProcessDAG\core</Filter>
-    </ClCompile>
-    <ClCompile Include="third_party\ProcessDAG\core\NodeFactory.cpp">
-      <Filter>ProcessDAG\core</Filter>
-    </ClCompile>
-    <ClCompile Include="third_party\ProcessDAG\DAG\Commit.cpp">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClCompile>
-    <ClCompile Include="third_party\ProcessDAG\DAG\DagEngine.cpp">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClCompile>
-    <ClCompile Include="third_party\ProcessDAG\proc\Proc.Logging.ixx">
-      <Filter>ProcessDAG\proc</Filter>
-    </ClCompile>
-    <ClCompile Include="third_party\ProcessDAG\boundary\Logger.cpp">
-      <Filter>ProcessDAG\boundary</Filter>
-    </ClCompile>
-    <ClCompile Include="third_party\ProcessDAG\proc\Proc.FileSchema.ixx">
-      <Filter>ProcessDAG\proc</Filter>
-    </ClCompile>
-    <ClCompile Include="third_party\ProcessDAG\proc\Proc.Scenario.ixx">
-      <Filter>ProcessDAG\proc</Filter>
-    </ClCompile>
-    <ClCompile Include="third_party\ProcessDAG\boundary\ScenarioReader.cpp">
-      <Filter>ProcessDAG\boundary</Filter>
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="controllers\CameraController.cpp">
-      <Filter>controllers</Filter>
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="controllers\HexSphereSceneController.cpp">
-      <Filter>controllers</Filter>
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="controllers\InputController.cpp">
-      <Filter>controllers</Filter>
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="controllers\PathBuilder.cpp">
-      <Filter>controllers</Filter>
+      <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="generation\ClimateBiomeGenerator.cpp">
-      <Filter>generation</Filter>
+    <ClCompile Include="core\main.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="generation\PerlinNoise.cpp">
-      <Filter>generation</Filter>
+    <ClCompile Include="culling\TerrainCulling.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="generation\TerrainGenerator.cpp">
-      <Filter>generation</Filter>
+    <ClCompile Include="dag\DagBackendBenchmark.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="generation\WaterWaveModel.cpp">
-      <Filter>generation</Filter>
+    <ClCompile Include="dag\DagTerrainBackend.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="generation\MeshGenerators\SelectionOutlineGenerator.cpp">
-      <Filter>generation\MeshGenerators</Filter>
-    </ClCompile>
-    <ClCompile Include="generation\MeshGenerators\TerrainMeshGenerator.cpp">
-      <Filter>generation\MeshGenerators</Filter>
-    </ClCompile>
-    <ClCompile Include="generation\MeshGenerators\WaterMeshGenerator.cpp">
-      <Filter>generation\MeshGenerators</Filter>
-    </ClCompile>
-    <ClCompile Include="model\CarModelHandler.cpp">
-      <Filter>model</Filter>
-    </ClCompile>
-    <ClCompile Include="model\FactoryModelHandler.cpp">
-      <Filter>model</Filter>
-    </ClCompile>
-    <ClCompile Include="model\MineModelHandler.cpp">
-      <Filter>model</Filter>
-    </ClCompile>
-    <ClCompile Include="model\HexSphereModel.cpp">
-      <Filter>model</Filter>
-    </ClCompile>
-    <ClCompile Include="model\ModelHandler.cpp">
-      <Filter>model</Filter>
-    </ClCompile>
-    <ClCompile Include="renderers\EntityRenderer.cpp">
-      <Filter>renderers</Filter>
-    </ClCompile>
-    <ClCompile Include="renderers\ParticleRenderer.cpp">
-      <Filter>renderers</Filter>
-    </ClCompile>
-    <ClCompile Include="renderers\HexSphereRenderer.cpp">
-      <Filter>renderers</Filter>
-    </ClCompile>
-    <ClCompile Include="renderers\TerrainRenderer.cpp">
-      <Filter>renderers</Filter>
-    </ClCompile>
-    <ClCompile Include="renderers\TerrainTessellator.cpp">
-      <Filter>renderers</Filter>
-    </ClCompile>
-    <ClCompile Include="renderers\PlanetSurfaceAtlasPass.cpp">
-      <Filter>renderers</Filter>
-    </ClCompile>
-    <ClCompile Include="renderers\WaterRenderer.cpp">
-      <Filter>renderers</Filter>
-    </ClCompile>
-    <ClCompile Include="ui\HexSphereWidget.cpp">
-      <Filter>ui</Filter>
-    </ClCompile>
-    <ClCompile Include="ui\MainWindow.cpp">
-      <Filter>ui</Filter>
-    </ClCompile>
-    <ClCompile Include="ui\OverlayRenderer.cpp">
-      <Filter>ui</Filter>
-    </ClCompile>
-    <ClCompile Include="ui\PerformanceStats.cpp">
-      <Filter>ui</Filter>
-    </ClCompile>
-    <ClCompile Include="ui\PlanetSettingsPanel.cpp">
-      <Filter>ui</Filter>
-    </ClCompile>
-    <ClCompile Include="tests\WaterWaveModelTests.cpp">
-      <Filter>tests</Filter>
-    </ClCompile>
-    <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp">
-      <Filter>tests</Filter>
-    </ClCompile>
-    <ClCompile Include="ECS\ComponentStorage.cpp">
-      <Filter>ECS</Filter>
-    </ClCompile>
-    <ClCompile Include="scene\Entity.cpp">
-      <Filter>scene</Filter>
-    </ClCompile>
-    <ClCompile Include="scene\SceneGraph.cpp">
-      <Filter>scene</Filter>
+    <ClCompile Include="dag\DagSceneBackend.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="dag\DataAdapters.cpp">
-      <Filter>dag</Filter>
-    </ClCompile>
-    <ClCompile Include="tools\model_cache_test.cpp">
-      <Filter>tools</Filter>
-    </ClCompile>
-    <ClCompile Include="model\OreSystem.cpp">
-      <Filter>model</Filter>
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="dag\EngineFacade.cpp">
-      <Filter>dag</Filter>
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="dag\LegacyTerrainBackend.cpp">
-      <Filter>dag</Filter>
+      <Filter>Source Files</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="core\AppViewConfig.h">
-      <Filter>core</Filter>
-    </ClInclude>
-    <ClInclude Include="contributor\ContributorAsset.h">
-      <Filter>contributor</Filter>
-    </ClInclude>
-    <ClInclude Include="contributor\ContributorParticles.h">
-      <Filter>contributor</Filter>
-    </ClInclude>
-    <ClInclude Include="controllers\CameraController.h">
-      <Filter>controllers</Filter>
-    </ClInclude>
-    <ClInclude Include="controllers\HexSphereSceneController.h">
-      <Filter>controllers</Filter>
-    </ClInclude>
-    <ClInclude Include="controllers\InputController.h">
-      <Filter>controllers</Filter>
-    </ClInclude>
-    <ClInclude Include="controllers\PathBuilder.h">
-      <Filter>controllers</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\DagTerrainBackend.h">
-      <Filter>dag</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\DagBackendBenchmark.h">
-      <Filter>dag</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\DagPathBackend.h">
-      <Filter>dag</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\DagSceneBackend.h">
-      <Filter>dag</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\TerrainSerialization.h">
-      <Filter>dag</Filter>
-    </ClInclude>
-    <ClInclude Include="generation\ClimateBiomeGenerator.h">
-      <Filter>generation</Filter>
-    </ClInclude>
-    <ClInclude Include="generation\PerlinNoise.h">
-      <Filter>generation</Filter>
-    </ClInclude>
-    <ClInclude Include="generation\TerrainGenerator.h">
-      <Filter>generation</Filter>
-    </ClInclude>
-    <ClInclude Include="generation\WaterWaveModel.h">
-      <Filter>generation</Filter>
-    </ClInclude>
-    <ClInclude Include="generation\MeshGenerators\SelectionOutlineGenerator.h">
-      <Filter>generation\MeshGenerators</Filter>
-    </ClInclude>
-    <ClInclude Include="generation\MeshGenerators\TerrainMeshGenerator.h">
-      <Filter>generation\MeshGenerators</Filter>
-    </ClInclude>
-    <ClInclude Include="generation\MeshGenerators\WaterMeshGenerator.h">
-      <Filter>generation\MeshGenerators</Filter>
-    </ClInclude>
-    <ClInclude Include="model\CarModelHandler.h">
-      <Filter>model</Filter>
-    </ClInclude>
-    <ClInclude Include="model\FactoryModelHandler.h">
-      <Filter>model</Filter>
-    </ClInclude>
-    <ClInclude Include="model\MineModelHandler.h">
-      <Filter>model</Filter>
-    </ClInclude>
-    <ClInclude Include="model\DebugModel.h">
-      <Filter>model</Filter>
-    </ClInclude>
-    <ClInclude Include="model\HexSphereModel.h">
-      <Filter>model</Filter>
-    </ClInclude>
-    <ClInclude Include="model\ModelHandler.h">
-      <Filter>model</Filter>
-    </ClInclude>
-    <ClInclude Include="model\SceneEntity.h">
-      <Filter>model</Filter>
-    </ClInclude>
-    <ClInclude Include="model\SurfacePlacement.h">
-      <Filter>model</Filter>
-    </ClInclude>
-    <ClInclude Include="model\simple3d_parser.hpp">
-      <Filter>model</Filter>
-    </ClInclude>
-    <ClInclude Include="renderers\EntityRenderer.h">
-      <Filter>renderers</Filter>
-    </ClInclude>
-    <ClInclude Include="renderers\ParticleRenderer.h">
-      <Filter>renderers</Filter>
-    </ClInclude>
-    <ClInclude Include="renderers\HexSphereRenderer.h">
-      <Filter>renderers</Filter>
-    </ClInclude>
-    <ClInclude Include="renderers\TerrainRenderer.h">
-      <Filter>renderers</Filter>
-    </ClInclude>
-    <ClInclude Include="renderers\TerrainTessellator.h">
-      <Filter>renderers</Filter>
-    </ClInclude>
-    <ClInclude Include="renderers\PlanetSurfaceAtlasPass.h">
-      <Filter>renderers</Filter>
-    </ClInclude>
-    <ClInclude Include="renderers\WaterRenderer.h">
-      <Filter>renderers</Filter>
-    </ClInclude>
-    <QtMoc Include="ui\HexSphereWidget.h">
-      <Filter>ui</Filter>
-    </QtMoc>
-    <QtMoc Include="ui\MainWindow.h">
-      <Filter>ui</Filter>
-    </QtMoc>
-    <ClInclude Include="ui\OverlayRenderer.h">
-      <Filter>ui</Filter>
-    </ClInclude>
-    <ClInclude Include="ui\PerformanceStats.h">
-      <Filter>ui</Filter>
-    </ClInclude>
-    <QtMoc Include="ui\PlanetSettingsPanel.h">
-      <Filter>ui</Filter>
-    </QtMoc>
-    <ClInclude Include="tests\WaterWaveModelTests.h">
-      <Filter>tests</Filter>
-    </ClInclude>
-    <ClInclude Include="tests\ClimateBiomeGeneratorTests.h">
-      <Filter>tests</Filter>
-    </ClInclude>
-    <ClInclude Include="ECS\Collider.h">
-      <Filter>ECS</Filter>
-    </ClInclude>
-    <ClInclude Include="ECS\ComponentStorage.h">
-      <Filter>ECS</Filter>
-    </ClInclude>
-    <ClInclude Include="ECS\Entity.h">
-      <Filter>ECS</Filter>
-    </ClInclude>
-    <ClInclude Include="ECS\Material.h">
-      <Filter>ECS</Filter>
-    </ClInclude>
-    <ClInclude Include="ECS\Mesh.h">
-      <Filter>ECS</Filter>
-    </ClInclude>
-    <ClInclude Include="ECS\Script.h">
-      <Filter>ECS</Filter>
-    </ClInclude>
-    <ClInclude Include="ECS\Transform.h">
-      <Filter>ECS</Filter>
-    </ClInclude>
-    <ClInclude Include="scene\Entity.h">
-      <Filter>scene</Filter>
-    </ClInclude>
-    <ClInclude Include="scene\Interaction.h">
-      <Filter>scene</Filter>
-    </ClInclude>
-    <ClInclude Include="scene\SceneGraph.h">
-      <Filter>scene</Filter>
-    </ClInclude>
-    <ClInclude Include="scene\Transform.h">
-      <Filter>scene</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\DataAdapters.h">
-      <Filter>dag</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\include\proc\ProcessDag.h">
-      <Filter>ProcessDAG\include\proc</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\include\proc\Schema.h">
-      <Filter>ProcessDAG\include\proc</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\include\proc\Logging.h">
-      <Filter>ProcessDAG\include\proc</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\include\proc\FileSchema.h">
-      <Filter>ProcessDAG\include\proc</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\include\proc\ScenarioReader.h">
-      <Filter>ProcessDAG\include\proc</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\core\BuiltinRegistries.h">
-      <Filter>ProcessDAG\core</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\core\GraphSchema.h">
-      <Filter>ProcessDAG\core</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\core\GraphSchemaCompile.h">
-      <Filter>ProcessDAG\core</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\core\NodeFactory.h">
-      <Filter>ProcessDAG\core</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\core\SpecBinding.h">
-      <Filter>ProcessDAG\core</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\Commit.h">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\CoreV2.h">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\DagEngine.h">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\DagEngine.inl">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\DagStorage.h">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\Executor.h">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\LayeredState.h">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\MemoryPolicy.h">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\Planner.h">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\PortStates.h">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\ProcTypes.h">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\RuntimeOperationRegistry.h">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\StateTypes.h">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="third_party\ProcessDAG\DAG\StoreTypes.h">
-      <Filter>ProcessDAG\DAG</Filter>
-    </ClInclude>
-    <ClInclude Include="model\OreSystem.h">
-      <Filter>model</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\DebugOverlay.h">
-      <Filter>dag</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\EngineFacade.h">
-      <Filter>dag</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\LegacyTerrainBackend.h">
-      <Filter>dag</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\TerrainBackendContract.h">
-      <Filter>dag</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\TerrainBackendSelector.h">
-      <Filter>dag</Filter>
-    </ClInclude>
-    <ClInclude Include="dag\TerrainBackendTypes.h">
-      <Filter>dag</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="resources\HexSphereWidget_shaders.h">
-      <Filter>resources</Filter>
-    </None>
-    <None Include="resources\water\water_common.glsl">
-      <Filter>resources\water</Filter>
-    </None>
-    <None Include="resources\water\water_intersection.glsl">
-      <Filter>resources\water</Filter>
-    </None>
-    <None Include="resources\water\water_shading.glsl">
-      <Filter>resources\water</Filter>
-    </None>
-    <None Include="resources\water\water_shell.frag">
-      <Filter>resources\water</Filter>
-    </None>
-    <None Include="resources\water\water_shell.vert">
-      <Filter>resources\water</Filter>
-    </None>
-    <None Include="resources\water\water_surface.glsl">
-      <Filter>resources\water</Filter>
-    </None>
-    <None Include="docs\rendering_refactor_task.md">
-      <Filter>docs</Filter>
-    </None>
-    <None Include="trunsuction_plan.md">
-      <Filter>docs</Filter>
-    </None>
-    <None Include="third_party\ProcessDAG\ProcessDag.Embedded.props">
-      <Filter>ProcessDAG\proc</Filter>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <Filter Include="culling">
-      <UniqueIdentifier>{AD51752B-0D93-4C3F-A6CC-CBDF53E3C808}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="docs\knowledge-base">
-      <UniqueIdentifier>{D72AAB11-AC5B-418D-97BF-0486A5549DD5}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="docs\knowledge-base\Архитектура">
-      <UniqueIdentifier>{3CB47CE7-9202-4585-86C4-7A63E3A7785C}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="docs\knowledge-base\Взаимодействие">
-      <UniqueIdentifier>{E916FDDE-6311-4064-8C3B-36E2E06CFAE9}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="docs\knowledge-base\Планета">
-      <UniqueIdentifier>{F24B7AE1-C649-4CCE-B685-1B64CB0EBB03}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="docs\knowledge-base\Рендеринг">
-      <UniqueIdentifier>{6E54F072-9D24-4565-B01A-CCAC1542891C}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="docs\knowledge-base\Эксплуатация">
-      <UniqueIdentifier>{E107B703-CF13-4E25-BE23-1751012B56D1}</UniqueIdentifier>
-    </Filter>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="contributor\TreeBuilder.cpp">
-      <Filter>contributor</Filter>
+    <ClCompile Include="dag\ProcessDagSmoke.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
-    <ClInclude Include="contributor\TreeBuilder.h">
-      <Filter>contributor</Filter>
-    </ClInclude>
-    <ClInclude Include="core\DebugOverlay.h">
-      <Filter>core</Filter>
-    </ClInclude>
-    <ClInclude Include="core\EngineFacade.h">
-      <Filter>core</Filter>
-    </ClInclude>
-    <ClInclude Include="core\PlayerResources.h">
-      <Filter>core</Filter>
-    </ClInclude>
-    <ClCompile Include="culling\TerrainCulling.cpp">
-      <Filter>culling</Filter>
+    <ClCompile Include="ECS\ComponentStorage.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
-    <ClInclude Include="culling\TerrainCulling.h">
-      <Filter>culling</Filter>
-    </ClInclude>
-    <None Include="docs\knowledge-base\00 - Главная.md">
-      <Filter>docs\knowledge-base</Filter>
-    </None>
-    <None Include="docs\knowledge-base\01 - Быстрый старт и runtime-карта.md">
-      <Filter>docs\knowledge-base</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Архитектура\Карта модулей.md">
-      <Filter>docs\knowledge-base\Архитектура</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Архитектура\Контракты и потоки данных.md">
-      <Filter>docs\knowledge-base\Архитектура</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Архитектура\Системная архитектура.md">
-      <Filter>docs\knowledge-base\Архитектура</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Архитектура\ECS и жизненный цикл сущностей.md">
-      <Filter>docs\knowledge-base\Архитектура</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Архитектура\Legacy и DAG бэкенды.md">
-      <Filter>docs\knowledge-base\Архитектура</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Взаимодействие\Ввод, picking и выделение клеток.md">
-      <Filter>docs\knowledge-base\Взаимодействие</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Взаимодействие\Поиск пути и анимация движения.md">
-      <Filter>docs\knowledge-base\Взаимодействие</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Взаимодействие\Постройки и сущности.md">
-      <Filter>docs\knowledge-base\Взаимодействие</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Планета\Меш рельефа, вода и culling.md">
-      <Filter>docs\knowledge-base\Планета</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Планета\Руда — старая и текущая реализация.md">
-      <Filter>docs\knowledge-base\Планета</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Планета\Топология и процедурная генерация.md">
-      <Filter>docs\knowledge-base\Планета</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Рендеринг\Каталог анимаций.md">
-      <Filter>docs\knowledge-base\Рендеринг</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Рендеринг\Конвейер рендеринга.md">
-      <Filter>docs\knowledge-base\Рендеринг</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Рендеринг\Машинка, деревья и модели.md">
-      <Filter>docs\knowledge-base\Рендеринг</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Эксплуатация\Известные ограничения и техдолг.md">
-      <Filter>docs\knowledge-base\Эксплуатация</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Эксплуатация\Индекс исходников.md">
-      <Filter>docs\knowledge-base\Эксплуатация</Filter>
-    </None>
-    <None Include="docs\knowledge-base\Эксплуатация\Сборка, запуск, тесты и benchmark.md">
-      <Filter>docs\knowledge-base\Эксплуатация</Filter>
-    </None>
-    <None Include="docs\knowledge-base\README.md">
-      <Filter>docs\knowledge-base</Filter>
-    </None>
-    <None Include="docs\planet_reorg_tasks.md">
-      <Filter>docs</Filter>
-    </None>
-    <None Include="docs\scene_example.md">
-      <Filter>docs</Filter>
-    </None>
-    <ClInclude Include="ECS\Animation.h">
-      <Filter>ECS</Filter>
-    </ClInclude>
-    <ClCompile Include="generation\OreGenerator.cpp">
-      <Filter>generation</Filter>
+    <ClCompile Include="generation\ClimateBiomeGenerator.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
-    <ClInclude Include="generation\OreGenerator.h">
-      <Filter>generation</Filter>
-    </ClInclude>
-    <ClCompile Include="tests\dag_backend_benchmark.cpp">
-      <Filter>tests</Filter>
+    <ClCompile Include="generation\PerlinNoise.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="tests\scene_integration.cpp">
-      <Filter>tests</Filter>
+    <ClCompile Include="generation\TerrainGenerator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="generation\WaterWaveModel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="generation\MeshGenerators\SelectionOutlineGenerator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="generation\MeshGenerators\TerrainMeshGenerator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="generation\MeshGenerators\WaterMeshGenerator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="generation\MeshGenerators\WireMeshGenerator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="model\CarModelHandler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="model\FactoryModelHandler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="model\HexSphereModel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="model\MineModelHandler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="model\ModelHandler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\EntityRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\HexSphereRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\ParticleRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\TerrainRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\TerrainTessellator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\WaterRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="renderers\PlanetSurfaceAtlasPass.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\WaterWaveModelTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="scene\Entity.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="scene\SceneGraph.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\boundary\Logger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\boundary\ScenarioReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\core\DataSpecV2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\core\NodeFactory.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\DAG\Commit.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\ProcessDAG\DAG\DagEngine.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="tools\converters\DataAdapters.cpp">
-      <Filter>tools\converters</Filter>
+      <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ui\HexSphereWidget.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ui\MainWindow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ui\OverlayRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ui\PerformanceStats.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ui\PlanetSettingsPanel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="dag\DagPathBackend.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="dag\TerrainSerialization.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="contributor\ContributorAsset.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="contributor\ContributorParticles.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="controllers\CameraController.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="controllers\HexSphereSceneController.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="controllers\InputController.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="controllers\PathBuilder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="core\AppViewConfig.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\DebugOverlay.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="culling\TerrainCulling.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\DagBackendBenchmark.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\DagTerrainBackend.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\DagSceneBackend.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\DataAdapters.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\EngineFacade.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\LegacyTerrainBackend.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\TerrainBackendContract.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\TerrainBackendSelector.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\TerrainBackendTypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\Animation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\Collider.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\ComponentStorage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\Material.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\Mesh.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\Script.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ECS\Transform.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="generation\ClimateBiomeGenerator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="generation\PerlinNoise.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="generation\TerrainGenerator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="generation\WaterWaveModel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="generation\MeshGenerators\SelectionOutlineGenerator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="generation\MeshGenerators\TerrainMeshGenerator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="generation\MeshGenerators\WaterMeshGenerator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="generation\MeshGenerators\WireMeshGenerator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="model\CarModelHandler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="model\DebugModel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="model\FactoryModelHandler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="model\HexSphereModel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="model\MineModelHandler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="model\ModelHandler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="model\SceneEntity.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="model\simple3d_parser.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="model\SurfacePlacement.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\EntityRenderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\HexSphereRenderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\ParticleRenderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\TerrainRenderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\TerrainTessellator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\WaterRenderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderers\PlanetSurfaceAtlasPass.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\ClimateBiomeGeneratorTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\WaterWaveModelTests.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="scene\Entity.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="scene\Interaction.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="scene\SceneGraph.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="scene\Transform.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\boundary\Logger.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\boundary\ScenarioReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\core\BuiltinRegistries.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\core\GraphSchema.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\core\GraphSchemaCompile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\core\NodeFactory.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\core\SpecBinding.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\Commit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\CoreV2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\DagEngine.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\Executor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\LayeredState.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\MemoryPolicy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\Planner.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\PortStates.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\ProcTypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\RuntimeOperationRegistry.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\StateTypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\DAG\StoreTypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\include\proc\FileSchema.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\include\proc\Logging.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\include\proc\ProcessDag.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\include\proc\ScenarioReader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\ProcessDAG\include\proc\Schema.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="tools\converters\DataAdapters.h">
-      <Filter>tools\converters</Filter>
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ui\OverlayRenderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ui\PerformanceStats.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="resources\HexSphereWidget_shaders.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\DagPathBackend.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dag\TerrainSerialization.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="tests\DagTransportBenchmark.cpp"><Filter>tests</Filter></ClCompile>
-    <ClInclude Include="tests\DagTransportBenchmark.h"><Filter>tests</Filter></ClInclude>
+    <ClCompile Include="contributor\TreeBuilder.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="model\OreSystem.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="renderers\SurfaceAtlasMeshBuilder.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="tests\DagTransportBenchmark.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="tests\WaterScreenPassTests.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClInclude Include="contributor\TreeBuilder.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="core\DebugOverlay.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="core\EngineFacade.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="core\PlayerResources.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="dag\InProcessDagPayloads.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="model\OreSystem.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="renderers\SurfaceAtlasMeshBuilder.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="tests\DagTransportBenchmark.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="tests\WaterScreenPassTests.h"><Filter>Header Files</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="dag\InProcessDagPayloads.h"><Filter>dag</Filter></ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <Filter Include="docs\benchmarks"><UniqueIdentifier>{96D0AFC7-16CF-4F34-9777-F1916B105C54}</UniqueIdentifier></Filter>
-    <Filter Include="docs\benchmarks\2026-10-21-json-removal"><UniqueIdentifier>{C1DD2202-9EC8-4968-80D6-F57BFB897C52}</UniqueIdentifier></Filter>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="docs\benchmarks\2026-10-21-json-removal\after-1.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
-    <None Include="docs\benchmarks\2026-10-21-json-removal\after-2.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
-    <None Include="docs\benchmarks\2026-10-21-json-removal\after-3.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
-    <None Include="docs\benchmarks\2026-10-21-json-removal\all-json-1.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
-    <None Include="docs\benchmarks\2026-10-21-json-removal\all-json-2.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
-    <None Include="docs\benchmarks\2026-10-21-json-removal\all-json-3.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
-    <None Include="docs\benchmarks\2026-10-21-json-removal\hashes.json"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
-    <None Include="docs\benchmarks\2026-10-21-json-removal\machine.json"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
-    <None Include="docs\benchmarks\2026-10-21-json-removal\README.md"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
-    <None Include="docs\benchmarks\2026-10-21-json-removal\summary.csv"><Filter>docs\benchmarks\2026-10-21-json-removal</Filter></None>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="tests\WaterScreenPassTests.cpp">
-      <Filter>tests</Filter>
-    </ClCompile>
-    <ClInclude Include="tests\WaterScreenPassTests.h">
-      <Filter>tests</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="docs\benchmarks\2026-10-21-water-screen\memory-summary.csv">
-      <Filter>docs</Filter>
+    <None Include="resources\water\water_common.glsl">
+      <Filter>Resource Files</Filter>
     </None>
-    <None Include="docs\benchmarks\2026-10-21-water-screen\metadata.json">
-      <Filter>docs</Filter>
+    <None Include="resources\water\water_intersection.glsl">
+      <Filter>Resource Files</Filter>
     </None>
-    <None Include="docs\benchmarks\2026-10-21-water-screen\summary.csv">
-      <Filter>docs</Filter>
+    <None Include="resources\water\water_shading.glsl">
+      <Filter>Resource Files</Filter>
     </None>
-    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run1-memory.csv">
-      <Filter>docs</Filter>
+    <None Include="resources\water\water_shell.frag">
+      <Filter>Resource Files</Filter>
     </None>
-    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run1-timing.csv">
-      <Filter>docs</Filter>
+    <None Include="resources\water\water_shell.vert">
+      <Filter>Resource Files</Filter>
     </None>
-    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run2-memory.csv">
-      <Filter>docs</Filter>
-    </None>
-    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run2-timing.csv">
-      <Filter>docs</Filter>
-    </None>
-    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run3-memory.csv">
-      <Filter>docs</Filter>
-    </None>
-    <None Include="docs\benchmarks\2026-10-21-water-screen\water-run3-timing.csv">
-      <Filter>docs</Filter>
+    <None Include="resources\water\water_surface.glsl">
+      <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="renderers\SurfaceAtlasMeshBuilder.cpp"><Filter>renderers</Filter></ClCompile>
-    <ClInclude Include="renderers\SurfaceAtlasMeshBuilder.h"><Filter>renderers</Filter></ClInclude>
+    <QtMoc Include="ui\HexSphereWidget.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="ui\MainWindow.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="ui\PlanetSettingsPanel.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
   </ItemGroup>
 </Project>
