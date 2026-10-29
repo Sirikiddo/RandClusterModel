@@ -1,0 +1,79 @@
+category,scenario,operation,backend,iteration,elapsed_ms,cell_count,compatible,selection_count,tree_count,model_count,executed_nodes,skipped_guard_nodes,cache_hits,cache_misses,plan_cache_hits,plan_cache_misses
+"terrain","cold climate L2","full_regenerate","DAG terrain",0,4.1304,162,1,0,0,0,0,0,0,0,0,0
+"terrain","cold climate L2","full_regenerate","Legacy terrain",0,3.2177,162,1,0,0,0,0,0,0,0,0,0
+"terrain","cold climate L2","full_regenerate","DAG terrain",1,4.6002,162,1,0,0,0,0,0,0,0,0,0
+"terrain","cold climate L2","full_regenerate","Legacy terrain",1,3.5193,162,1,0,0,0,0,0,0,0,0,0
+"terrain","cold climate L2","full_regenerate","DAG terrain",2,4.7970,162,1,0,0,0,0,0,0,0,0,0
+"terrain","cold climate L2","full_regenerate","Legacy terrain",2,3.6919,162,1,0,0,0,0,0,0,0,0,0
+"terrain","cold climate L2","full_regenerate","DAG terrain",3,4.4372,162,1,0,0,0,0,0,0,0,0,0
+"terrain","cold climate L2","full_regenerate","Legacy terrain",3,3.5016,162,1,0,0,0,0,0,0,0,0,0
+"terrain","cold climate L2","full_regenerate","DAG terrain",4,4.4247,162,1,0,0,0,0,0,0,0,0,0
+"terrain","cold climate L2","full_regenerate","Legacy terrain",4,3.6106,162,1,0,0,0,0,0,0,0,0,0
+"scene-derived","cold climate L2","baseline","DAG scene",0,1.4801,162,1,10,0,1,3,0,0,3,0,1
+"scene-derived","cold climate L2","baseline","Legacy scene",0,7.9470,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","cold climate L2","repeat_same","DAG scene",1,0.0504,162,1,10,0,1,0,3,0,0,1,0
+"scene-derived","cold climate L2","repeat_same","Legacy scene",1,9.7028,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","cold climate L2","selection_change","DAG scene",2,0.4463,162,1,10,0,1,1,2,0,1,1,0
+"scene-derived","cold climate L2","selection_change","Legacy scene",2,7.8791,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","cold climate L2","selection_revert","DAG scene",3,0.0574,162,1,10,0,1,1,2,1,0,1,0
+"scene-derived","cold climate L2","selection_revert","Legacy scene",3,7.9256,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","cold climate L2","visual_change","DAG scene",4,0.8861,162,1,10,0,1,2,1,0,2,1,0
+"scene-derived","cold climate L2","visual_change","Legacy scene",4,7.9654,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","cold climate L2","visual_revert","DAG scene",5,0.0533,162,1,10,0,1,2,1,2,0,1,0
+"scene-derived","cold climate L2","visual_revert","Legacy scene",5,7.6941,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","cold climate L2","terrain_edit","DAG scene",6,1.2467,162,1,10,0,1,3,0,0,3,1,0
+"scene-derived","cold climate L2","terrain_edit","Legacy scene",6,7.7053,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","cold climate L2","terrain_revert","DAG scene",7,0.0456,162,1,10,0,1,3,0,3,0,1,0
+"scene-derived","cold climate L2","terrain_revert","Legacy scene",7,7.5486,162,1,10,0,0,0,0,0,0,0,0
+"terrain","changed seed L2","full_regenerate","DAG terrain",0,4.5579,162,1,0,0,0,0,0,0,0,0,0
+"terrain","changed seed L2","full_regenerate","Legacy terrain",0,4.0032,162,1,0,0,0,0,0,0,0,0,0
+"terrain","changed seed L2","full_regenerate","DAG terrain",1,4.6126,162,1,0,0,0,0,0,0,0,0,0
+"terrain","changed seed L2","full_regenerate","Legacy terrain",1,3.4773,162,1,0,0,0,0,0,0,0,0,0
+"terrain","changed seed L2","full_regenerate","DAG terrain",2,4.5173,162,1,0,0,0,0,0,0,0,0,0
+"terrain","changed seed L2","full_regenerate","Legacy terrain",2,3.3951,162,1,0,0,0,0,0,0,0,0,0
+"terrain","changed seed L2","full_regenerate","DAG terrain",3,4.4612,162,1,0,0,0,0,0,0,0,0,0
+"terrain","changed seed L2","full_regenerate","Legacy terrain",3,3.3612,162,1,0,0,0,0,0,0,0,0,0
+"terrain","changed seed L2","full_regenerate","DAG terrain",4,4.3927,162,1,0,0,0,0,0,0,0,0,0
+"terrain","changed seed L2","full_regenerate","Legacy terrain",4,3.4426,162,1,0,0,0,0,0,0,0,0,0
+"scene-derived","changed seed L2","baseline","DAG scene",0,1.2343,162,1,10,0,1,3,0,0,3,0,1
+"scene-derived","changed seed L2","baseline","Legacy scene",0,8.0564,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","changed seed L2","repeat_same","DAG scene",1,0.0370,162,1,10,0,1,0,3,0,0,1,0
+"scene-derived","changed seed L2","repeat_same","Legacy scene",1,7.5412,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","changed seed L2","selection_change","DAG scene",2,0.4621,162,1,10,0,1,1,2,0,1,1,0
+"scene-derived","changed seed L2","selection_change","Legacy scene",2,7.6508,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","changed seed L2","selection_revert","DAG scene",3,0.0452,162,1,10,0,1,1,2,1,0,1,0
+"scene-derived","changed seed L2","selection_revert","Legacy scene",3,7.6143,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","changed seed L2","visual_change","DAG scene",4,0.7710,162,1,10,0,1,2,1,0,2,1,0
+"scene-derived","changed seed L2","visual_change","Legacy scene",4,7.4229,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","changed seed L2","visual_revert","DAG scene",5,0.0512,162,1,10,0,1,2,1,2,0,1,0
+"scene-derived","changed seed L2","visual_revert","Legacy scene",5,7.4088,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","changed seed L2","terrain_edit","DAG scene",6,1.3802,162,1,10,0,1,3,0,0,3,1,0
+"scene-derived","changed seed L2","terrain_edit","Legacy scene",6,7.7928,162,1,10,0,0,0,0,0,0,0,0
+"scene-derived","changed seed L2","terrain_revert","DAG scene",7,0.0692,162,1,10,0,1,3,0,3,0,1,0
+"scene-derived","changed seed L2","terrain_revert","Legacy scene",7,7.8913,162,1,10,0,0,0,0,0,0,0,0
+"terrain","perlin L3","full_regenerate","DAG terrain",0,14.0716,642,1,0,0,0,0,0,0,0,0,0
+"terrain","perlin L3","full_regenerate","Legacy terrain",0,10.6050,642,1,0,0,0,0,0,0,0,0,0
+"terrain","perlin L3","full_regenerate","DAG terrain",1,12.9328,642,1,0,0,0,0,0,0,0,0,0
+"terrain","perlin L3","full_regenerate","Legacy terrain",1,9.4441,642,1,0,0,0,0,0,0,0,0,0
+"terrain","perlin L3","full_regenerate","DAG terrain",2,13.6207,642,1,0,0,0,0,0,0,0,0,0
+"terrain","perlin L3","full_regenerate","Legacy terrain",2,9.4947,642,1,0,0,0,0,0,0,0,0,0
+"terrain","perlin L3","full_regenerate","DAG terrain",3,13.8920,642,1,0,0,0,0,0,0,0,0,0
+"terrain","perlin L3","full_regenerate","Legacy terrain",3,9.7195,642,1,0,0,0,0,0,0,0,0,0
+"terrain","perlin L3","full_regenerate","DAG terrain",4,13.7772,642,1,0,0,0,0,0,0,0,0,0
+"terrain","perlin L3","full_regenerate","Legacy terrain",4,9.2060,642,1,0,0,0,0,0,0,0,0,0
+"scene-derived","perlin L3","baseline","DAG scene",0,5.7537,642,1,10,145,1,3,0,0,3,0,1
+"scene-derived","perlin L3","baseline","Legacy scene",0,14.0014,642,1,10,119,0,0,0,0,0,0,0
+"scene-derived","perlin L3","repeat_same","DAG scene",1,0.0511,642,1,10,145,1,0,3,0,0,1,0
+"scene-derived","perlin L3","repeat_same","Legacy scene",1,14.5199,642,1,10,119,0,0,0,0,0,0,0
+"scene-derived","perlin L3","selection_change","DAG scene",2,1.5346,642,1,10,145,1,1,2,0,1,1,0
+"scene-derived","perlin L3","selection_change","Legacy scene",2,13.8274,642,1,10,119,0,0,0,0,0,0,0
+"scene-derived","perlin L3","selection_revert","DAG scene",3,0.0595,642,1,10,145,1,1,2,1,0,1,0
+"scene-derived","perlin L3","selection_revert","Legacy scene",3,13.7848,642,1,10,119,0,0,0,0,0,0,0
+"scene-derived","perlin L3","visual_change","DAG scene",4,2.9792,642,1,10,145,1,2,1,0,2,1,0
+"scene-derived","perlin L3","visual_change","Legacy scene",4,13.7771,642,1,10,119,0,0,0,0,0,0,0
+"scene-derived","perlin L3","visual_revert","DAG scene",5,0.0546,642,1,10,145,1,2,1,2,0,1,0
+"scene-derived","perlin L3","visual_revert","Legacy scene",5,13.9629,642,1,10,119,0,0,0,0,0,0,0
+"scene-derived","perlin L3","terrain_edit","DAG scene",6,5.3053,642,1,10,145,1,3,0,0,3,1,0
+"scene-derived","perlin L3","terrain_edit","Legacy scene",6,13.2957,642,1,10,116,0,0,0,0,0,0,0
+"scene-derived","perlin L3","terrain_revert","DAG scene",7,0.0869,642,1,10,145,1,3,0,3,0,1,0
+"scene-derived","perlin L3","terrain_revert","Legacy scene",7,13.6156,642,1,10,119,0,0,0,0,0,0,0

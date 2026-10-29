@@ -1,4 +1,4 @@
-﻿#include "controllers/HexSphereSceneController.h"
+#include "controllers/HexSphereSceneController.h"
 
 #include <QtGlobal>
 #include <algorithm>
@@ -14,6 +14,23 @@
 
 namespace {
     constexpr float kContributorTreeScale = 0.5f;
+
+    float smoothstep01(float value, float edge0, float edge1) {
+        if (edge1 <= edge0) {
+            return value >= edge1 ? 1.0f : 0.0f;
+        }
+        const float t = std::clamp((value - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+        return t * t * (3.0f - 2.0f * t);
+    }
+
+    // Направление между центрами двух соседних клеток (для точек русла внутри ребра).
+    QVector3D slerpDirection(const QVector3D& from, const QVector3D& to, float t) {
+        const QVector3D blended = from * (1.0f - t) + to * t;
+        if (blended.lengthSquared() < 1e-12f) {
+            return from;
+        }
+        return blended.normalized();
+    }
 
     bool waveInputsEqual(const WaterParams& lhs, const WaterParams& rhs) {
         return lhs.preset == rhs.preset
@@ -155,6 +172,7 @@ void HexSphereSceneController::regenerateTerrain() {
         }
     }
     updateTerrainMesh();
+    generateRivers();
     generateTreePlacements();
 }
 
@@ -165,6 +183,7 @@ void HexSphereSceneController::rebuildDerivedGeometry() {
     }
 
     updateTerrainMesh();
+    generateRivers();
     generateTreePlacements();
 }
 
@@ -174,6 +193,9 @@ void HexSphereSceneController::clearForShutdown() {
     selectionOutlineDirty_ = true;
     treePlacements_.clear();
     treeOccupiedCells_.clear();
+    rivers_.clear();
+    riverOccupiedCells_.clear();
+    ++riverRevision_;
     triangleCache_.clear();
     cacheValid_ = false;
     velocity_ = QVector3D();
@@ -264,6 +286,26 @@ TerrainSnapshot HexSphereSceneController::captureTerrainSnapshot() const {
         snapshot.cells.push_back(cellSnapshot);
     }
 
+    // Деревья — препятствие для дороги. Отдаём пути ровно те клетки, на которых
+    // деревья стоят сейчас (набор поддерживается setTreePlacements/generateTreePlacements).
+    snapshot.treeCells.reserve(static_cast<size_t>(treeOccupiedCells_.size()));
+    for (int cellId : treeOccupiedCells_) {
+        if (cellId >= 0 && cellId < static_cast<int>(model_.cells().size())) {
+            snapshot.treeCells.push_back(cellId);
+        }
+    }
+    std::sort(snapshot.treeCells.begin(), snapshot.treeCells.end());
+
+    // Реки — второй вид препятствия для дороги (наравне с деревьями). Набор
+    // поддерживается generateRivers() и едет в path backend вместе с террейном.
+    snapshot.riverCells.reserve(static_cast<size_t>(riverOccupiedCells_.size()));
+    for (int cellId : riverOccupiedCells_) {
+        if (cellId >= 0 && cellId < static_cast<int>(model_.cells().size())) {
+            snapshot.riverCells.push_back(cellId);
+        }
+    }
+    std::sort(snapshot.riverCells.begin(), snapshot.riverCells.end());
+
     return snapshot;
 }
 
@@ -298,6 +340,7 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
     selectionOutlineVertices_.clear();
     selectionOutlineDirty_ = true;
     updateTerrainMesh();
+    generateRivers();
     generateTreePlacements();
 }
 
@@ -388,6 +431,13 @@ float HexSphereSceneController::getModelScaleFactor() const {
     return clampedScale;
 }
 
+float HexSphereSceneController::treeGlobalScale() const {
+    // Деревья масштабируются вместе с клетками: тот же коэффициент, что и у
+    // машин/построек/дороги, поэтому относительные размеры объектов на планете
+    // сохраняются при любом SubdivisionLevel.
+    return getModelScaleFactor();
+}
+
 bool HexSphereSceneController::isCellOccupiedByTree(int cellId) const {
     return std::any_of(treePlacements_.begin(), treePlacements_.end(),
         [cellId](const TreePlacement& p) { return p.cellId == cellId; });
@@ -429,7 +479,10 @@ void HexSphereSceneController::generateTreePlacements() {
     std::mt19937 gen(deterministicSeed);
 
     std::uniform_real_distribution<float> distBary(0.1f, 0.8f);
-    std::uniform_real_distribution<float> distScale(0.7f, 1.3f);
+    // Разброс сугубо декоративный: мировой размер дерева задаётся топологией
+    // (treeGlobalScale), а не случайным коэффициентом, иначе при смене
+    // SubdivisionLevel дерево могло бы вырасти в разы.
+    std::uniform_real_distribution<float> distScale(0.9f, 1.1f);
     std::uniform_real_distribution<float> distRot(0.0f, 2.0f * 3.14159f);
     std::uniform_real_distribution<float> distTreePresence(0.0f, 1.0f);
 
@@ -450,6 +503,12 @@ void HexSphereSceneController::generateTreePlacements() {
 
         // ========== ВЫСОТА ==========
         if (cell.height >= 2) {
+            continue;
+        }
+
+        // ========== НЕ В РУСЛЕ РЕКИ ==========
+        // Деревья не растут в воде: клетки, занятые рекой, пропускаем.
+        if (isCellOccupiedByRiver(static_cast<int>(i))) {
             continue;
         }
 
@@ -512,10 +571,10 @@ void HexSphereSceneController::generateTreePlacements() {
         // ========== МАСШТАБ (без цветов!) ==========
         float s = distScale(gen);
         if (cell.biome == Biome::Jungle && cell.humidity > 0.7f) {
-            s *= 1.15f;
+            s *= 1.06f;
         }
         else if (cell.biome == Biome::Savanna && cell.humidity < 0.3f) {
-            s *= 0.85f;
+            s *= 0.94f;
         }
         placement.scale = s;
 
@@ -543,6 +602,280 @@ void HexSphereSceneController::regenerateTreePlacements() {
     generateTreePlacements();
 }
 
+void HexSphereSceneController::generateRivers() {
+    rivers_.clear();
+    riverOccupiedCells_.clear();
+
+    if (!isContributorMode() && !model_.cells().empty()) {
+        const int cellCount = static_cast<int>(model_.cells().size());
+
+        RiverGenerationOptions options;
+        // Соль отделяет реки от расстановки деревьев при том же seed уровня.
+        options.seed = genParams_.seed
+            ^ (static_cast<uint32_t>(generatorIndex_ + 1) * 0x9e3779b9u)
+            ^ (static_cast<uint32_t>(L_ + 1) * 0x85ebca6bu)
+            ^ 0x52e3f1a7u;
+        options.maxRivers = std::clamp(cellCount / 40, 2, 24);
+        options.maxRiverCells = std::clamp(8 + 4 * L_, 10, 34);
+        options.minLandCells = 2;
+        options.searchNodeLimit = 1500;
+
+        rivers_ = RiverGenerator::generate(model_, options);
+
+        for (const RiverPath& river : rivers_) {
+            for (int cellId : river.cellIds) {
+                riverOccupiedCells_.insert(cellId);
+            }
+        }
+    }
+
+    ++riverRevision_;
+    qDebug() << "Generated" << rivers_.size() << "rivers";
+}
+
+std::vector<float> HexSphereSceneController::buildRiverMesh() const {
+    std::vector<float> vertices;
+    if (isContributorMode() || rivers_.empty()) {
+        return vertices;
+    }
+
+    const auto& cells = model_.cells();
+    if (cells.empty()) {
+        return vertices;
+    }
+
+    const int cellCount = static_cast<int>(cells.size());
+    const float modelScale = getModelScaleFactor();
+    const float waterRadius = model_.waterSurfaceRadius();
+    const float waterLevel = model_.waterSurfaceLevel();
+    // Крошечный зазор против z-fighting: иначе русло совпадает с рельефом.
+    const float surfaceBias = 0.0008f * modelScale;
+    // Особенность реки против дороги: русло шире у устьев и уже в среднем течении.
+    const float mouthHalfWidth = kRiverMouthHalfWidth * modelScale;
+    const float midHalfWidth = kRiverMidHalfWidth * modelScale;
+
+    // Русло повторяет профиль рельефа. Тесселятор между клетками строит скос
+    // (bladeHeightForEdge: среднее высот клеток при перепаде не больше
+    // smoothMaxDelta, иначе — высота самой клетки), поэтому и русло идёт так же:
+    // плато клетки → скос к общей кромке → скос соседа → плато соседа.
+    // Иначе русло либо проваливается под рельеф, либо совпадает со скосом и
+    // пропадает из-за z-fighting (в частности, у берега скос стоит ровно на
+    // уровне моря).
+    constexpr int kSubStepsPerEdge = 8;
+    // Кромка внутреннего плато: тесселятор вдавливает плато на stripInset от границы,
+    // поэтому скос занимает последние stripInset клетки (при inset 0.25 это 3/8..5/8).
+    const float bladeStart = std::clamp(0.5f * (1.0f - stripInset_), 0.10f, 0.45f);
+    const float bladeEnd = 1.0f - bladeStart;
+
+    constexpr int kCrossCount = 5;
+    constexpr float kCross[kCrossCount] = { -1.0f, -0.5f, 0.0f, 0.5f, 1.0f };
+
+    struct Sample {
+        QVector3D dir;
+        float radius = 0.0f;
+    };
+    struct Section {
+        QVector3D center;
+        QVector3D right;
+        QVector3D up;
+        float halfWidth = 0.0f;
+    };
+
+    std::vector<Sample> samples;
+    std::vector<Section> sections;
+
+    const int smoothDelta = smoothOneStep_ ? 1 : 0;
+    auto mixf = [](float a, float b, float t) { return a + (b - a) * t; };
+
+    // Высота кромки со стороны клетки — как TerrainTessellator::bladeHeightForEdge.
+    auto edgeHeight = [smoothDelta](const Cell& self, const Cell& other) {
+        if (std::abs(self.height - other.height) <= smoothDelta) {
+            return 0.5f * (static_cast<float>(self.height) + static_cast<float>(other.height));
+        }
+        return static_cast<float>(self.height);
+    };
+
+    // Радиус поверхности для высоты: у воды — не ниже поверхности моря.
+    auto surfaceRadius = [&](float height) {
+        float radius = model_.radiusForHeight(height);
+        if (height <= waterLevel) {
+            radius = waterRadius;
+        }
+        return radius + surfaceBias;
+    };
+
+    for (const RiverPath& river : rivers_) {
+        if (river.cellIds.size() < 3) {
+            continue;
+        }
+
+        // Сначала проверяем весь путь: дальше мы свободно обращаемся к соседним клеткам.
+        const bool allCellsValid = std::all_of(
+            river.cellIds.begin(), river.cellIds.end(),
+            [cellCount](int cellId) { return cellId >= 0 && cellId < cellCount; });
+        if (!allCellsValid) {
+            continue;
+        }
+
+        samples.clear();
+        const size_t count = river.cellIds.size();
+        // Река всегда начинается и заканчивается морской клеткой. Внутрь моря
+        // русло не заводим: поверхность воды там рисует сам WaterRenderer, и
+        // лента, ушедшая под морскую клетку, читалась как провал под водой.
+        // Обрезаем по кромке клетки (t = 0.5 ребра) — река впадает в море.
+        const Cell& firstCell = cells[static_cast<size_t>(river.cellIds.front())];
+        const Cell& lastCell = cells[static_cast<size_t>(river.cellIds.back())];
+        const bool startsInSea = firstCell.biome == Biome::Sea;
+        const bool endsInSea = lastCell.biome == Biome::Sea;
+
+        for (size_t i = 0; i + 1 < count; ++i) {
+            const Cell& from = cells[static_cast<size_t>(river.cellIds[i])];
+            const Cell& to = cells[static_cast<size_t>(river.cellIds[i + 1])];
+            const QVector3D dirFrom = from.centroid.normalized();
+            const QVector3D dirTo = to.centroid.normalized();
+
+            const float edgeFrom = edgeHeight(from, to);
+            const float edgeTo = edgeHeight(to, from);
+
+            for (int k = 0; k < kSubStepsPerEdge; ++k) {
+                const float t = static_cast<float>(k) / static_cast<float>(kSubStepsPerEdge);
+                if (startsInSea && i == 0 && t < 0.5f) {
+                    continue;
+                }
+                if (endsInSea && i + 2 == count && t > 0.5f) {
+                    continue;
+                }
+
+                float height = static_cast<float>(from.height);
+                if (t > bladeStart && t <= 0.5f) {
+                    height = mixf(static_cast<float>(from.height), edgeFrom,
+                        (t - bladeStart) / (0.5f - bladeStart));
+                }
+                else if (t > 0.5f && t <= bladeEnd) {
+                    height = mixf(edgeTo, static_cast<float>(to.height),
+                        (t - 0.5f) / (bladeEnd - 0.5f));
+                }
+                else if (t > bladeEnd) {
+                    height = static_cast<float>(to.height);
+                }
+
+                Sample sample;
+                sample.dir = slerpDirection(dirFrom, dirTo, t);
+                sample.radius = surfaceRadius(height);
+                samples.push_back(sample);
+            }
+        }
+        if (!endsInSea) {
+            const Cell& last = cells[static_cast<size_t>(river.cellIds.back())];
+            Sample sample;
+            sample.dir = last.centroid.normalized();
+            sample.radius = surfaceRadius(static_cast<float>(last.height));
+            samples.push_back(sample);
+        }
+
+        if (samples.size() < 3) {
+            continue;
+        }
+
+        // Устье должно встречаться с морем ровно на уровне его поверхности, даже
+        // если берег — обрыв и усреднённая высота кромки выше уровня моря.
+        const float mouthRadius = waterRadius + surfaceBias;
+        if (startsInSea) {
+            samples.front().radius = mouthRadius;
+        }
+        if (endsInSea) {
+            samples.back().radius = mouthRadius;
+        }
+
+        sections.clear();
+        sections.reserve(samples.size());
+        for (size_t i = 0; i < samples.size(); ++i) {
+            const QVector3D up = samples[i].dir;
+
+            // Касательная по центральной разности: на повороте сечение идёт по
+            // биссектрисе, поэтому русло не «ломается» на углах между клетками.
+            QVector3D tangent;
+            if (i > 0 && i + 1 < samples.size()) {
+                tangent = samples[i + 1].dir - samples[i - 1].dir;
+            }
+            else if (i + 1 < samples.size()) {
+                tangent = samples[i + 1].dir - up;
+            }
+            else {
+                tangent = up - samples[i - 1].dir;
+            }
+            tangent -= QVector3D::dotProduct(tangent, up) * up;
+            if (tangent.lengthSquared() < 1e-10f) {
+                tangent = QVector3D::crossProduct(up, QVector3D(0.0f, 1.0f, 0.0f));
+            }
+            tangent.normalize();
+
+            QVector3D right = QVector3D::crossProduct(tangent, up);
+            if (right.lengthSquared() < 1e-10f) {
+                right = QVector3D(1.0f, 0.0f, 0.0f);
+            }
+            right.normalize();
+
+            // На крутом повороте русло чуть сужается: иначе внешняя сторона
+            // самопересекается и выглядит сложенной.
+            float turnScale = 1.0f;
+            if (i > 0 && i + 1 < samples.size()) {
+                const QVector3D inDir = (up - samples[i - 1].dir).normalized();
+                const QVector3D outDir = (samples[i + 1].dir - up).normalized();
+                const float cosTurn = std::clamp(
+                    QVector3D::dotProduct(inDir, outDir), -1.0f, 1.0f);
+                turnScale = std::clamp(0.55f + 0.45f * cosTurn, 0.45f, 1.0f);
+            }
+
+            const float t = static_cast<float>(i) / static_cast<float>(samples.size() - 1);
+            const float mouthBlend = std::max(
+                smoothstep01(t, 0.0f, 0.3f),
+                smoothstep01(1.0f - t, 0.0f, 0.3f));
+            const float wobble = 0.85f
+                + 0.30f * std::sin(t * 12.3f + static_cast<float>(river.cellIds.front()) * 0.7f);
+
+            Section section;
+            section.center = up * samples[i].radius;
+            section.right = right;
+            section.up = up;
+            section.halfWidth =
+                (midHalfWidth + (mouthHalfWidth - midHalfWidth) * mouthBlend) * wobble * turnScale;
+            sections.push_back(section);
+        }
+
+        // 11 float на вершину: позиция, (берег, глубина), нормаль, руда.
+        auto emitSectionVertex = [&vertices](const Section& section, float offset) {
+            const float bank = std::abs(offset);
+            const float depth = 1.0f - bank;
+            QVector3D point = section.center + section.right * (offset * section.halfWidth);
+            point = point.normalized() * section.center.length();
+            const QVector3D& normal = section.up;
+            vertices.insert(vertices.end(), {
+                point.x(), point.y(), point.z(),
+                bank, depth, 0.0f,
+                normal.x(), normal.y(), normal.z(),
+                0.0f, 0.0f
+                });
+            };
+
+        for (size_t i = 0; i + 1 < sections.size(); ++i) {
+            const Section& from = sections[i];
+            const Section& to = sections[i + 1];
+            for (int k = 0; k + 1 < kCrossCount; ++k) {
+                emitSectionVertex(from, kCross[k]);
+                emitSectionVertex(from, kCross[k + 1]);
+                emitSectionVertex(to, kCross[k + 1]);
+
+                emitSectionVertex(from, kCross[k]);
+                emitSectionVertex(to, kCross[k + 1]);
+                emitSectionVertex(to, kCross[k]);
+            }
+        }
+    }
+
+    return vertices;
+}
+
 void HexSphereSceneController::rebuildContributorScene() {
     selectedCells_.clear();
     heightStep_ = autoHeightStep();
@@ -561,6 +894,7 @@ void HexSphereSceneController::rebuildContributorScene() {
     terrainCPU_ = TerrainMesh{};
     triangleCache_.clear();
     cacheValid_ = false;
+    generateRivers();
     generateTreePlacements();
 }
 

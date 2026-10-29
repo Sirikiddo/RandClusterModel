@@ -45,6 +45,11 @@ struct ContributorAsset {
     // Индексация: [species][variant]
     std::vector<std::vector<simple3d::Mesh>> speciesMeshes;
     std::vector<std::vector<std::vector<ContributorParticle>>> speciesParticles;
+    // ВАЖНО: TreeVariant::realisticScale здесь переопределён в buildContributorAsset().
+    // Это уже не "сырой" видовой коэффициент из TreeBuilder, а полный множитель
+    // размера варианта: узкий видовой характер × нормировка локальной высоты меша
+    // к эталонной. Рендерер умножает его только на топологический масштаб планеты
+    // и мелкий per-placement разброс.
     std::vector<std::vector<TreeBuilder::TreeVariant>> speciesVariants;
 };
 

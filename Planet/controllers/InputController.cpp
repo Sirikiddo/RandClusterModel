@@ -1,4 +1,4 @@
-﻿#include "controllers/InputController.h"
+#include "controllers/InputController.h"
 
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -163,11 +163,25 @@ namespace {
             return 0;
         }
 
+        // Машина не должна появляться в воде: море и русло реки — непроезжие.
+        auto isWetCell = [&scene, &cells](size_t index) {
+            return cells[index].biome == Biome::Sea
+                || scene.isCellOccupiedByRiver(static_cast<int>(index));
+        };
+
         int bestCell = 0;
         float bestZ = cells.front().centroid.z();
+        bool bestIsWet = isWetCell(0);
         for (size_t i = 1; i < cells.size(); ++i) {
             const float z = cells[i].centroid.z();
-            if (z > bestZ) {
+            const bool isWet = isWetCell(i);
+            if (bestIsWet && !isWet) {
+                bestCell = static_cast<int>(i);
+                bestZ = z;
+                bestIsWet = false;
+                continue;
+            }
+            if (bestIsWet == isWet && z > bestZ) {
                 bestZ = z;
                 bestCell = static_cast<int>(i);
             }
@@ -875,6 +889,10 @@ void InputController::refreshSceneDagOutputs() {
 
     SceneDagRequest request;
     request.terrain = scene_.captureTerrainSnapshot();
+    // Деревья — выход scene DAG, а не его вход: набор treeCells нужен только
+    // path backend. Если оставить его в ключе запроса, кэш DAG будет промахиваться
+    // на каждом обновлении набора деревьев и считать BuildTreePlacements лишний раз.
+    request.terrain.treeCells.clear();
     request.heightStep = scene_.heightStep();
     request.outlineBias = scene_.outlineBias();
     request.smoothOneStep = scene_.smoothOneStep();
@@ -901,8 +919,24 @@ void InputController::refreshSceneDagOutputs() {
     if (request.selectedCells.empty() || !result.selectionOutline.vertices.empty()) {
         scene_.setSelectionOutlineVertices(std::move(result.selectionOutline.vertices));
     }
-    if (!result.treePlacements.empty() || scene_.getTreePlacements().empty()) {
-        scene_.setTreePlacements(std::move(result.treePlacements));
+    // Деревья не растут в русле реки: DAG scene строит placements, не зная о
+    // реках, поэтому занятые рекой клетки отсеиваем здесь.
+    std::vector<TreePlacement> treePlacements = std::move(result.treePlacements);
+    treePlacements.erase(
+        std::remove_if(treePlacements.begin(), treePlacements.end(),
+            [this](const TreePlacement& placement) {
+                return scene_.isCellOccupiedByRiver(placement.cellId);
+            }),
+        treePlacements.end());
+
+    if (!treePlacements.empty() || scene_.getTreePlacements().empty()) {
+        // Деревья — препятствие для дороги, поэтому если DAG реально заменил набор
+        // размещений, нужно сразу переслать его в path backend: syncPathBackendFromScene()
+        // в шагах rebuild* выполняется ДО этого момента и видит только legacy-деревья.
+        if (treePlacements != scene_.getTreePlacements()) {
+            scene_.setTreePlacements(std::move(treePlacements));
+            syncPathBackendFromScene();
+        }
     }
 }
 
@@ -948,6 +982,11 @@ void InputController::rebuildTerrainFromInputs() {
         return;
     }
     scene_.rebuildTerrainFromInputs();
+
+    // Legacy terrain backend не знает о деревьях, поэтому актуальный снапшот
+    // (с клетками-препятствиями) отдаём пути из сцены. В DAG-ветке то же самое
+    // делает projectTerrainSnapshot().
+    syncPathBackendFromScene();
 }
 
 TerrainSnapshot InputController::captureTerrainSnapshot() const {
@@ -1159,6 +1198,16 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
         response.requestUpdate = true;
         return;
     }
+    if (isCellBlockedByTree(cellId)) {
+        response.hudMessage = QString("Target cell has a tree: road cannot end there");
+        response.requestUpdate = true;
+        return;
+    }
+    if (isCellBlockedByRiver(cellId)) {
+        response.hudMessage = QString("Target cell is a river: car cannot stand in water");
+        response.requestUpdate = true;
+        return;
+    }
 
     scene_.clearSelection();
     scene_.toggleCellSelection(oldCell);
@@ -1183,7 +1232,7 @@ void InputController::moveSelectedEntityToCell(int cellId, Response& response) {
         if (renderer_) {
             renderer_->uploadPath({});
         }
-        response.hudMessage = QString("No traversable path. Max smooth delta is %1 cells, sea cells are blocked.")
+        response.hudMessage = QString("No traversable path. Max smooth delta is %1 cells, sea cells, trees and rivers are blocked.")
             .arg(pathClimbLimit(scene_));
         deselectEntity();
         response.requestUpdate = true;
@@ -1205,6 +1254,20 @@ bool InputController::isCellOccupied(int cellId, std::optional<int> ignoredEntit
         }
     }
     return false;
+}
+
+bool InputController::isCellBlockedByTree(int cellId) const {
+    if (isContributorMode()) {
+        return false;
+    }
+    return scene_.isCellOccupiedByTree(cellId);
+}
+
+bool InputController::isCellBlockedByRiver(int cellId) const {
+    if (isContributorMode()) {
+        return false;
+    }
+    return scene_.isCellOccupiedByRiver(cellId);
 }
 
 InputController::Response InputController::placeBuildingOnCell(int cellId) {
@@ -1379,6 +1442,14 @@ bool InputController::applyAnimation(int entityId, int targetCell, float speed, 
         qDebug() << "Entity" << entityId << "cannot move to occupied cell" << targetCell;
         return false;
     }
+    if (targetCell != startCell && isCellBlockedByTree(targetCell)) {
+        qDebug() << "Entity" << entityId << "cannot end the road on a tree cell" << targetCell;
+        return false;
+    }
+    if (targetCell != startCell && isCellBlockedByRiver(targetCell)) {
+        qDebug() << "Entity" << entityId << "cannot end the road in a river cell" << targetCell;
+        return false;
+    }
     if (targetCell == startCell) {
         transform->position = computeSurfacePoint(scene_, targetCell, scene_.heightStep(), kEntitySurfaceOffset);
         refreshBuildPreview();
@@ -1418,6 +1489,14 @@ bool InputController::applyAnimationWithPath(int entityId, int targetCell, const
     }
     if (targetCell != startCell && isCellOccupied(targetCell, entityId)) {
         qDebug() << "Entity" << entityId << "cannot move to occupied cell" << targetCell;
+        return false;
+    }
+    if (targetCell != startCell && isCellBlockedByTree(targetCell)) {
+        qDebug() << "Entity" << entityId << "cannot end the road on a tree cell" << targetCell;
+        return false;
+    }
+    if (targetCell != startCell && isCellBlockedByRiver(targetCell)) {
+        qDebug() << "Entity" << entityId << "cannot end the road in a river cell" << targetCell;
         return false;
     }
     if (targetCell == startCell) {

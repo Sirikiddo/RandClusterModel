@@ -22,6 +22,19 @@ struct TerrainSnapshot {
     TerrainParams params = defaultTerrainParams();
     std::vector<TerrainCellSnapshot> cells;
 
+    // Клетки, занятые деревьями (отсортированные, без повторов). Дерево — препятствие
+    // для дороги: через такую клетку нельзя проложить путь и нельзя сделать её концом
+    // дороги. Набор заполняет HexSphereSceneController::captureTerrainSnapshot() из
+    // фактического размещения деревьев, поэтому path backend всегда блокирует ровно
+    // те клетки, на которых стоит дерево на экране.
+    std::vector<int> treeCells;
+
+    // Клетки, занятые руслом реки (отсортированные, без повторов). Река — такое
+    // же препятствие для дороги, как дерево: машина не может проехать через
+    // такую клетку и не может на ней остановиться. Набор заполняет
+    // HexSphereSceneController::captureTerrainSnapshot() из сгенерированных рек.
+    std::vector<int> riverCells;
+
     bool empty() const noexcept {
         return cells.empty();
     }

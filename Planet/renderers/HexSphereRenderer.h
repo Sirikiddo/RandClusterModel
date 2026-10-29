@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <QMatrix4x4>
 #include <QOpenGLFunctions_3_3_Core>
@@ -22,6 +22,7 @@
 #include "model/FactoryModelHandler.h"
 #include "model/MineModelHandler.h"
 #include "renderers/ParticleRenderer.h"
+#include "renderers/WaterShaderUniforms.h"
 #include "contributor/ContributorParticles.h"
 #include "contributor/TreeBuilder.h"
 
@@ -120,6 +121,7 @@ private:
     void uploadTerrainInternal(const TerrainMesh& mesh, GLenum usage);
     void uploadSelectionOutlineInternal(const std::vector<float>& vertices);
     void uploadPathInternal(const std::vector<QVector3D>& points);
+    void uploadRiverInternal(const std::vector<float>& vertices);
     void loadContributorModel();
     void renderContributorModel(const RenderContext& ctx);
     void renderProceduralTreeParticles(const RenderContext& ctx);  // Твой метод
@@ -168,6 +170,18 @@ private:
     GLsizei roadVertexCount_ = 0;
     GLint uRoadColor_ = -1;
     GLint uIsRoad_ = -1;
+
+    // Реки: та же лента, что и дорога, но рисуется водой (см. resources/terrain).
+    GLuint vaoRiver_ = 0;
+    GLuint vboRiver_ = 0;
+    GLsizei riverVertexCount_ = 0;
+    uint64_t uploadedRiverRevision_ = 0;
+    GLint uIsRiver_ = -1;
+    GLint uRiverWaveAmplitude_ = -1;
+    GLint uRiverWaveNormalAmplitude_ = -1;
+    GLint uRiverWaterDepth_ = -1;
+    // Общие с морем uniform-ы: волны, оптика, окружение (см. WaterShaderUniforms.h).
+    WaterShaderLocations waterLocationsTerrain_;
 
     // ===== ТОЛЬКО ПРОЦЕДУРНЫЕ ДЕРЕВЬЯ (БЕЗ OBJ) =====
     std::shared_ptr<ModelHandler> proceduralLeavesModel_;

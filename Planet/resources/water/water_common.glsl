@@ -57,14 +57,6 @@ struct WaterHit {
     float visibleThickness;
 };
 
-float saturate(float value) { return clamp(value, 0.0, 1.0); }
-float saturateDot(vec3 a, vec3 b) { return saturate(dot(a, b)); }
-
-vec3 safeNormalize(vec3 value, vec3 fallbackValue) {
-    float lenSq = dot(value, value);
-    return lenSq <= 1e-10 ? fallbackValue : value * inversesqrt(lenSq);
-}
-
 uint decodeSurfaceKind(float encodedKind) {
     return uint(clamp(int(floor(encodedKind + 0.5)), 0, 3));
 }

@@ -109,8 +109,14 @@ namespace {
         // Строим модель
         HexSphereModel model = buildModelFromSnapshot(*snapshot);
 
-        // Строим граф и ищем путь
+        // Строим граф и ищем путь.
+        // Деревья и реки из снапшота — препятствия: дорога не проходит через
+        // занятые ими клетки, и закончиться на такой клетке она тоже не может.
         PathBuilder builder(model, smoothMaxDelta);
+        std::vector<int> blockedCells = snapshot->treeCells;
+        blockedCells.insert(blockedCells.end(),
+            snapshot->riverCells.begin(), snapshot->riverCells.end());
+        builder.setBlockedCells(blockedCells);
         builder.build();
         std::vector<int> path = builder.astar(startId, goalId);
 

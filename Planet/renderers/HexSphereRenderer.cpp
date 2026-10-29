@@ -1,4 +1,4 @@
-﻿#include "renderers/HexSphereRenderer.h"
+#include "renderers/HexSphereRenderer.h"
 
 #include <QOpenGLWidget>
 #include <QtDebug>
@@ -33,8 +33,35 @@ namespace {
         return first >= 0 && second > first ? trimmed.mid(first + 1, second - first - 1) : QString{};
     }
 
+    // Путь include-файла относительно каталога текущего шейдера. Для ресурсов Qt
+    // ("":/Planet/...") QDir::cleanPath не нормализует "..", поэтому сегменты
+    // схлопываются вручную: рельеф лежит в resources/terrain и подключает воду
+    // через "../water/...".
+    QString resolveShaderInclude(const QString& baseDir, const QString& includePath) {
+        const QString combined = QDir(baseDir).filePath(includePath);
+        if (!combined.startsWith(QStringLiteral(":/"))) {
+            return QDir::cleanPath(combined);
+        }
+
+        QStringList resolved;
+        const QStringList parts = combined.mid(2).split(QLatin1Char('/'), Qt::SkipEmptyParts);
+        for (const QString& part : parts) {
+            if (part == QStringLiteral(".")) {
+                continue;
+            }
+            if (part == QStringLiteral("..")) {
+                if (!resolved.isEmpty()) {
+                    resolved.removeLast();
+                }
+                continue;
+            }
+            resolved.append(part);
+        }
+        return QStringLiteral(":/") + resolved.join(QLatin1Char('/'));
+    }
+
     QByteArray loadShaderSourceRecursive(const QString& path, QSet<QString>& stack) {
-        const QString filePath = QFileInfo(path).filePath();
+        const QString filePath = resolveShaderInclude(QStringLiteral(":/"), path);
         if (stack.contains(filePath)) {
             qWarning() << "Recursive shader include:" << filePath;
             return {};
@@ -52,7 +79,8 @@ namespace {
             const QString line = stream.readLine();
             const QString includePath = shaderIncludePath(line);
             if (!includePath.isEmpty()) {
-                source += loadShaderSourceRecursive(QDir(baseDir).filePath(includePath), stack);
+                source += loadShaderSourceRecursive(
+                    resolveShaderInclude(baseDir, includePath), stack);
             }
             else {
                 source += line.toUtf8();
@@ -105,6 +133,10 @@ namespace {
         const auto quantized = static_cast<int64_t>(std::llround(static_cast<double>(value) * 100000.0));
         return static_cast<uint64_t>(quantized);
     }
+
+    // Формат вершины реки совпадает с атрибутами террейна:
+    // позиция (3) + берег/глубина (3) + нормаль (3) + руда (2).
+    constexpr size_t kRiverFloatsPerVertex = 11u;
 }
 
 HexSphereRenderer::HexSphereRenderer(QOpenGLWidget* owner)
@@ -182,6 +214,8 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (sceneDepthFbo_) gl_->glDeleteFramebuffers(1, &sceneDepthFbo_);
     if (vaoRoad_ != 0) gl_->glDeleteVertexArrays(1, &vaoRoad_);
     if (vboRoad_ != 0) gl_->glDeleteBuffers(1, &vboRoad_);
+    if (vaoRiver_ != 0) gl_->glDeleteVertexArrays(1, &vaoRiver_);
+    if (vboRiver_ != 0) gl_->glDeleteBuffers(1, &vboRiver_);
 
     if (QOpenGLContext::currentContext()) {
         owner_->doneCurrent();
@@ -257,7 +291,11 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
     gl_->glFrontFace(GL_CCW);
 
     progWire_ = makeProgram(VS_WIRE, FS_WIRE);
-    progTerrain_ = makeProgram(VS_TERRAIN, FS_TERRAIN);
+    // Шейдеры рельефа лежат в ресурсах: фрагментный шейдер подключает общую с
+    // морем волновую модель и функцию затенения воды (реки = море).
+    progTerrain_ = makeProgram(
+        loadShaderSource(":/Planet/resources/terrain/terrain.vert"),
+        loadShaderSource(":/Planet/resources/terrain/terrain.frag"));
     progSel_ = makeProgram(VS_WIRE, FS_SEL);
     progWater_ = makeProgram(
         loadShaderSource(":/Planet/resources/water/water_shell.vert"),
@@ -290,6 +328,11 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
     uOreEnabled_ = gl_->glGetUniformLocation(progTerrain_, "uOreVisualizationEnabled");
     uRoadColor_ = gl_->glGetUniformLocation(progTerrain_, "uRoadColor");
     uIsRoad_ = gl_->glGetUniformLocation(progTerrain_, "uIsRoad");
+    uIsRiver_ = gl_->glGetUniformLocation(progTerrain_, "uIsRiver");
+    uRiverWaveAmplitude_ = gl_->glGetUniformLocation(progTerrain_, "uRiverWaveAmplitude");
+    uRiverWaveNormalAmplitude_ = gl_->glGetUniformLocation(progTerrain_, "uRiverWaveNormalAmplitude");
+    uRiverWaterDepth_ = gl_->glGetUniformLocation(progTerrain_, "uRiverWaterDepth");
+    waterLocationsTerrain_.cache(gl_, progTerrain_);
 
     gl_->glUseProgram(progSel_);
     uMVP_Sel_ = gl_->glGetUniformLocation(progSel_, "uMVP");
@@ -369,6 +412,27 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboRoad_);
     gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(0);
+    gl_->glBindVertexArray(0);
+
+    // Реки: та же лента, что и дорога, но с атрибутами террейна (берег/глубина
+    // в aColor, нормаль, руда) в одном interleaved-буфере — 11 float на вершину.
+    gl_->glGenVertexArrays(1, &vaoRiver_);
+    gl_->glGenBuffers(1, &vboRiver_);
+    gl_->glBindVertexArray(vaoRiver_);
+    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboRiver_);
+    const GLsizei riverStride = static_cast<GLsizei>(sizeof(float) * 11u);
+    gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, riverStride,
+        reinterpret_cast<void*>(0));
+    gl_->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, riverStride,
+        reinterpret_cast<void*>(sizeof(float) * 3u));
+    gl_->glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, riverStride,
+        reinterpret_cast<void*>(sizeof(float) * 6u));
+    gl_->glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, riverStride,
+        reinterpret_cast<void*>(sizeof(float) * 9u));
+    gl_->glEnableVertexAttribArray(0);
+    gl_->glEnableVertexAttribArray(1);
+    gl_->glEnableVertexAttribArray(2);
+    gl_->glEnableVertexAttribArray(3);
     gl_->glBindVertexArray(0);
 
     initPyramidGeometry();
@@ -862,6 +926,10 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
         rebuildPlanetSurfaceAtlas(scene.terrain(), scene.model());
         uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
         uploadPathInternal({});
+        if (uploadedRiverRevision_ != scene.riverRevision()) {
+            uploadRiverInternal(scene.buildRiverMesh());
+            uploadedRiverRevision_ = scene.riverRevision();
+        }
         });
     qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
         << "(terrain" << options.terrainUsage << ")";
@@ -956,6 +1024,92 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
         }
     }
 
+    // ===================================================================
+    // ================ РИСУЕМ РЕКИ ======================================
+    // ===================================================================
+    // Река — та же лента, что и дорога, но вода: волны, отражения, пена и
+    // прозрачность берутся из общих с морем uniform-ов и общих include-ов
+    // (resources/water/water_wave_field.glsl, water_shading.glsl).
+    if (riverVertexCount_ > 0 && progTerrain_ != 0) {
+        const HexSphereSceneController& scene = ctx.graph.scene;
+        const WaterParams& water = scene.resolvedWaterParamsValue();
+        const ResolvedWaterWaveSpec& wave = scene.resolvedWaterWaveSpec();
+        const WaterWaveUniformData waveData =
+            WaterWaveUniformData::gather(wave, ctx.lighting.waterTime);
+
+        gl_->glUseProgram(progTerrain_);
+
+        uploadWaterFrameUniforms(
+            gl_,
+            waterLocationsTerrain_,
+            ctx.mvp,
+            ctx.lighting.direction,
+            ctx.cameraPos,
+            ctx.mvp,
+            ctx.invViewProjection,
+            ctx.viewportSize,
+            scene.model().waterSurfaceRadius(),
+            water);
+        uploadWaterWaveUniforms(gl_, waterLocationsTerrain_, wave, waveData);
+
+        QMatrix4x4 model;
+        model.setToIdentity();
+        gl_->glUniformMatrix4fv(uModel_, 1, GL_FALSE, model.constData());
+        gl_->glUniformMatrix3fv(uNormalMatrix_, 1, GL_FALSE, model.normalMatrix().constData());
+
+        if (uIsRiver_ >= 0) gl_->glUniform1i(uIsRiver_, 1);
+        // Волны в русле — та же модель, что у моря. Геометрию поднимаем слабее
+        // наклона (у реки нет разгона волны), но затенение получает полноценный
+        // морской наклон, поэтому рябь и блики у реки как у моря.
+        // «Плоская вода» гасит волны и в русле: амплитуда 0 даёт ровную
+        // поверхность без отдельной ветки в шейдере.
+        const float riverWaveScale = water.wavesEnabled ? 1.0f : 0.0f;
+        if (uRiverWaveAmplitude_ >= 0) {
+            gl_->glUniform1f(uRiverWaveAmplitude_,
+                wave.effectiveGeometryAmplitude * HexSphereSceneController::kRiverWaveGeometryScale
+                * riverWaveScale);
+        }
+        if (uRiverWaveNormalAmplitude_ >= 0) {
+            gl_->glUniform1f(uRiverWaveNormalAmplitude_,
+                wave.effectiveGeometryAmplitude * riverWaveScale);
+        }
+        // Глубина русла задаётся в мировых единицах и масштабируется вместе
+        // с планетой, чтобы цвет воды не зависел от SubdivisionLevel.
+        if (uRiverWaterDepth_ >= 0) {
+            gl_->glUniform1f(
+                uRiverWaterDepth_,
+                HexSphereSceneController::kRiverChannelDepth * scene.getModelScaleFactor());
+        }
+
+        GLint previousActiveTexture = GL_TEXTURE0;
+        gl_->glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+        bindWaterEnvCubemap(gl_, GL_TEXTURE5, envCubemap_, waterLocationsTerrain_.envMap);
+
+        GLint previousBlendSrcRgb = GL_ONE;
+        GLint previousBlendDstRgb = GL_ZERO;
+        gl_->glGetIntegerv(GL_BLEND_SRC_RGB, &previousBlendSrcRgb);
+        gl_->glGetIntegerv(GL_BLEND_DST_RGB, &previousBlendDstRgb);
+
+        gl_->glEnable(GL_BLEND);
+        // Как у моря: premultiplied alpha.
+        gl_->glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        gl_->glDisable(GL_CULL_FACE);
+        gl_->glDepthMask(GL_FALSE);
+
+        gl_->glBindVertexArray(vaoRiver_);
+        gl_->glDrawArrays(GL_TRIANGLES, 0, riverVertexCount_);
+        gl_->glBindVertexArray(0);
+
+        gl_->glDepthMask(GL_TRUE);
+        gl_->glEnable(GL_CULL_FACE);
+        gl_->glDisable(GL_BLEND);
+        gl_->glBlendFunc(static_cast<GLenum>(previousBlendSrcRgb),
+            static_cast<GLenum>(previousBlendDstRgb));
+        gl_->glActiveTexture(static_cast<GLenum>(previousActiveTexture));
+
+        if (uIsRiver_ >= 0) gl_->glUniform1i(uIsRiver_, 0);
+    }
+
     if (graph.scene.isContributorMode()) {
         renderContributorModel(ctx);
     }
@@ -1006,6 +1160,24 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
     // ========== ГЛОБАЛЬНЫЙ МАСШТАБ ==========
     // Keep procedural trunks and foliage at the same scale as other scene models.
     const float treeSceneScale = 0.12f * ctx.graph.scene.getModelScaleFactor();
+
+    // ЕДИНЫЙ ИСТОЧНИК ИСТИНЫ ДЛЯ РАЗМЕРА ДЕРЕВА.
+    // Мировой размер дерева обязан следовать за размером клетки планеты, иначе при
+    // росте SubdivisionLevel клетки уменьшаются, а деревья остаются прежними (или,
+    // из-за пересбора placement'ов, вырастают в разы). Топологический масштаб сцены
+    // уже используется машиной, фабрикой, шахтой и дорогой, поэтому деревья берут
+    // ровно тот же коэффициент: getModelScaleFactor().
+
+    // Разброс размера внутри одной планеты — чисто декоративный. Исторические
+    // источники placement'ов (legacy controller и DAG backend) дают 0.7..1.3,
+    // но такой разброс поверх смены вида снова делал бы дерево в разы больше при
+    // смене SubdivisionLevel, поэтому здесь он ограничен узкой полосой.
+    constexpr float kMinPlacementJitter = 0.9f;
+    constexpr float kMaxPlacementJitter = 1.1f;
+    const auto placementJitter =
+        [minJitter = kMinPlacementJitter, maxJitter = kMaxPlacementJitter](float scale) {
+        return std::clamp(scale, minJitter, maxJitter);
+        };
 
     // ========== БЮДЖЕТ ЧАСТИЦ ==========
     constexpr size_t kMaxRenderedTrees = 96;
@@ -1103,11 +1275,9 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
                 treeParticlesBySpecies[info.speciesIdx][info.variantIdx];
             if (particleTemplate.empty()) continue;
 
-            // Итоговый масштаб: реалистичный × глобальный × per-placement
-            const float baseScale =
-                variant.realisticScale * treeSceneScale;
-            const float finalScale = baseScale * placements[
-                &info - infos.data()].scale;
+            const float baseScale = variant.realisticScale * treeSceneScale;
+            const float finalScale = baseScale * placementJitter(
+                placements[&info - infos.data()].scale);
 
             QMatrix4x4 transform;
             transform.translate(info.treePos);
@@ -1191,8 +1361,10 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
             proceduralTreeModelsBySpecies[info.speciesIdx][info.variantIdx];
         if (!model3d || !model3d->isInitialized()) continue;
 
+        // Итоговый масштаб: видовой коэффициент (уже нормированный по высоте
+        // варианта в buildContributorAsset) × топология планеты × мелкий шум.
         const float baseScale = variant.realisticScale * treeSceneScale;
-        const float finalScale = baseScale * placement.scale;
+        const float finalScale = baseScale * placementJitter(placement.scale);
 
         QMatrix4x4 modelMat;
         modelMat.translate(info.treePos);
@@ -1339,6 +1511,15 @@ void HexSphereRenderer::setOreVisualizationEnabled(bool enabled) {
     if (terrainRenderer_) {
         terrainRenderer_->setOreVisualizationEnabled(enabled);
     }
+}
+
+void HexSphereRenderer::uploadRiverInternal(const std::vector<float>& vertices) {
+    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboRiver_);
+    gl_->glBufferData(GL_ARRAY_BUFFER,
+        GLsizeiptr(vertices.size() * sizeof(float)),
+        vertices.empty() ? nullptr : vertices.data(),
+        GL_DYNAMIC_DRAW);
+    riverVertexCount_ = static_cast<GLsizei>(vertices.size() / kRiverFloatsPerVertex);
 }
 
 void HexSphereRenderer::uploadRoad(const std::vector<float>& vertices) {

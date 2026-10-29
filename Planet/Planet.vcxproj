@@ -304,6 +304,22 @@
     <None Include="resources\water\water_shell.vert" />
     <None Include="resources\water\water_surface.glsl" />
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="generation\RiverGenerator.cpp" />
+    <ClCompile Include="renderers\WaterShaderUniforms.cpp" />
+    <ClInclude Include="generation\RiverGenerator.h" />
+    <ClInclude Include="renderers\WaterShaderUniforms.h" />
+    <None Include="resources\water\water_shell.vert" />
+    <None Include="resources\water\water_shell.frag" />
+    <None Include="resources\water\water_math.glsl" />
+    <None Include="resources\water\water_common.glsl" />
+    <None Include="resources\water\water_wave_field.glsl" />
+    <None Include="resources\water\water_intersection.glsl" />
+    <None Include="resources\water\water_surface.glsl" />
+    <None Include="resources\water\water_shading.glsl" />
+    <None Include="resources\terrain\terrain.vert" />
+    <None Include="resources\terrain\terrain.frag" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
     <Import Project="$(QtMsBuild)\qt.targets" />

@@ -90,6 +90,23 @@ struct TreePlacement {
     QVector3D getPosition(const HexSphereModel& model) const;
 
     void applyGlobalScale(float globalScale) { scale *= globalScale; }
+
+    // Нужно, чтобы InputController понял, изменился ли набор размещений, пришедший
+    // из DAG scene backend, и обновил блокировку дороги деревьями.
+    bool operator==(const TreePlacement& other) const {
+        return cellId == other.cellId
+            && triangleIdx == other.triangleIdx
+            && baryU == other.baryU
+            && baryV == other.baryV
+            && baryW == other.baryW
+            && scale == other.scale
+            && rotation == other.rotation
+            && placementMode == other.placementMode
+            && worldPosition == other.worldPosition
+            && worldUp == other.worldUp
+            && worldYaw == other.worldYaw
+            && worldScale == other.worldScale;
+    }
 };
 // Dual (hex/pent) sphere data
 struct Cell {

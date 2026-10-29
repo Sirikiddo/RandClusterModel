@@ -2,9 +2,13 @@
     <qresource prefix="Planet">
         <file alias="resources/water/water_shell.vert">water/water_shell.vert</file>
         <file alias="resources/water/water_shell.frag">water/water_shell.frag</file>
+        <file alias="resources/water/water_math.glsl">water/water_math.glsl</file>
         <file alias="resources/water/water_common.glsl">water/water_common.glsl</file>
+        <file alias="resources/water/water_wave_field.glsl">water/water_wave_field.glsl</file>
         <file alias="resources/water/water_intersection.glsl">water/water_intersection.glsl</file>
         <file alias="resources/water/water_surface.glsl">water/water_surface.glsl</file>
         <file alias="resources/water/water_shading.glsl">water/water_shading.glsl</file>
+        <file alias="resources/terrain/terrain.vert">terrain/terrain.vert</file>
+        <file alias="resources/terrain/terrain.frag">terrain/terrain.frag</file>
     </qresource>
 </RCC>

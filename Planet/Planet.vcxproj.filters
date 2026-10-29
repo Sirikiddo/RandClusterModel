@@ -500,4 +500,40 @@
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="generation\RiverGenerator.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="renderers\WaterShaderUniforms.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClInclude Include="generation\RiverGenerator.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="renderers\WaterShaderUniforms.h"><Filter>Header Files</Filter></ClInclude>
+    <None Include="resources\water\water_shell.vert">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\water\water_shell.frag">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\water\water_math.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\water\water_common.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\water\water_wave_field.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\water\water_intersection.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\water\water_surface.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\water\water_shading.glsl">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\terrain\terrain.vert">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="resources\terrain\terrain.frag">
+      <Filter>Resource Files</Filter>
+    </None>
+  </ItemGroup>
 </Project>

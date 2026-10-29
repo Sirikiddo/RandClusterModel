@@ -6,7 +6,7 @@
 #include <QJsonParseError>
 
 namespace {
-constexpr int kCurrentTerrainSnapshotVersion = 2;
+constexpr int kCurrentTerrainSnapshotVersion = 3;
 
 bool isSupportedOreType(int value) {
     return value >= static_cast<int>(OreType::None)
@@ -56,6 +56,23 @@ QString serializeTerrainSnapshot(const TerrainSnapshot& snapshot) {
     }
     root["cells"] = cells;
 
+    // v3: клетки, занятые деревьями. Дорога не может проходить через них и
+    // заканчиваться на них, поэтому набор едет вместе с террейном.
+    QJsonArray treeCells;
+    for (int cellId : snapshot.treeCells) {
+        treeCells.push_back(cellId);
+    }
+    root["treeCells"] = treeCells;
+
+    // Клетки русел рек — ещё одно препятствие для дороги, того же рода, что и
+    // деревья. Поле необязательное: снапшоты v3, записанные до появления рек,
+    // читаются как «рек нет».
+    QJsonArray riverCells;
+    for (int cellId : snapshot.riverCells) {
+        riverCells.push_back(cellId);
+    }
+    root["riverCells"] = riverCells;
+
     return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
 }
 
@@ -71,7 +88,7 @@ std::optional<TerrainSnapshot> deserializeTerrainSnapshot(const QString& encoded
         return std::nullopt;
     }
     const int version = root["version"].toInt();
-    if (version != 1 && version != kCurrentTerrainSnapshotVersion) {
+    if (version != 1 && version != 2 && version != kCurrentTerrainSnapshotVersion) {
         return std::nullopt;
     }
     if (!root["subdivisionLevel"].isDouble()
@@ -123,6 +140,47 @@ std::optional<TerrainSnapshot> deserializeTerrainSnapshot(const QString& encoded
         cell.oreDensity = static_cast<float>(oreDensity);
         cell.oreType = static_cast<OreType>(oreType);
         snapshot.cells.push_back(cell);
+    }
+
+    // v3: клетки с деревьями. Для старых снапшотов (v1/v2) поля нет — это пустой
+    // набор; для текущей версии оно обязательно.
+    const QJsonValue treeCellsValue = root["treeCells"];
+    if (treeCellsValue.isArray()) {
+        const QJsonArray treeCells = treeCellsValue.toArray();
+        snapshot.treeCells.reserve(static_cast<size_t>(treeCells.size()));
+        for (const auto& value : treeCells) {
+            if (!isIntegralNumber(value) || value.toInt() < 0) {
+                return std::nullopt;
+            }
+            const int cellId = value.toInt();
+            if (cellId >= static_cast<int>(snapshot.cells.size())) {
+                return std::nullopt;
+            }
+            snapshot.treeCells.push_back(cellId);
+        }
+    }
+    else if (version >= kCurrentTerrainSnapshotVersion) {
+        return std::nullopt;
+    }
+
+    // Клетки русел рек: необязательное поле (старые v3 его не содержат).
+    const QJsonValue riverCellsValue = root["riverCells"];
+    if (riverCellsValue.isArray()) {
+        const QJsonArray riverCells = riverCellsValue.toArray();
+        snapshot.riverCells.reserve(static_cast<size_t>(riverCells.size()));
+        for (const auto& value : riverCells) {
+            if (!isIntegralNumber(value) || value.toInt() < 0) {
+                return std::nullopt;
+            }
+            const int cellId = value.toInt();
+            if (cellId >= static_cast<int>(snapshot.cells.size())) {
+                return std::nullopt;
+            }
+            snapshot.riverCells.push_back(cellId);
+        }
+    }
+    else if (!riverCellsValue.isUndefined() && !riverCellsValue.isNull()) {
+        return std::nullopt;
     }
 
     return snapshot;

@@ -1,4 +1,4 @@
-﻿#include "EngineFacade.h"
+#include "EngineFacade.h"
 
 #include <memory>
 #include "TerrainBackendSelector.h"
@@ -55,11 +55,10 @@ TerrainRegenerationResult EngineFacade::regenerateTerrain() {
     if (result) {
         ++overlay_.sceneVersion;
 
-        // ÐŸÐ¾ÑÐ»Ðµ ÑƒÑÐ¿ÐµÑˆÐ½Ð¾Ð¹ Ñ€ÐµÐ³ÐµÐ½ÐµÑ€Ð°Ñ†Ð¸Ð¸ Ñ‚ÐµÑ€Ñ€ÐµÐ¹Ð½Ð° Ð¾Ð±Ð½Ð¾Ð²Ð»ÑÐµÐ¼ PathBackend
-        const TerrainSnapshot* snapshot = impl_->terrainBackend.currentTerrainSnapshot();
-        if (snapshot) {
-            impl_->pathBackend.setTerrainSnapshot(*snapshot);
-        }
+        // PathBackend здесь намеренно не обновляем: terrain backend не знает о
+        // деревьях, и его снапшот затёр бы набор клеток-препятствий для дороги.
+        // Актуальный и полный снапшот приходит из сцены через ITerrainSceneBridge
+        // (InputController::projectTerrainSnapshot / rebuildTerrainFromInputs).
     }
 
     return result;

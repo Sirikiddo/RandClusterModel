@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <QMatrix4x4>
 #include <QPoint>
@@ -148,6 +148,12 @@ private:
     void moveSelectedEntityToCell(int cellId, Response& response);
     bool applyAnimationWithPath(int entityId, int targetCell, const std::vector<int>& cellPath, float speed, float bounceHeight);
     bool isCellOccupied(int cellId, std::optional<int> ignoredEntityId = std::nullopt) const;
+    // Клетка с деревом непроезжая: дорога не проходит через неё и не может на ней
+    // закончиться. Это отдельное от isCellOccupied правило (там постройки/техника).
+    bool isCellBlockedByTree(int cellId) const;
+    // Клетка в русле реки непроезжая по тем же правилам, что и клетка с деревом:
+    // машина не стоит в воде и путь через реку не прокладывается.
+    bool isCellBlockedByRiver(int cellId) const;
     Response placeBuildingOnCell(int cellId);
     bool isDeletableEntity(int entityId) const;
     Response deleteEntityAtHit(const PickHit& hit);

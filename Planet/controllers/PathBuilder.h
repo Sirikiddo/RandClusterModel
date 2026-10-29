@@ -23,6 +23,11 @@ public:
         : model_(model)
         , smoothMaxDelta_(effectiveMaxClimbDelta(smoothMaxDelta)) {}
 
+    // Клетки-препятствия (деревья): через них путь не проходит, и закончиться
+    // на такой клетке он тоже не может. Индексы вне модели игнорируются.
+    void setBlockedCells(const std::vector<int>& cellIds);
+    bool isBlocked(int cellId) const;
+
     void build(WeightFn w = nullptr) const;
     std::vector<int> astar(int startId, int goalId) const;
 
@@ -42,5 +47,6 @@ private:
     const HexSphereModel& model_;
     const int smoothMaxDelta_;
     mutable std::vector<std::vector<Adj>> g_;
+    std::vector<char> blocked_;
 };
 

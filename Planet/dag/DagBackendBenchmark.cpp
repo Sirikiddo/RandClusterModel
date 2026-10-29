@@ -182,23 +182,57 @@ bool runOrePipelineChecks(QString* failure) {
     snapshot.cells.push_back(TerrainCellSnapshot{
         4, Biome::Rock, 0.25f, 0.5f, 0.75f, 0.8f, OreType::Gold
     });
+    snapshot.treeCells.push_back(0);
+    snapshot.riverCells.push_back(0);
 
-    const QString encodedV2 = serializeTerrainSnapshot(snapshot);
-    const QJsonDocument v2Document = QJsonDocument::fromJson(encodedV2.toUtf8());
-    if (!v2Document.isObject()
-        || v2Document.object()["version"].toInt() != 2
-        || v2Document.object()["cells"].toArray().at(0).toObject().contains("oreVisualDensity")) {
-        return fail("snapshot v2 shape");
+    const QString encodedCurrent = serializeTerrainSnapshot(snapshot);
+    const QJsonDocument currentDocument = QJsonDocument::fromJson(encodedCurrent.toUtf8());
+    if (!currentDocument.isObject()
+        || currentDocument.object()["version"].toInt() != 3
+        || currentDocument.object()["cells"].toArray().at(0).toObject().contains("oreVisualDensity")
+        || currentDocument.object()["treeCells"].toArray().size() != 1
+        || currentDocument.object()["riverCells"].toArray().size() != 1) {
+        return fail("snapshot v3 shape");
     }
-    const auto roundTrip = deserializeTerrainSnapshot(encodedV2);
+    const auto roundTrip = deserializeTerrainSnapshot(encodedCurrent);
     if (!roundTrip
         || roundTrip->cells.size() != 1
         || roundTrip->cells.front().oreType != OreType::Gold
-        || std::abs(roundTrip->cells.front().oreDensity - 0.8f) > 0.0001f) {
-        return fail("snapshot v2 round-trip");
+        || std::abs(roundTrip->cells.front().oreDensity - 0.8f) > 0.0001f
+        || roundTrip->treeCells != std::vector<int>{ 0 }
+        || roundTrip->riverCells != std::vector<int>{ 0 }) {
+        return fail("snapshot v3 round-trip");
     }
 
-    QJsonObject v1Root = v2Document.object();
+    // v3 обязан нести набор клеток с деревьями: без него путь не сможет их объехать.
+    QJsonObject missingTreeCells = currentDocument.object();
+    missingTreeCells.remove("treeCells");
+    if (deserializeTerrainSnapshot(
+            QString::fromUtf8(QJsonDocument(missingTreeCells).toJson(QJsonDocument::Compact)))) {
+        return fail("snapshot v3 without treeCells accepted");
+    }
+
+    // Клетки рек — необязательное поле v3: старые снапшоты читаются как «рек нет».
+    QJsonObject missingRiverCells = currentDocument.object();
+    missingRiverCells.remove("riverCells");
+    const auto legacySnapshot = deserializeTerrainSnapshot(
+        QString::fromUtf8(QJsonDocument(missingRiverCells).toJson(QJsonDocument::Compact)));
+    if (!legacySnapshot || !legacySnapshot->riverCells.empty()) {
+        return fail("snapshot v3 without riverCells rejected");
+    }
+
+    // v2 (и v1) читаются по-прежнему, деревьев в них нет.
+    QJsonObject v2Root = currentDocument.object();
+    v2Root["version"] = 2;
+    v2Root.remove("treeCells");
+    v2Root.remove("riverCells");
+    const auto v2Snapshot = deserializeTerrainSnapshot(
+        QString::fromUtf8(QJsonDocument(v2Root).toJson(QJsonDocument::Compact)));
+    if (!v2Snapshot || !v2Snapshot->treeCells.empty()) {
+        return fail("snapshot v2 compatibility");
+    }
+
+    QJsonObject v1Root = currentDocument.object();
     v1Root["version"] = 1;
     QJsonArray v1Cells = v1Root["cells"].toArray();
     QJsonObject v1Cell = v1Cells.at(0).toObject();
@@ -211,14 +245,14 @@ bool runOrePipelineChecks(QString* failure) {
         return fail("snapshot v1 compatibility");
     }
 
-    QJsonObject invalidVersion = v2Document.object();
-    invalidVersion["version"] = 3;
+    QJsonObject invalidVersion = currentDocument.object();
+    invalidVersion["version"] = 4;
     if (deserializeTerrainSnapshot(
             QString::fromUtf8(QJsonDocument(invalidVersion).toJson(QJsonDocument::Compact)))) {
         return fail("unknown snapshot version accepted");
     }
 
-    QJsonObject invalidType = v2Document.object();
+    QJsonObject invalidType = currentDocument.object();
     QJsonArray invalidCells = invalidType["cells"].toArray();
     QJsonObject invalidCell = invalidCells.at(0).toObject();
     invalidCell["oreType"] = 99;

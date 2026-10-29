@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <QElapsedTimer>
 #include <QSet>
@@ -14,6 +14,7 @@
 #include "dag/TerrainBackendTypes.h"
 #include "controllers/PathBuilder.h"
 #include "generation/MeshGenerators/TerrainMeshGenerator.h"
+#include "generation/RiverGenerator.h"
 #include "generation/TerrainGenerator.h"
 #include "generation/WaterWaveModel.h"
 #include "model/HexSphereModel.h"
@@ -100,9 +101,36 @@ public:
 
     float cellSize() const;
     float getModelScaleFactor() const;
+
+    // Единый коэффициент мирового размера процедурных деревьев.
+    // Дерево стоит на клетке планеты, поэтому его размер обязан следовать за
+    // топологией (SubdivisionLevel) так же, как размер машины, фабрики и шахты.
+    // Любая правка размера деревьев должна идти через этот метод.
+    float treeGlobalScale() const;
     bool isCellOccupiedByTree(int cellId) const;
     const std::vector<TreePlacement>& getTreePlacements() const { return treePlacements_; }
     void generateTreePlacements();
+
+    // ========== РЕКИ ==========
+    // Река — путь «море → суша → море». Рисуется тем же способом, что и дорога
+    // (лента по клеткам планеты), но водой: см. buildRiverMesh().
+    // Полуширина русла у устья и в среднем течении, а также глубина воды в
+    // русле — в долях getModelScaleFactor(). Одни и те же константы использует
+    // рендерер, когда передаёт в шейдер реки глубину и амплитуду волн.
+    static constexpr float kRiverMouthHalfWidth = 0.034f;
+    static constexpr float kRiverMidHalfWidth = 0.022f;
+    static constexpr float kRiverChannelDepth = 0.008f;
+    // Доля морской амплитуды волн, которую русло поднимает геометрически.
+    // Наклон для затенения остаётся морским (см. renderers/HexSphereRenderer.cpp).
+    static constexpr float kRiverWaveGeometryScale = 0.35f;
+    const std::vector<RiverPath>& getRivers() const { return rivers_; }
+    bool isCellOccupiedByRiver(int cellId) const { return riverOccupiedCells_.contains(cellId); }
+    const QSet<int>& riverCells() const { return riverOccupiedCells_; }
+    uint64_t riverRevision() const { return riverRevision_; }
+    void generateRivers();
+    // Лента воды вдоль русел: 11 float на вершину (позиция, берег/глубина, нормаль, руда).
+    std::vector<float> buildRiverMesh() const;
+
     SceneViewMode sceneViewMode() const { return viewMode_; }
     bool isContributorMode() const { return viewMode_ == SceneViewMode::Contributor; }
     bool supportsTerrainVisibility() const { return !isContributorMode() && !terrainCPU_.idx.empty(); }
@@ -227,6 +255,12 @@ private:
     QSet<int> treeOccupiedCells_;
     std::vector<float> selectionOutlineVertices_;
     bool selectionOutlineDirty_ = true;
+
+    // Реки: пути «море → суша → море». Хранятся как клетки, из них строится
+    // ленточная сетка воды (buildRiverMesh), которую рендерер рисует как море.
+    std::vector<RiverPath> rivers_;
+    QSet<int> riverOccupiedCells_;
+    uint64_t riverRevision_ = 0;
 
     QVector3D cameraPos_{ 0, 0, 5 };      // Ð¢ÐµÐºÑƒÑ‰Ð°Ñ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ñ ÐºÐ°Ð¼ÐµÑ€Ñ‹ (Ð½Ð°Ñ‡Ð°Ð»ÑŒÐ½Ð¾Ðµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ)
     QVector3D lastCameraPos_{ 0, 0, 5 };  // ÐŸÐ¾Ð·Ð¸Ñ†Ð¸Ñ Ð½Ð° Ð¿Ñ€Ð¾ÑˆÐ»Ð¾Ð¼ ÐºÐ°Ð´Ñ€Ðµ Ð´Ð»Ñ Ð´ÐµÑ‚ÐµÐºÑ‚Ð° Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ

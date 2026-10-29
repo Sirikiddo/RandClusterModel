@@ -1,4 +1,4 @@
-﻿#include "controllers/PathBuilder.h"
+#include "controllers/PathBuilder.h"
 
 #include <algorithm>
 #include <cmath>
@@ -16,6 +16,21 @@ namespace {
 
 int PathBuilder::effectiveMaxClimbDelta(int smoothMaxDelta) {
     return std::clamp(smoothMaxDelta, 0, kMaxClimbDelta);
+}
+
+void PathBuilder::setBlockedCells(const std::vector<int>& cellIds) {
+    blocked_.assign(model_.cells().size(), 0);
+    for (int cellId : cellIds) {
+        if (cellId >= 0 && cellId < static_cast<int>(blocked_.size())) {
+            blocked_[static_cast<size_t>(cellId)] = 1;
+        }
+    }
+}
+
+bool PathBuilder::isBlocked(int cellId) const {
+    return cellId >= 0
+        && cellId < static_cast<int>(blocked_.size())
+        && blocked_[static_cast<size_t>(cellId)] != 0;
 }
 
 void PathBuilder::build(PathBuilder::WeightFn w) const {
@@ -41,6 +56,11 @@ void PathBuilder::build(PathBuilder::WeightFn w) const {
 
 bool PathBuilder::isTraversable(const Cell& from, const Cell& to) const {
     if (to.biome == Biome::Sea) {
+        return false;
+    }
+
+    // Дерево — препятствие: дорога не проходит сквозь занятую им клетку.
+    if (isBlocked(to.id)) {
         return false;
     }
 
@@ -85,6 +105,12 @@ float PathBuilder::traversalCost(const Cell& from, const Cell& to) const {
 std::vector<int> PathBuilder::astar(int startId, int goalId) const {
     const int n = static_cast<int>(g_.size());
     if (startId < 0 || goalId < 0 || startId >= n || goalId >= n) {
+        return {};
+    }
+
+    // Концом дороги не может быть клетка с деревом: путь не строим вовсе.
+    // Старт может быть занят (Explorer уже стоит там) — выехать с него можно.
+    if (startId != goalId && isBlocked(goalId)) {
         return {};
     }
 
