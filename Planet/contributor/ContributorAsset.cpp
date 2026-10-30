@@ -1,10 +1,12 @@
 #include "contributor/ContributorAsset.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <QDebug>
 #include <random>
+#include <thread>
 #include <vector>
 
 #include "contributor/ContributorParticles.h"
@@ -72,25 +74,64 @@ namespace {
         asset.speciesMeshes.resize(TreeBuilder::kTreeSpeciesCount);
         asset.speciesParticles.resize(TreeBuilder::kTreeSpeciesCount);
 
+        const size_t totalVariants = static_cast<size_t>(TreeBuilder::kTreeSpeciesCount)
+            * static_cast<size_t>(kVariantsPerSpecies);
+
+        struct VariantBuild {
+            simple3d::Mesh wood;
+            std::vector<ContributorParticle> particles;
+            float realisticScale = 1.0f;
+        };
+        std::vector<VariantBuild> builds(totalVariants);
+
+        // Варианты независимы: каждый использует собственный seed и локальный
+        // генератор. Деревья собираются на нескольких потоках, а порядок
+        // результатов сохраняется по индексу (species, variant).
+        std::atomic<size_t> nextIndex{ 0 };
+        const unsigned workerCount = std::max(1u, std::min(
+            8u, std::thread::hardware_concurrency()));
+        auto worker = [&]() {
+            for (;;) {
+                const size_t index = nextIndex.fetch_add(1, std::memory_order_relaxed);
+                if (index >= totalVariants) {
+                    return;
+                }
+                const int s = static_cast<int>(index / kVariantsPerSpecies);
+                const int v = static_cast<int>(index % kVariantsPerSpecies);
+
+                const TreeBuilder::TreeVariant& variant = cache[static_cast<size_t>(s)][static_cast<size_t>(v)];
+                auto meshData = TreeBuilder::generateMesh(variant.params);
+
+                VariantBuild build;
+                // Видовой коэффициент становится полным множителем размера
+                // варианта: видовой характер × нормировка высоты меша.
+                build.realisticScale = treeScaleForVariant(
+                    variant, localTreeHeight(meshData));
+                build.particles = TreeBuilder::generateParticles(
+                    meshData, variant, kGlobalScale);
+                build.wood = std::move(meshData.wood);
+                builds[index] = std::move(build);
+            }
+            };
+
+        std::vector<std::thread> workers;
+        workers.reserve(workerCount);
+        for (unsigned i = 0; i < workerCount; ++i) {
+            workers.emplace_back(worker);
+        }
+        for (std::thread& thread : workers) {
+            thread.join();
+        }
+
         for (int s = 0; s < TreeBuilder::kTreeSpeciesCount; ++s) {
             asset.speciesMeshes[s].resize(kVariantsPerSpecies);
             asset.speciesParticles[s].resize(kVariantsPerSpecies);
-
             for (int v = 0; v < kVariantsPerSpecies; ++v) {
-                // Генерируем меш
-                auto meshData = TreeBuilder::generateMesh(cache[s][v].params);
-
-                // Переопределяем видовой коэффициент: теперь это полный множитель
-                // размера варианта — видовой характер × нормировка высоты меша.
-                cache[s][v].realisticScale =
-                    treeScaleForVariant(cache[s][v], localTreeHeight(meshData));
-
-                // Меш ствола уже в simple3d::Mesh — просто перемещаем
-                asset.speciesMeshes[s][v] = std::move(meshData.wood);
-
-                // Частицы (центры — в локальных координатах дерева)
-                asset.speciesParticles[s][v] =
-                    TreeBuilder::generateParticles(meshData, cache[s][v], kGlobalScale);
+                VariantBuild& build = builds[static_cast<size_t>(s) * kVariantsPerSpecies + v];
+                cache[static_cast<size_t>(s)][static_cast<size_t>(v)].realisticScale =
+                    build.realisticScale;
+                asset.speciesMeshes[s][v] = std::move(build.wood);
+                asset.speciesParticles[s][v] = std::move(build.particles);
             }
 
             qDebug() << "Species" << s << "generated"

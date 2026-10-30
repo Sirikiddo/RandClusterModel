@@ -111,7 +111,8 @@ public:
     void updateTerrainOreData(const TerrainMesh& mesh);
 
 private:
-    GLuint makeProgram(const QByteArray& vs, const QByteArray& fs);
+    GLuint makeProgram(const QByteArray& vs, const QByteArray& fs,
+        const QByteArray& gs = QByteArray{});
     void generateEnvCubemap();
     void ensureSceneDepthTexture(int width, int height);
     void copySceneDepthToTexture(int width, int height);
@@ -122,6 +123,7 @@ private:
     void uploadSelectionOutlineInternal(const std::vector<float>& vertices);
     void uploadPathInternal(const std::vector<QVector3D>& points);
     void uploadRiverInternal(const std::vector<float>& vertices);
+    void uploadRiverLineInternal(const std::vector<float>& vertices);
     void loadContributorModel();
     void renderContributorModel(const RenderContext& ctx);
     void renderProceduralTreeParticles(const RenderContext& ctx);  // Твой метод
@@ -175,11 +177,21 @@ private:
     GLuint vaoRiver_ = 0;
     GLuint vboRiver_ = 0;
     GLsizei riverVertexCount_ = 0;
+    GLuint vaoRiverLine_ = 0;
+    GLuint vboRiverLine_ = 0;
+    GLsizei riverLineVertexCount_ = 0;
+    GLuint progRiverLine_ = 0;
+    GLint uMVP_RiverLine_ = -1;
+    GLint uViewPos_RiverLine_ = -1;
+    GLint uViewportSize_RiverLine_ = -1;
+    GLint uWidthPx_RiverLine_ = -1;
     uint64_t uploadedRiverRevision_ = 0;
     GLint uIsRiver_ = -1;
     GLint uRiverWaveAmplitude_ = -1;
     GLint uRiverWaveNormalAmplitude_ = -1;
     GLint uRiverWaterDepth_ = -1;
+    GLint uRiverDepthTolerance_ = -1;
+    GLint uSceneDepthTex_Terrain_ = -1;
     // Общие с морем uniform-ы: волны, оптика, окружение (см. WaterShaderUniforms.h).
     WaterShaderLocations waterLocationsTerrain_;
 

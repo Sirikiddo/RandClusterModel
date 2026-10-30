@@ -8,10 +8,12 @@
 
 namespace {
 
-    // Подъём воды стоит дорого, спуск — немного дешевле: река течёт вниз.
-    constexpr float kClimbPenalty = 0.70f;
+    // Спуск дешевле подъёма: река должна стекать с горы вниз, а не искать
+    // обходные долины с подъёмами. Штраф за подъём заметно выше старого,
+    // потому что теперь исток фиксирован в горах.
+    constexpr float kClimbPenalty = 2.40f;
     constexpr float kDescentDiscount = 0.12f;
-    constexpr float kMaxDescentDiscount = 0.45f;
+    constexpr float kMaxDescentDiscount = 0.42f;
 
     float angularDistance(const QVector3D& a, const QVector3D& b) {
         const float dot = std::clamp(
@@ -71,11 +73,140 @@ namespace {
         return false;
     }
 
-    // Dijkstra от устья: ищем ближайшее другое устье, идя только по суше.
-    // Море нельзя проходить насквозь — оно может быть только финишем.
-    RiverPath findRiverFrom(
+    int heightQuantile(std::vector<int>& heights, float quantile) {
+        if (heights.empty()) {
+            return 0;
+        }
+        const float q = std::clamp(quantile, 0.0f, 1.0f);
+        const size_t index = std::min(
+            heights.size() - 1,
+            static_cast<size_t>(q * static_cast<float>(heights.size() - 1)));
+        std::nth_element(heights.begin(), heights.begin() + static_cast<ptrdiff_t>(index), heights.end());
+        return heights[index];
+    }
+
+    // Исток должен лежать на склоне: рядом есть клетка ниже, иначе вода
+    // "начинается" на плато и река выглядит случайной.
+    bool hasLowerLandNeighbor(const HexSphereModel& model, int cellId) {
+        const auto& cells = model.cells();
+        const Cell& cell = cells[static_cast<size_t>(cellId)];
+        for (int neighbor : cell.neighbors) {
+            if (neighbor < 0 || neighbor >= static_cast<int>(cells.size())) {
+                continue;
+            }
+            const Cell& other = cells[static_cast<size_t>(neighbor)];
+            if (other.biome != Biome::Sea && other.height < cell.height) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    struct SourceCandidate {
+        int cellId = -1;
+        int height = 0;
+        int score = 0;
+        QVector3D direction;
+    };
+
+    std::vector<SourceCandidate> collectMountainSources(
         const HexSphereModel& model,
-        int mouth,
+        const RiverGenerationOptions& options) {
+        const auto& cells = model.cells();
+        const int count = static_cast<int>(cells.size());
+
+        std::vector<int> landHeights;
+        landHeights.reserve(static_cast<size_t>(count));
+        for (const Cell& cell : cells) {
+            if (cell.biome != Biome::Sea) {
+                landHeights.push_back(cell.height);
+            }
+        }
+        if (landHeights.empty()) {
+            return {};
+        }
+
+        // Истоки — верхняя доля суши. Снег на полюсах сам по себе не гора,
+        // поэтому для снежных/каменных клеток дополнительно проверяется высота.
+        const int highThreshold = std::max(1, heightQuantile(landHeights, options.sourceHeightQuantile));
+        const int topThreshold = std::max(highThreshold, heightQuantile(landHeights, 0.95f));
+
+        std::vector<SourceCandidate> candidates;
+        candidates.reserve(static_cast<size_t>(count));
+
+        for (int cellId = 0; cellId < count; ++cellId) {
+            const Cell& cell = cells[static_cast<size_t>(cellId)];
+            if (cell.biome == Biome::Sea || cell.height < highThreshold) {
+                continue;
+            }
+            const bool mountainBiome = cell.biome == Biome::Rock || cell.biome == Biome::Snow;
+            if (!mountainBiome && cell.height < topThreshold) {
+                continue;
+            }
+            if (!hasLowerLandNeighbor(model, cellId)) {
+                continue;
+            }
+            candidates.push_back({
+                cellId, cell.height, mountainBiome ? 8 : 0, cell.centroid.normalized() });
+        }
+
+        // На случай планеты без выраженных гор: всё равно стартуем с самых
+        // высоких клеток, а не с произвольных низин.
+        if (candidates.size() < static_cast<size_t>(std::max(options.maxRivers, 1))) {
+            for (int cellId = 0; cellId < count; ++cellId) {
+                const Cell& cell = cells[static_cast<size_t>(cellId)];
+                if (cell.biome == Biome::Sea || cell.height < topThreshold) {
+                    continue;
+                }
+                if (!hasLowerLandNeighbor(model, cellId)) {
+                    continue;
+                }
+                const bool already = std::any_of(
+                    candidates.begin(), candidates.end(),
+                    [cellId](const SourceCandidate& value) { return value.cellId == cellId; });
+                if (!already) {
+                    candidates.push_back({ cellId, cell.height, 0, cell.centroid.normalized() });
+                }
+            }
+        }
+
+        // Детерминированный разброс: высокие горы сохраняют приоритет, но seed
+        // выбирает, какие из близких вершин станут истоками.
+        std::mt19937 rng(options.seed);
+        std::uniform_int_distribution<int> jitter(-2, 2);
+        for (SourceCandidate& candidate : candidates) {
+            candidate.score += candidate.height * 4 + jitter(rng);
+        }
+        std::stable_sort(candidates.begin(), candidates.end(),
+            [](const SourceCandidate& a, const SourceCandidate& b) {
+                return a.score > b.score;
+            });
+
+        std::vector<SourceCandidate> spaced;
+        spaced.reserve(candidates.size());
+        for (const SourceCandidate& candidate : candidates) {
+            const bool tooClose = std::any_of(
+                spaced.begin(), spaced.end(),
+                [&](const SourceCandidate& other) {
+                    return angularDistance(candidate.direction, other.direction)
+                        < options.sourceMinSeparation;
+                });
+            if (!tooClose) {
+                spaced.push_back(candidate);
+            }
+        }
+
+        if (spaced.size() < 2 && candidates.size() >= 2) {
+            return candidates;
+        }
+        return spaced;
+    }
+
+    // Dijkstra от горного истока к ближайшему морскому устью. По суше идём с
+    // сильным штрафом за подъём, море может быть только финишем.
+    RiverPath findRiverFromSource(
+        const HexSphereModel& model,
+        int source,
         const std::vector<char>& blocked,
         const RiverGenerationOptions& options) {
 
@@ -85,8 +216,7 @@ namespace {
 
         std::vector<float> distance(static_cast<size_t>(count), kInfinity);
         std::vector<int> parent(static_cast<size_t>(count), -1);
-        // Сколько сухопутных клеток пройдено от устья: по нему отсеиваем слишком
-        // короткие «реки-перемычки» и не прекращаем поиск из-за них.
+        // Сколько сухопутных шагов пройдено от истока.
         std::vector<int> landDepth(static_cast<size_t>(count), 0);
         std::vector<char> closed(static_cast<size_t>(count), 0);
 
@@ -99,8 +229,8 @@ namespace {
         };
         std::priority_queue<Node, std::vector<Node>, Compare> queue;
 
-        distance[static_cast<size_t>(mouth)] = 0.0f;
-        queue.push({ 0.0f, mouth });
+        distance[static_cast<size_t>(source)] = 0.0f;
+        queue.push({ 0.0f, source });
 
         int goal = -1;
         float goalDistance = kInfinity;
@@ -130,14 +260,13 @@ namespace {
                 }
 
                 if (cells[static_cast<size_t>(neighbor)].biome == Biome::Sea) {
-                    // Морская клетка может быть только финишем.
-                    if (current == mouth || !isCoastalSeaCell(model, neighbor)) {
+                    // Море — только устье: от истока до него должен быть путь по суше.
+                    if (current == source || !isCoastalSeaCell(model, neighbor)) {
                         continue;
                     }
-                    // Слишком короткая река (озеро-перемычка) — не финиш: ищем дальше.
-                    const int depth = landDepth[static_cast<size_t>(current)];
-                    if (depth < options.minLandCells
-                        || depth + 2 > options.maxRiverCells) {
+                    const int landCells = landDepth[static_cast<size_t>(current)] + 1;
+                    if (landCells < options.minLandCells
+                        || landCells + 1 > options.maxRiverCells) {
                         continue;
                     }
                     const float candidate = distance[static_cast<size_t>(current)]
@@ -171,23 +300,44 @@ namespace {
         std::vector<int> path;
         for (int current = goal; current != -1; current = parent[static_cast<size_t>(current)]) {
             path.push_back(current);
-            if (current == mouth) {
+            if (current == source) {
                 break;
             }
         }
         std::reverse(path.begin(), path.end());
 
-        if (path.size() < 3 || path.front() != mouth) {
+        if (path.size() < 3 || path.front() != source) {
             return {};
         }
-        const int landCells = static_cast<int>(path.size()) - 2;
+        const int landCells = static_cast<int>(path.size()) - 1;
         if (landCells < options.minLandCells
             || static_cast<int>(path.size()) > options.maxRiverCells) {
             return {};
         }
 
+        const Cell& sourceCell = cells[static_cast<size_t>(source)];
+        const Cell& mouthCell = cells[static_cast<size_t>(goal)];
+        if (sourceCell.height - mouthCell.height < options.minSourceDrop) {
+            return {};
+        }
+
+        // Река не должна по дороге забираться выше своего истока: иначе это не
+        // сток с горы, а случайный маршрут через хребет. Устье (последняя клетка)
+        // лежит в море и в проверку не входит.
+        for (size_t i = 0; i + 1 < path.size(); ++i) {
+            const Cell& cell = cells[static_cast<size_t>(path[i])];
+            if (cell.biome == Biome::Sea || cell.height > sourceCell.height) {
+                return {};
+            }
+        }
+        if (cells[static_cast<size_t>(path.back())].biome != Biome::Sea) {
+            return {};
+        }
+
         RiverPath river;
         river.cellIds = std::move(path);
+        river.sourceCellId = source;
+        river.mouthCellId = goal;
         return river;
     }
 
@@ -205,32 +355,22 @@ std::vector<RiverPath> RiverGenerator::generate(
         return rivers;
     }
 
-    std::vector<int> mouths;
-    mouths.reserve(static_cast<size_t>(count));
-    for (int cellId = 0; cellId < count; ++cellId) {
-        if (isCoastalSeaCell(model, cellId)) {
-            mouths.push_back(cellId);
-        }
-    }
-    if (mouths.size() < 2) {
+    const std::vector<SourceCandidate> sources = collectMountainSources(model, options);
+    if (sources.empty()) {
         return rivers;
     }
 
-    // Порядок перебора устьев детерминирован и зависит только от seed.
-    std::mt19937 rng(options.seed);
-    std::shuffle(mouths.begin(), mouths.end(), rng);
-
     std::vector<char> blocked(static_cast<size_t>(count), 0);
 
-    for (int mouth : mouths) {
+    for (const SourceCandidate& source : sources) {
         if (static_cast<int>(rivers.size()) >= options.maxRivers) {
             break;
         }
-        if (blocked[static_cast<size_t>(mouth)]) {
+        if (blocked[static_cast<size_t>(source.cellId)]) {
             continue;
         }
 
-        RiverPath river = findRiverFrom(model, mouth, blocked, options);
+        RiverPath river = findRiverFromSource(model, source.cellId, blocked, options);
         if (!river.isValid()) {
             continue;
         }

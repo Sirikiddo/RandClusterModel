@@ -281,3 +281,67 @@ void main() {
 }
 )GLSL";
 
+
+// Осевая линия реки: постоянная толщина в пикселях, чтобы русло не сжималось
+// в ноль на ракурсах, где лента почти параллельна лучу зрения.
+static const char* VS_RIVER_CORE = R"GLSL(
+#version 330 core
+layout(location=0) in vec3 aPos;
+uniform mat4 uMVP;
+out vec3 vWorld;
+void main() {
+    vWorld = aPos;
+    gl_Position = uMVP * vec4(aPos, 1.0);
+}
+)GLSL";
+
+static const char* GS_RIVER_CORE = R"GLSL(
+#version 330 core
+layout(lines) in;
+layout(triangle_strip, max_vertices = 4) out;
+uniform vec2 uViewportSize;
+uniform float uWidthPx;
+in vec3 vWorld[];
+out vec3 vWorldOut;
+void main() {
+    vec4 c0 = gl_in[0].gl_Position;
+    vec4 c1 = gl_in[1].gl_Position;
+    if (c0.w <= 1e-5 || c1.w <= 1e-5) {
+        return;
+    }
+    vec2 s0 = c0.xy / c0.w;
+    vec2 s1 = c1.xy / c1.w;
+    vec2 dir = (s1 - s0) * uViewportSize;
+    if (length(dir) < 1e-6) {
+        dir = vec2(0.0, 1.0);
+    }
+    dir = normalize(dir);
+    vec2 normal = vec2(-dir.y, dir.x);
+    vec2 offset = normal * (uWidthPx * 2.0) / max(uViewportSize, vec2(1.0));
+
+    vec4 a0 = c0; a0.xy += offset * c0.w;
+    vec4 b0 = c0; b0.xy -= offset * c0.w;
+    vec4 a1 = c1; a1.xy += offset * c1.w;
+    vec4 b1 = c1; b1.xy -= offset * c1.w;
+
+    vWorldOut = vWorld[0]; gl_Position = a0; EmitVertex();
+    vWorldOut = vWorld[0]; gl_Position = b0; EmitVertex();
+    vWorldOut = vWorld[1]; gl_Position = a1; EmitVertex();
+    vWorldOut = vWorld[1]; gl_Position = b1; EmitVertex();
+    EndPrimitive();
+}
+)GLSL";
+
+static const char* FS_RIVER_CORE = R"GLSL(
+#version 330 core
+in vec3 vWorldOut;
+uniform vec3 uViewPos;
+out vec4 FragColor;
+void main() {
+    // Не рисуем линию на обратной стороне планеты.
+    if (dot(normalize(vWorldOut), normalize(uViewPos)) < 0.0) {
+        discard;
+    }
+    FragColor = vec4(0.02, 0.07, 0.12, 1.0);
+}
+)GLSL";

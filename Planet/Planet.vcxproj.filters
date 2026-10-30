@@ -536,4 +536,8 @@
       <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="tests\RiverGeneratorTests.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClInclude Include="tests\RiverGeneratorTests.h"><Filter>Header Files</Filter></ClInclude>
+  </ItemGroup>
 </Project>

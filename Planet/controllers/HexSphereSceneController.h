@@ -129,7 +129,10 @@ public:
     uint64_t riverRevision() const { return riverRevision_; }
     void generateRivers();
     // Лента воды вдоль русел: 11 float на вершину (позиция, берег/глубина, нормаль, руда).
-    std::vector<float> buildRiverMesh() const;
+    // centerlineOut (если задан) получает пары точек GL_LINES по осевой русла:
+    // рендерер рисует их постоянной толщиной, чтобы река не «пропадала» на
+    // ракурсах, где лента сжимается почти в ноль.
+    std::vector<float> buildRiverMesh(std::vector<float>* centerlineOut = nullptr) const;
 
     SceneViewMode sceneViewMode() const { return viewMode_; }
     bool isContributorMode() const { return viewMode_ == SceneViewMode::Contributor; }

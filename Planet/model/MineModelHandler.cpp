@@ -588,6 +588,16 @@ bool MineModelHandler::loadFromFile(const QString& path) {
         }
 
         if (!sub.positions.empty() && !sub.indices.empty()) {
+            // Показная вагонетка (obj2) должна остаться отдельными связными
+            // частями: renderer анимирует её корпус и платформу. Остальные
+            // объекты рудника не нуждаются в разбиении и идут одним мешем на
+            // пару (объект, материал) — иначе модель распадается на тысячи
+            // подмешей и загрузка/отрисовка становятся дорогими.
+            if (sub.objectName != "obj2") {
+                meshes_.push_back(std::move(sub));
+                continue;
+            }
+
             const size_t vertexCount = sub.positions.size() / 3;
             const size_t triangleCount = sub.indices.size() / 3;
 
@@ -686,9 +696,89 @@ bool MineModelHandler::loadFromFile(const QString& path) {
 
     finalizePlacement();
     finalizeCartAnimation();
+    mergeStaticSubMeshes();
     path_ = normalized;
     loadMaterials(normalized);
     return true;
+}
+
+void MineModelHandler::mergeStaticSubMeshes() {
+    if (meshes_.size() < 2) {
+        return;
+    }
+
+    std::vector<SubMesh> merged;
+    merged.reserve(meshes_.size());
+    std::unordered_map<QString, size_t> staticLookup;
+
+    for (SubMesh& sub : meshes_) {
+        if (sub.isCart) {
+            merged.push_back(std::move(sub));
+            continue;
+        }
+
+        const QString key = sub.objectName + QChar(0x1f) + sub.materialName;
+        const auto found = staticLookup.find(key);
+        if (found == staticLookup.end()) {
+            staticLookup.emplace(key, merged.size());
+            merged.push_back(std::move(sub));
+            continue;
+        }
+
+        SubMesh& dst = merged[found->second];
+        const size_t existingVertices = dst.positions.size() / 3;
+        const size_t sourceVertices = sub.positions.size() / 3;
+
+        dst.positions.insert(dst.positions.end(),
+            sub.positions.begin(), sub.positions.end());
+
+        if (!dst.normals.empty() || !sub.normals.empty()) {
+            if (dst.normals.empty()) {
+                dst.normals.assign(existingVertices * 3, 0.0f);
+            }
+            if (sub.normals.size() == sourceVertices * 3) {
+                dst.normals.insert(dst.normals.end(),
+                    sub.normals.begin(), sub.normals.end());
+            }
+            else {
+                dst.normals.insert(dst.normals.end(), sourceVertices * 3, 0.0f);
+            }
+        }
+        if (!dst.texcoords.empty() || !sub.texcoords.empty()) {
+            if (dst.texcoords.empty()) {
+                dst.texcoords.assign(existingVertices * 2, 0.0f);
+            }
+            if (sub.texcoords.size() == sourceVertices * 2) {
+                dst.texcoords.insert(dst.texcoords.end(),
+                    sub.texcoords.begin(), sub.texcoords.end());
+            }
+            else {
+                dst.texcoords.insert(dst.texcoords.end(), sourceVertices * 2, 0.0f);
+            }
+        }
+        if (!dst.colors.empty() || !sub.colors.empty()) {
+            if (dst.colors.empty()) {
+                dst.colors.assign(existingVertices * 3, 1.0f);
+            }
+            if (sub.colors.size() == sourceVertices * 3) {
+                dst.colors.insert(dst.colors.end(),
+                    sub.colors.begin(), sub.colors.end());
+            }
+            else {
+                dst.colors.insert(dst.colors.end(), sourceVertices * 3, 1.0f);
+            }
+        }
+
+        const uint32_t offset = static_cast<uint32_t>(existingVertices);
+        for (uint32_t index : sub.indices) {
+            dst.indices.push_back(index + offset);
+        }
+        dst.hasTexcoords = dst.hasTexcoords || sub.hasTexcoords;
+        dst.hasVertexColors = dst.hasVertexColors || sub.hasVertexColors;
+    }
+
+    meshes_ = std::move(merged);
+    qDebug() << "Mine static submeshes merged to:" << meshes_.size();
 }
 
 void MineModelHandler::loadMaterials(const QString& objPath) {

@@ -60,6 +60,7 @@ private:
     void loadMaterials(const QString& objPath);
     GLuint loadTexture(const QString& path);
     void uploadSubMeshToGPU(SubMesh& sub);
+    void mergeStaticSubMeshes();
     void resetDerivedPlacementData();
     void finalizePlacement();
     void finalizeCartAnimation();

@@ -20,6 +20,11 @@ uniform bool uIsRiver;
 uniform float uRiverWaveAmplitude;
 uniform float uRiverWaveNormalAmplitude;
 uniform float uRiverWaterDepth;
+// Допуск сравнения с глубиной террейна. Река лежит на рельефе, поэтому на
+// кромках клиффов и скосах отдельные пиксели могут оказаться чуть ближе;
+// допуск не даёт им вырезать русло. Настоящие горы впереди ближе на большее
+// расстояние и по-прежнему перекрывают реку.
+uniform float uRiverDepthTolerance;
 uniform float uDepthOpticalDensity;
 uniform float uDepthAlphaDensity;
 
@@ -92,6 +97,13 @@ vec3 oreColor(int oreType) {
 
 void main() {
     if (uIsRiver) {
+        if (uRiverDepthTolerance >= 0.0) {
+            float terrainDistance = sceneDistanceAtUv(currentScreenUv());
+            float riverDistance = length(vWorldPos - uViewPos);
+            if (terrainDistance + uRiverDepthTolerance < riverDistance) {
+                discard;
+            }
+        }
         // vColor.x — близость к берегу (0 центр русла, 1 кромка).
         float bank = clamp(vColor.x, 0.0, 1.0);
         vec3 dir = normalize(vWorldPos);
@@ -155,6 +167,9 @@ void main() {
             openWater,
             foamMask,
             fresnel);
+        // Река не должна просвечивать на тонких/наклонных участках: иначе
+        // кажется, что русло разрывается. Держим минимальную непрозрачность.
+        alpha = max(alpha, 0.85);
         FragColor = shadeWaterPremultiplied(color, fresnel, alpha);
         return;
     }

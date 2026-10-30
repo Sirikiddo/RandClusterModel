@@ -3,6 +3,7 @@
 #include <QOpenGLWidget>
 #include <QtDebug>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QSet>
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <future>
 #include <utility>
 
 #include "contributor/ContributorAsset.h"
@@ -191,6 +193,7 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (progModel_)   gl_->glDeleteProgram(progModel_);
     if (progFactory_) gl_->glDeleteProgram(progFactory_);
     if (progSteam_)   gl_->glDeleteProgram(progSteam_);
+    if (progRiverLine_) gl_->glDeleteProgram(progRiverLine_);
 
     if (vaoSel_ != 0)      gl_->glDeleteVertexArrays(1, &vaoSel_);
     if (vaoWater_ != 0)    gl_->glDeleteVertexArrays(1, &vaoWater_);
@@ -216,6 +219,8 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (vboRoad_ != 0) gl_->glDeleteBuffers(1, &vboRoad_);
     if (vaoRiver_ != 0) gl_->glDeleteVertexArrays(1, &vaoRiver_);
     if (vboRiver_ != 0) gl_->glDeleteBuffers(1, &vboRiver_);
+    if (vaoRiverLine_ != 0) gl_->glDeleteVertexArrays(1, &vaoRiverLine_);
+    if (vboRiverLine_ != 0) gl_->glDeleteBuffers(1, &vboRiverLine_);
 
     if (QOpenGLContext::currentContext()) {
         owner_->doneCurrent();
@@ -224,7 +229,9 @@ HexSphereRenderer::~HexSphereRenderer() {
     glReady_ = false;
 }
 
-GLuint HexSphereRenderer::makeProgram(const QByteArray& vertexSource, const QByteArray& fragmentSource) {
+GLuint HexSphereRenderer::makeProgram(const QByteArray& vertexSource,
+    const QByteArray& fragmentSource,
+    const QByteArray& geometrySource) {
     auto compile = [&](GLenum stage, const QByteArray& source) -> GLuint {
         if (source.isEmpty()) {
             qCritical() << "Cannot compile empty shader source for stage" << stage;
@@ -249,15 +256,19 @@ GLuint HexSphereRenderer::makeProgram(const QByteArray& vertexSource, const QByt
 
     const GLuint v = compile(GL_VERTEX_SHADER, vertexSource);
     const GLuint f = compile(GL_FRAGMENT_SHADER, fragmentSource);
-    if (v == 0 || f == 0) {
+    const GLuint g = geometrySource.isEmpty()
+        ? 0 : compile(GL_GEOMETRY_SHADER, geometrySource);
+    if (v == 0 || f == 0 || (!geometrySource.isEmpty() && g == 0)) {
         if (v != 0) gl_->glDeleteShader(v);
         if (f != 0) gl_->glDeleteShader(f);
+        if (g != 0) gl_->glDeleteShader(g);
         return 0;
     }
 
     GLuint p = gl_->glCreateProgram();
     gl_->glAttachShader(p, v);
     gl_->glAttachShader(p, f);
+    if (g != 0) gl_->glAttachShader(p, g);
     gl_->glLinkProgram(p);
 
     GLint success = GL_FALSE;
@@ -265,6 +276,7 @@ GLuint HexSphereRenderer::makeProgram(const QByteArray& vertexSource, const QByt
 
     gl_->glDeleteShader(v);
     gl_->glDeleteShader(f);
+    if (g != 0) gl_->glDeleteShader(g);
     if (success != GL_TRUE) {
         GLint logLength = 0;
         gl_->glGetProgramiv(p, GL_INFO_LOG_LENGTH, &logLength);
@@ -303,13 +315,15 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
     progModel_ = makeProgram(VS_MODEL, FS_MODEL);
     progFactory_ = makeProgram(VS_FACTORY, FS_FACTORY);
     progSteam_ = makeProgram(VS_STEAM, FS_STEAM);
+    progRiverLine_ = makeProgram(VS_RIVER_CORE, FS_RIVER_CORE, GS_RIVER_CORE);
 
     if (progWire_ == 0 || progTerrain_ == 0 || progSel_ == 0 || progWater_ == 0
-        || progModel_ == 0 || progFactory_ == 0 || progSteam_ == 0) {
+        || progModel_ == 0 || progFactory_ == 0 || progSteam_ == 0
+        || progRiverLine_ == 0) {
         qCritical() << "HexSphereRenderer initialization stopped because a shader program is invalid";
         for (GLuint* program : {
                 &progWire_, &progTerrain_, &progSel_, &progWater_,
-                &progModel_, &progFactory_, &progSteam_ }) {
+                &progModel_, &progFactory_, &progSteam_, &progRiverLine_ }) {
             if (*program != 0) gl_->glDeleteProgram(*program);
             *program = 0;
         }
@@ -332,7 +346,15 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
     uRiverWaveAmplitude_ = gl_->glGetUniformLocation(progTerrain_, "uRiverWaveAmplitude");
     uRiverWaveNormalAmplitude_ = gl_->glGetUniformLocation(progTerrain_, "uRiverWaveNormalAmplitude");
     uRiverWaterDepth_ = gl_->glGetUniformLocation(progTerrain_, "uRiverWaterDepth");
+    uRiverDepthTolerance_ = gl_->glGetUniformLocation(progTerrain_, "uRiverDepthTolerance");
+    uSceneDepthTex_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uSceneDepthTex");
     waterLocationsTerrain_.cache(gl_, progTerrain_);
+
+    gl_->glUseProgram(progRiverLine_);
+    uMVP_RiverLine_ = gl_->glGetUniformLocation(progRiverLine_, "uMVP");
+    uViewPos_RiverLine_ = gl_->glGetUniformLocation(progRiverLine_, "uViewPos");
+    uViewportSize_RiverLine_ = gl_->glGetUniformLocation(progRiverLine_, "uViewportSize");
+    uWidthPx_RiverLine_ = gl_->glGetUniformLocation(progRiverLine_, "uWidthPx");
 
     gl_->glUseProgram(progSel_);
     uMVP_Sel_ = gl_->glGetUniformLocation(progSel_, "uMVP");
@@ -348,7 +370,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
         if (envCubemap_ != 0) { gl_->glDeleteTextures(1, &envCubemap_); envCubemap_ = 0; }
         for (GLuint* program : {
                 &progWire_, &progTerrain_, &progSel_, &progWater_,
-                &progModel_, &progFactory_, &progSteam_ }) {
+                &progModel_, &progFactory_, &progSteam_, &progRiverLine_ }) {
             if (*program != 0) gl_->glDeleteProgram(*program);
             *program = 0;
         }
@@ -418,6 +440,13 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
     // в aColor, нормаль, руда) в одном interleaved-буфере — 11 float на вершину.
     gl_->glGenVertexArrays(1, &vaoRiver_);
     gl_->glGenBuffers(1, &vboRiver_);
+    gl_->glGenVertexArrays(1, &vaoRiverLine_);
+    gl_->glGenBuffers(1, &vboRiverLine_);
+    gl_->glBindVertexArray(vaoRiverLine_);
+    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboRiverLine_);
+    gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    gl_->glEnableVertexAttribArray(0);
+    gl_->glBindVertexArray(0);
     gl_->glBindVertexArray(vaoRiver_);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboRiver_);
     const GLsizei riverStride = static_cast<GLsizei>(sizeof(float) * 11u);
@@ -439,6 +468,27 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
 
     particleRenderer_ = std::make_unique<ParticleRenderer>();
     particleRenderer_->initialize();
+
+    // OBJ-модели не требуют OpenGL на этапе разбора: читаем и разбираем их
+    // параллельно с генерацией процедурных деревьев, а на GPU загружаем
+    // позже, на GL-потоке.
+    const QString carPath = "resources/car/scene.obj";
+    const QString factoryPath = "resources/factory/scene.obj";
+    const QString minePath = "resources/mine/stylized_gold_mine.obj";
+
+    carModel_ = std::make_shared<CarModelHandler>();
+    factoryModel_ = std::make_shared<FactoryModelHandler>();
+    mineModel_ = std::make_shared<MineModelHandler>();
+
+    auto parseTimed = [](const auto& model, const QString& path) {
+        QElapsedTimer timer;
+        timer.start();
+        const bool ok = model->loadFromFile(path);
+        return std::make_pair(ok, timer.elapsed());
+        };
+    auto carParse = std::async(std::launch::async, parseTimed, carModel_, carPath);
+    auto factoryParse = std::async(std::launch::async, parseTimed, factoryModel_, factoryPath);
+    auto mineParse = std::async(std::launch::async, parseTimed, mineModel_, minePath);
 
     // ===================================================================
     // ================ ЗАГРУЗКА КЭША ПРОЦЕДУРНЫХ ДЕРЕВЬЕВ ================
@@ -494,35 +544,21 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
 
     owner_->makeCurrent();
 
-    const QString carPath = "resources/car/scene.obj";
-    carModel_ = std::make_shared<CarModelHandler>();
-    if (!carModel_->loadFromFile(carPath)) {
-        qDebug() << "Failed to load car model from:" << carPath;
-    }
-    else {
-        carModel_->uploadToGPU();
-        qDebug() << "Car model loaded successfully";
-    }
-
-    const QString factoryPath = "resources/factory/scene.obj";
-    factoryModel_ = std::make_shared<FactoryModelHandler>();
-    if (!factoryModel_->loadFromFile(factoryPath)) {
-        qDebug() << "Failed to load factory model from:" << factoryPath;
-    }
-    else {
-        factoryModel_->uploadToGPU();
-        qDebug() << "Factory model loaded successfully";
-    }
-
-    const QString minePath = "resources/mine/stylized_gold_mine.obj";
-    mineModel_ = std::make_shared<MineModelHandler>();
-    if (!mineModel_->loadFromFile(minePath)) {
-        qDebug() << "Failed to load mine model from:" << minePath;
-    }
-    else {
-        mineModel_->uploadToGPU();
-        qDebug() << "Mine model loaded successfully";
-    }
+    auto finishModelUpload = [](const char* label, auto& model, auto& parseFuture) {
+        const auto [ok, parseMs] = parseFuture.get();
+        qint64 uploadMs = 0;
+        if (ok) {
+            QElapsedTimer timer;
+            timer.start();
+            model->uploadToGPU();
+            uploadMs = timer.elapsed();
+        }
+        qDebug().nospace() << label << " model " << (ok ? "ready" : "failed")
+            << ": parse " << parseMs << " ms, upload " << uploadMs << " ms";
+        };
+    finishModelUpload("Car", carModel_, carParse);
+    finishModelUpload("Factory", factoryModel_, factoryParse);
+    finishModelUpload("Mine", mineModel_, mineParse);
 
     terrainRenderer_ = std::make_unique<TerrainRenderer>(
         gl_, progTerrain_, uMVP_Terrain_, uModel_, uLightDir_,
@@ -927,7 +963,9 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
         uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
         uploadPathInternal({});
         if (uploadedRiverRevision_ != scene.riverRevision()) {
-            uploadRiverInternal(scene.buildRiverMesh());
+            std::vector<float> centerline;
+            uploadRiverInternal(scene.buildRiverMesh(&centerline));
+            uploadRiverLineInternal(centerline);
             uploadedRiverRevision_ = scene.riverRevision();
         }
         });
@@ -1095,10 +1133,64 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
         gl_->glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         gl_->glDisable(GL_CULL_FACE);
         gl_->glDepthMask(GL_FALSE);
+        // Русло лежит на рельефе: смещаем глубину к камере, чтобы на ровных
+        // участках и кромках клиффов не было мерцания/исчезновения ленты.
+        gl_->glEnable(GL_POLYGON_OFFSET_FILL);
+        gl_->glPolygonOffset(-1.0f, -1.0f);
+
+        // Осевая линия рисуется ПОД руслом. Там, где лента воды есть, она
+        // непрозрачна и полностью закрывает линию; линия остаётся видимой
+        // только в реальных просветах, куда не попал ни один пиксель русла.
+        if (riverLineVertexCount_ > 0 && progRiverLine_ != 0) {
+            const GLboolean lineDepthWasEnabled = gl_->glIsEnabled(GL_DEPTH_TEST);
+            gl_->glUseProgram(progRiverLine_);
+            gl_->glUniformMatrix4fv(uMVP_RiverLine_, 1, GL_FALSE, ctx.mvp.constData());
+            gl_->glUniform3f(uViewPos_RiverLine_,
+                ctx.cameraPos.x(), ctx.cameraPos.y(), ctx.cameraPos.z());
+            gl_->glUniform2f(uViewportSize_RiverLine_,
+                static_cast<float>(ctx.viewportSize.width()),
+                static_cast<float>(ctx.viewportSize.height()));
+            gl_->glUniform1f(uWidthPx_RiverLine_, 3.5f);
+            gl_->glDisable(GL_DEPTH_TEST);
+            gl_->glLineWidth(1.0f);
+            gl_->glBindVertexArray(vaoRiverLine_);
+            gl_->glDrawArrays(GL_LINES, 0, riverLineVertexCount_);
+            gl_->glBindVertexArray(0);
+            if (lineDepthWasEnabled) {
+                gl_->glEnable(GL_DEPTH_TEST);
+            }
+            gl_->glUseProgram(progTerrain_);
+        }
+
+        // Глубину террейна проверяем вручную с допуском: кромка клиффа может
+        // быть на волосок ближе к камере и вырезать часть русла. Настоящие
+        // горы впереди остаются ближе на большее расстояние и перекрывают реку.
+        const GLboolean depthWasEnabled = gl_->glIsEnabled(GL_DEPTH_TEST);
+        const bool manualRiverDepth = sceneDepthTexture_ != 0
+            && uSceneDepthTex_Terrain_ >= 0;
+        if (manualRiverDepth) {
+            gl_->glDisable(GL_DEPTH_TEST);
+            gl_->glActiveTexture(GL_TEXTURE1);
+            gl_->glBindTexture(GL_TEXTURE_2D, sceneDepthTexture_);
+            gl_->glUniform1i(uSceneDepthTex_Terrain_, 1);
+            if (uRiverDepthTolerance_ >= 0) {
+                gl_->glUniform1f(uRiverDepthTolerance_, 0.25f);
+            }
+        }
+        else if (uRiverDepthTolerance_ >= 0) {
+            gl_->glUniform1f(uRiverDepthTolerance_, -1.0f);
+        }
 
         gl_->glBindVertexArray(vaoRiver_);
         gl_->glDrawArrays(GL_TRIANGLES, 0, riverVertexCount_);
         gl_->glBindVertexArray(0);
+        gl_->glDisable(GL_POLYGON_OFFSET_FILL);
+
+        if (uIsRiver_ >= 0) gl_->glUniform1i(uIsRiver_, 0);
+
+        if (depthWasEnabled) {
+            gl_->glEnable(GL_DEPTH_TEST);
+        }
 
         gl_->glDepthMask(GL_TRUE);
         gl_->glEnable(GL_CULL_FACE);
@@ -1106,8 +1198,6 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
         gl_->glBlendFunc(static_cast<GLenum>(previousBlendSrcRgb),
             static_cast<GLenum>(previousBlendDstRgb));
         gl_->glActiveTexture(static_cast<GLenum>(previousActiveTexture));
-
-        if (uIsRiver_ >= 0) gl_->glUniform1i(uIsRiver_, 0);
     }
 
     if (graph.scene.isContributorMode()) {
@@ -1520,6 +1610,15 @@ void HexSphereRenderer::uploadRiverInternal(const std::vector<float>& vertices) 
         vertices.empty() ? nullptr : vertices.data(),
         GL_DYNAMIC_DRAW);
     riverVertexCount_ = static_cast<GLsizei>(vertices.size() / kRiverFloatsPerVertex);
+}
+
+void HexSphereRenderer::uploadRiverLineInternal(const std::vector<float>& vertices) {
+    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboRiverLine_);
+    gl_->glBufferData(GL_ARRAY_BUFFER,
+        GLsizeiptr(vertices.size() * sizeof(float)),
+        vertices.empty() ? nullptr : vertices.data(),
+        GL_DYNAMIC_DRAW);
+    riverLineVertexCount_ = static_cast<GLsizei>(vertices.size() / 3);
 }
 
 void HexSphereRenderer::uploadRoad(const std::vector<float>& vertices) {

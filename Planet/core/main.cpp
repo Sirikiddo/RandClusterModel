@@ -12,6 +12,7 @@
 #include "tests/WaterScreenPassTests.h"
 #include "tests/ClimateBiomeGeneratorTests.h"
 #include "tests/DagTransportBenchmark.h"
+#include "tests/RiverGeneratorTests.h"
 
 extern "C" {
     __declspec(dllexport) DWORD NvOptimusEnablement = 1;
@@ -30,6 +31,7 @@ int main(int argc, char** argv) {
     bool runBenchmark = false;
     bool runWaterTests = false;
     bool runClimateTests = false;
+    bool runRiverTests = false;
     for (int i = 1; i < argc; ++i) {
         if (QString::fromLocal8Bit(argv[i]) == "--benchmark") {
             runBenchmark = true;
@@ -40,15 +42,19 @@ int main(int argc, char** argv) {
         if (QString::fromLocal8Bit(argv[i]) == "--climate-tests") {
             runClimateTests = true;
         }
+        if (QString::fromLocal8Bit(argv[i]) == "--river-tests") {
+            runRiverTests = true;
+        }
     }
     runBenchmark = runBenchmark || QString::fromWCharArray(GetCommandLineW()).contains("--benchmark");
     runBenchmark = runBenchmark || qEnvironmentVariableIsSet("GAME_NEW_BENCHMARK");
 
-    if (runWaterTests || runClimateTests) {
+    if (runWaterTests || runClimateTests || runRiverTests) {
         QCoreApplication app(argc, argv);
         try {
             if (runWaterTests) runWaterWaveModelUnitTests();
             if (runClimateTests) runClimateBiomeGeneratorUnitTests();
+            if (runRiverTests) runRiverGeneratorUnitTests();
             return 0;
         }
         catch (const std::exception&) {

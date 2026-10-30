@@ -320,6 +320,10 @@
     <None Include="resources\terrain\terrain.vert" />
     <None Include="resources\terrain\terrain.frag" />
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="tests\RiverGeneratorTests.cpp" />
+    <ClInclude Include="tests\RiverGeneratorTests.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
     <Import Project="$(QtMsBuild)\qt.targets" />
