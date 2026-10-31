@@ -332,9 +332,13 @@ SurfaceAtlasMeshData SurfaceAtlasMeshBuilder::build(
     outputSigns.reserve(mesh.idx.size());
 
     const std::size_t triangleCount = mesh.idx.size() / 3u;
-    const float directionQuantization = mesh.idx.size() >= 3000000u
+    // Explicit atlas LOD by logical subdivision. Keeping this tied to L makes
+    // the quality/performance tradeoff stable even when terrain tessellation
+    // options change the number of render triangles.
+    const int level = model.subdivisions();
+    const float directionQuantization = level >= 7
         ? 250.0f
-        : (mesh.idx.size() >= 700000u ? 1000.0f : 2000.0f);
+        : (level >= 6 ? 1000.0f : 2000.0f);
     for (std::size_t tri = 0; tri < triangleCount; ++tri) {
         const TriangleSurfaceRole role = tri < mesh.triSurfaceRole.size()
             ? mesh.triSurfaceRole[tri]
