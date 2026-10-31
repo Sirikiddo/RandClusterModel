@@ -858,9 +858,10 @@ void HexSphereRenderer::uploadPathInternal(const std::vector<QVector3D>& points)
 
 void HexSphereRenderer::rebuildPlanetSurfaceAtlas(
     const TerrainMesh& mesh,
-    const HexSphereModel& model) {
+    const HexSphereModel& model,
+    uint64_t terrainRevision) {
     if (!surfaceAtlasPass_) return;
-    surfaceAtlasPass_->updateMesh(mesh, model);
+    surfaceAtlasPass_->updateMesh(mesh, model, terrainRevision);
     planetRadiusAtlas_ = surfaceAtlasPass_->radiusTexture();
     planetSurfaceKindAtlas_ = surfaceAtlasPass_->kindTexture();
     planetShoreDistanceAtlas_ = surfaceAtlasPass_->shoreDistanceTexture();
@@ -972,7 +973,7 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
 
     withContext([&]() {
         uploadTerrainInternal(scene.terrain(), options.terrainUsage);
-        rebuildPlanetSurfaceAtlas(scene.terrain(), scene.model());
+        rebuildPlanetSurfaceAtlas(scene.terrain(), scene.model(), scene.terrainRevision());
         uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
         uploadPathInternal({});
         if (uploadedRiverRevision_ != scene.riverRevision()) {
@@ -1529,7 +1530,7 @@ void HexSphereRenderer::uploadTerrainHydrology(
     GLenum terrainUsage) {
     withContext([&]() {
         uploadTerrainInternal(scene.terrain(), terrainUsage);
-        rebuildPlanetSurfaceAtlas(scene.terrain(), scene.model());
+        rebuildPlanetSurfaceAtlas(scene.terrain(), scene.model(), scene.terrainRevision());
         });
 }
 

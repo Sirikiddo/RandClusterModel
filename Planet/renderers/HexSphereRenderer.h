@@ -116,7 +116,7 @@ private:
     void generateEnvCubemap();
     void ensureSceneDepthTexture(int width, int height);
     void copySceneDepthToTexture(int width, int height);
-    void rebuildPlanetSurfaceAtlas(const TerrainMesh& mesh, const HexSphereModel& model);
+    void rebuildPlanetSurfaceAtlas(const TerrainMesh& mesh, const HexSphereModel& model, uint64_t terrainRevision);
     void initPyramidGeometry();
     void withContext(const std::function<void()>& task);
     void uploadTerrainInternal(const TerrainMesh& mesh, GLenum usage);

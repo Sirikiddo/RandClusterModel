@@ -267,9 +267,12 @@ QMatrix4x4 PlanetSurfaceAtlasPass::cubeFaceView(int faceIndex) const {
     return view;
 }
 
-void PlanetSurfaceAtlasPass::updateMesh(const TerrainMesh& mesh, const HexSphereModel& model) {
+void PlanetSurfaceAtlasPass::updateMesh(const TerrainMesh& mesh, const HexSphereModel& model, uint64_t terrainRevision) {
     ensureResources();
     if (!ready()) {
+        return;
+    }
+    if (terrainRevision != 0 && terrainRevision == terrainRevision_) {
         return;
     }
 
@@ -278,6 +281,7 @@ void PlanetSurfaceAtlasPass::updateMesh(const TerrainMesh& mesh, const HexSphere
     const size_t triangleCount = mesh.idx.size() / 3u;
     SurfaceAtlasMeshData atlas = SurfaceAtlasMeshBuilder::build(mesh, model);
     stats_ = atlas.stats;
+    terrainRevision_ = terrainRevision;
     vertexCount_ = static_cast<GLsizei>(atlas.positions.size() / 3u);
 
     QElapsedTimer stageTimer;

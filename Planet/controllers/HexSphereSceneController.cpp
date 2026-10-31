@@ -380,6 +380,7 @@ void HexSphereSceneController::updateTerrainMesh() {
     }
 
     heightStep_ = autoHeightStep();
+    ++terrainRevision_;
     model_.setHeightStep(heightStep_);
     rebuildCoastalBand();
     buildTerrainMeshFromCurrentCoast();

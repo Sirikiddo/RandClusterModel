@@ -22,7 +22,7 @@ public:
     void initialize(QOpenGLFunctions_3_3_Core* gl);
     void release();
 
-    void updateMesh(const TerrainMesh& mesh, const HexSphereModel& model);
+    void updateMesh(const TerrainMesh& mesh, const HexSphereModel& model, uint64_t terrainRevision = 0);
     void renderIfDirty();
 
     GLuint radiusTexture() const { return radiusCubemap_; }
@@ -57,4 +57,5 @@ private:
     bool dirty_ = false;
     bool initializationFailed_ = false;
     BuildStats stats_{};
+    uint64_t terrainRevision_ = 0;
 };
