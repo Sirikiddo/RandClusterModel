@@ -333,7 +333,7 @@ SurfaceAtlasMeshData SurfaceAtlasMeshBuilder::build(
 
     const std::size_t triangleCount = mesh.idx.size() / 3u;
     const float directionQuantization = mesh.idx.size() >= 3000000u
-        ? 500.0f
+        ? 250.0f
         : (mesh.idx.size() >= 700000u ? 1000.0f : 2000.0f);
     for (std::size_t tri = 0; tri < triangleCount; ++tri) {
         const TriangleSurfaceRole role = tri < mesh.triSurfaceRole.size()
