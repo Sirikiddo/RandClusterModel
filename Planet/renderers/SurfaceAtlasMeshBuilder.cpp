@@ -63,13 +63,12 @@ struct PositionKeyHash {
     }
 };
 
-PositionKey positionKey(const QVector3D& value) {
-    // Atlas shore distance is sampled into a 512^2 cubemap. Reusing queries
-    // for directions that differ by less than 5e-4 world units is below that
-    // raster resolution, but substantially reduces the number of BVH queries
-    // at L6/L7.
-    auto quantize = [](float component) -> std::uint32_t {
-        const int value = static_cast<int>(std::lround(component * 2000.0f));
+PositionKey positionKey(const QVector3D& value, float quantization) {
+    // Atlas shore distance is sampled into a 512^2 cubemap. The caller lowers
+    // this quantization for L6/L7, giving the shore-distance field a coarse
+    // LOD while keeping the full atlas geometry and continuous shoreline.
+    auto quantize = [quantization](float component) -> std::uint32_t {
+        const int value = static_cast<int>(std::lround(component * quantization));
         return static_cast<std::uint32_t>(value);
     };
     return {
@@ -333,6 +332,9 @@ SurfaceAtlasMeshData SurfaceAtlasMeshBuilder::build(
     outputSigns.reserve(mesh.idx.size());
 
     const std::size_t triangleCount = mesh.idx.size() / 3u;
+    const float directionQuantization = mesh.idx.size() >= 3000000u
+        ? 500.0f
+        : (mesh.idx.size() >= 700000u ? 1000.0f : 2000.0f);
     for (std::size_t tri = 0; tri < triangleCount; ++tri) {
         const TriangleSurfaceRole role = tri < mesh.triSurfaceRole.size()
             ? mesh.triSurfaceRole[tri]
@@ -354,7 +356,7 @@ SurfaceAtlasMeshData SurfaceAtlasMeshBuilder::build(
             result.kinds.push_back(surfaceKind);
             outputSigns.push_back(shoreSign);
 
-            const PositionKey key = positionKey(position);
+            const PositionKey key = positionKey(position, directionQuantization);
             const auto [it, inserted] = uniqueLookup.try_emplace(key, static_cast<std::uint32_t>(workItems.size()));
             if (inserted) {
                 workItems.push_back(DistanceWorkItem{ position });
