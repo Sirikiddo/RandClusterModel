@@ -23,7 +23,15 @@ constexpr std::uint32_t kLeafSize = 8;
 constexpr std::size_t kParallelThreshold = 4096;
 
 float clampedAcos(float value) {
-    return std::acos(std::clamp(value, -1.0f, 1.0f));
+    // Shore distance queries call this millions of times at L6/L7. This
+    // minimax-style approximation keeps the angular error below roughly
+    // 1e-3 radians while avoiding a library acos call in the hot loop.
+    const float x = std::clamp(value, -1.0f, 1.0f);
+    const float ax = std::abs(x);
+    float result = (((-0.0187293f * ax + 0.0742610f) * ax - 0.2121144f) * ax + 1.5707288f)
+        * std::sqrt(std::max(0.0f, 1.0f - ax));
+    if (x < 0.0f) result = kPi - result;
+    return result;
 }
 
 QVector3D loadVec3(const std::vector<float>& data, std::uint32_t index) {

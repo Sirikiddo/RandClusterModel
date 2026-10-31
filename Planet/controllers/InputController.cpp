@@ -6,6 +6,7 @@
 #include <QOpenGLVersionFunctionsFactory>
 #include <QOpenGLWidget>
 #include <QWheelEvent>
+#include <QElapsedTimer>
 #include <QtDebug>
 
 #include <algorithm>
@@ -633,6 +634,8 @@ InputController::Response InputController::setSubdivisionLevel(int L) {
         return contributorModeResponse();
     }
     if (scene_.subdivisionLevel() != L) {
+        QElapsedTimer subdivisionTimer;
+        subdivisionTimer.start();
         stats_.setSubdivisionLevel(L);
         updateBufferUsageStrategy(L);
 
@@ -668,6 +671,9 @@ InputController::Response InputController::setSubdivisionLevel(int L) {
         refreshAllEntitiesPosition();
         refreshBuildPreview();
         uploadBuffers();
+        qInfo().nospace() << "[Perf][Subdivision] level=" << L
+            << " button_to_upload_ms="
+            << subdivisionTimer.nsecsElapsed() / 1000000.0;
         refreshRoadIfExists();
         response.requestUpdate = true;
     }

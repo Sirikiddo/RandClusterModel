@@ -78,6 +78,8 @@ private:
     std::unique_ptr<EngineFacade> engine_;
     QElapsedTimer frameTimer_;
     bool timerStarted_ = false;
+    QElapsedTimer subdivisionFrameTimer_;
+    bool subdivisionFramePending_ = false;
 
     QString overlayText_;
     QLabel* hudLabel_ = nullptr;

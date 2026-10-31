@@ -273,6 +273,11 @@ void HexSphereWidget::paintGL() {
         engine_->tick(dt);
     }
     inputController_.render();
+    if (subdivisionFramePending_) {
+        qInfo().nospace() << "[Perf][Subdivision] first_paint_ms="
+            << subdivisionFrameTimer_.nsecsElapsed() / 1000000.0;
+        subdivisionFramePending_ = false;
+    }
     if (engine_) {
         const auto& o = engine_->overlay();
         const auto& sceneDag = engine_->lastSceneDagStats();
@@ -363,6 +368,8 @@ void HexSphereWidget::keyPressEvent(QKeyEvent* e) {
 }
 
 void HexSphereWidget::setSubdivisionLevel(int L) {
+    subdivisionFrameTimer_.start();
+    subdivisionFramePending_ = true;
     applyResponse(inputController_.setSubdivisionLevel(L));
 }
 
