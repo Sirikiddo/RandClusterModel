@@ -64,10 +64,18 @@ struct PositionKeyHash {
 };
 
 PositionKey positionKey(const QVector3D& value) {
+    // Atlas shore distance is sampled into a 512^2 cubemap. Reusing queries
+    // for directions that differ by less than 5e-4 world units is below that
+    // raster resolution, but substantially reduces the number of BVH queries
+    // at L6/L7.
+    auto quantize = [](float component) -> std::uint32_t {
+        const int value = static_cast<int>(std::lround(component * 2000.0f));
+        return static_cast<std::uint32_t>(value);
+    };
     return {
-        std::bit_cast<std::uint32_t>(value.x()),
-        std::bit_cast<std::uint32_t>(value.y()),
-        std::bit_cast<std::uint32_t>(value.z()),
+        quantize(value.x()),
+        quantize(value.y()),
+        quantize(value.z()),
     };
 }
 
