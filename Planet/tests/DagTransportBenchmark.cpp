@@ -89,6 +89,7 @@ void checkSceneContract() {
     model.rebuildFromIcosphere(ico.build(2));
     SceneDagRequest request;
     request.terrain.subdivisionLevel = 2;
+    request.terrain.topology = model.topology();
     request.terrain.cells.resize(model.cells().size());
     request.selectedCells = {0, 1};
     request.heightStep = 0.05f; request.outlineBias = 0.004f;
@@ -119,6 +120,7 @@ void checkPathContract() {
     model.rebuildFromIcosphere(ico.build(2));
     TerrainSnapshot terrain;
     terrain.subdivisionLevel = 2;
+    terrain.topology = model.topology();
     terrain.cells.resize(model.cells().size());
     for (auto& cell : model.cells()) { cell.height = 0; cell.biome = Biome::Grass; }
     DagPathBackend backend;
