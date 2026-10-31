@@ -79,6 +79,10 @@ void PlanetSurfaceAtlasPass::release() {
         gl_->glDeleteBuffers(1, &vboShoreDistance_);
         vboShoreDistance_ = 0;
     }
+    if (iboIndices_ != 0) {
+        gl_->glDeleteBuffers(1, &iboIndices_);
+        iboIndices_ = 0;
+    }
     if (depthRbo_ != 0) {
         gl_->glDeleteRenderbuffers(1, &depthRbo_);
         depthRbo_ = 0;
@@ -100,6 +104,7 @@ void PlanetSurfaceAtlasPass::release() {
         shoreDistanceCubemap_ = 0;
     }
     vertexCount_ = 0;
+    indexCount_ = 0;
     dirty_ = false;
 }
 
@@ -111,6 +116,7 @@ bool PlanetSurfaceAtlasPass::ready() const {
         && vboPos_ != 0
         && vboKind_ != 0
         && vboShoreDistance_ != 0
+        && iboIndices_ != 0
         && fbo_ != 0
         && depthRbo_ != 0
         && radiusCubemap_ != 0
@@ -135,6 +141,7 @@ void PlanetSurfaceAtlasPass::ensureResources() {
         gl_->glGenBuffers(1, &vboPos_);
         gl_->glGenBuffers(1, &vboKind_);
         gl_->glGenBuffers(1, &vboShoreDistance_);
+        gl_->glGenBuffers(1, &iboIndices_);
 
         gl_->glBindVertexArray(vao_);
 
@@ -150,6 +157,8 @@ void PlanetSurfaceAtlasPass::ensureResources() {
         gl_->glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 0, nullptr);
         gl_->glEnableVertexAttribArray(2);
 
+        // Element buffer binding is part of the VAO state.
+        gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboIndices_);
         gl_->glBindVertexArray(0);
     }
 
@@ -267,22 +276,26 @@ QMatrix4x4 PlanetSurfaceAtlasPass::cubeFaceView(int faceIndex) const {
     return view;
 }
 
-void PlanetSurfaceAtlasPass::updateMesh(const TerrainMesh& mesh, const HexSphereModel& model, uint64_t terrainRevision) {
+void PlanetSurfaceAtlasPass::updateMesh(const HexSphereModel& model, uint64_t terrainRevision) {
     ensureResources();
     if (!ready()) {
         return;
     }
     if (terrainRevision != 0 && terrainRevision == terrainRevision_) {
+        qInfo().nospace() << "[Perf][Generation] stage=surface_atlas_update skipped=1"
+            << " revision=" << terrainRevision;
         return;
     }
 
     QElapsedTimer totalTimer;
     totalTimer.start();
-    const size_t triangleCount = mesh.idx.size() / 3u;
-    SurfaceAtlasMeshData atlas = SurfaceAtlasMeshBuilder::build(mesh, model);
+    const TerrainMesh atlasSource = buildAtlasSourceMesh(model);
+    const size_t triangleCount = atlasSource.idx.size() / 3u;
+    SurfaceAtlasMeshData atlas = SurfaceAtlasMeshBuilder::build(atlasSource, model);
     stats_ = atlas.stats;
     terrainRevision_ = terrainRevision;
     vertexCount_ = static_cast<GLsizei>(atlas.positions.size() / 3u);
+    indexCount_ = static_cast<GLsizei>(atlas.indices.size());
 
     QElapsedTimer stageTimer;
     stageTimer.start();
@@ -294,17 +307,27 @@ void PlanetSurfaceAtlasPass::updateMesh(const TerrainMesh& mesh, const HexSphere
 
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboShoreDistance_);
     gl_->glBufferData(GL_ARRAY_BUFFER, atlas.shoreDistances.size() * sizeof(float), atlas.shoreDistances.empty() ? nullptr : atlas.shoreDistances.data(), GL_STATIC_DRAW);
+
+    // Upload the index buffer through the VAO so its element binding persists.
+    gl_->glBindVertexArray(vao_);
+    gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboIndices_);
+    gl_->glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+        atlas.indices.size() * sizeof(std::uint32_t),
+        atlas.indices.empty() ? nullptr : atlas.indices.data(),
+        GL_STATIC_DRAW);
+    gl_->glBindVertexArray(0);
     const double gpuUploadMs = stageTimer.nsecsElapsed() / 1000000.0;
 
     dirty_ = true;
     qInfo().nospace()
         << "[Perf][Generation] stage=surface_atlas_update"
-        << " input_triangles=" << triangleCount
+        << " atlas_triangles=" << triangleCount
         << " kept_triangles=" << stats_.keptTriangles
         << " culled_triangles=" << stats_.culledTriangles
         << " shoreline_arcs=" << stats_.shorelineArcCount
         << " atlas_vertices=" << stats_.atlasVertices
         << " unique_directions=" << stats_.uniqueDirections
+        << " exact_directions=" << stats_.exactDirections
         << " cache_hits=" << stats_.cacheHits
         << " bvh_nodes=" << stats_.bvhNodes
         << " bvh_node_visits=" << stats_.bvhNodeVisits
@@ -315,6 +338,7 @@ void PlanetSurfaceAtlasPass::updateMesh(const TerrainMesh& mesh, const HexSphere
         << " workers=" << stats_.workers
         << " shoreline_ms=" << stats_.shorelineMs
         << " index_build_ms=" << stats_.indexBuildMs
+        << " shore_gate_ms=" << stats_.shoreGateMs
         << " distance_query_ms=" << stats_.distanceQueryMs
         << " distance_field_ms=" << stats_.distanceQueryMs
         << " gpu_upload_ms=" << gpuUploadMs
@@ -374,8 +398,8 @@ void PlanetSurfaceAtlasPass::renderIfDirty() {
 
         const QMatrix4x4 viewProjection = projection * cubeFaceView(face);
         gl_->glUniformMatrix4fv(uViewProjection_, 1, GL_FALSE, viewProjection.constData());
-        if (vertexCount_ > 0) {
-            gl_->glDrawArrays(GL_TRIANGLES, 0, vertexCount_);
+        if (indexCount_ > 0) {
+            gl_->glDrawElements(GL_TRIANGLES, indexCount_, GL_UNSIGNED_INT, nullptr);
         }
     }
 
@@ -406,6 +430,7 @@ void PlanetSurfaceAtlasPass::renderIfDirty() {
     qInfo().nospace()
         << "[Perf][Generation] stage=surface_atlas_render_submit"
         << " vertices=" << vertexCount_
+        << " indices=" << indexCount_
         << " cubemap_faces=6"
         << " cpu_submit_ms=" << timer.nsecsElapsed() / 1000000.0;
 }

@@ -1,5 +1,9 @@
 #include "renderers/TerrainTessellator.h"
 
+#include <QFuture>
+#include <QThreadPool>
+#include <QtConcurrent/QtConcurrentRun>
+
 #include <cmath>
 #include <numeric>
 
@@ -257,8 +261,7 @@ QVector3D TerrainTessellator::calculateCellColorWithOre(
 TerrainTessellator::PreCell TerrainTessellator::makePreCell(const Cell& c, const std::vector<QVector3D>& dual) const {
     PreCell pc;
     const int deg = static_cast<int>(c.poly.size());
-    pc.inner.resize(static_cast<size_t>(deg));
-    pc.outerUnit.resize(static_cast<size_t>(deg));
+    pc.degree = deg;
     pc.h = static_cast<float>(c.height);
     pc.beachLike = isBeachLikeCell(c);
     pc.color = colorForCell(c);
@@ -274,13 +277,8 @@ TerrainTessellator::PreCell TerrainTessellator::makePreCell(const Cell& c, const
 
 TerrainTessellator::TrimDirs TerrainTessellator::makeTrimDirs(const PreCell& pc) const {
     TrimDirs td;
-    const int deg = static_cast<int>(pc.outerUnit.size());
+    const int deg = pc.degree;
     const float t = std::clamp(outerTrim, 0.0f, 0.49f);
-    td.sideL.resize(static_cast<size_t>(deg));
-    td.sideR.resize(static_cast<size_t>(deg));
-    td.prevU.resize(static_cast<size_t>(deg));
-    td.currU.resize(static_cast<size_t>(deg));
-    td.apexU.resize(static_cast<size_t>(deg));
 
     auto U = [&](int k) -> QVector3D { return pc.outerUnit[static_cast<size_t>((k % deg + deg) % deg)]; };
 
@@ -302,8 +300,6 @@ TerrainTessellator::EdgeHeights TerrainTessellator::makeHeights(
     const std::vector<Cell>& cells) const {
     const int deg = static_cast<int>(c.poly.size());
     EdgeHeights eh;
-    eh.edgeH.resize(static_cast<size_t>(deg));
-    eh.apexH.resize(static_cast<size_t>(deg));
     for (int i = 0; i < deg; ++i) {
         eh.edgeH[static_cast<size_t>(i)] = bladeHeightForEdge(c, i, cells);
         const float hBlend = cornerBlendTargetHeight(c, i, cells);
@@ -331,7 +327,7 @@ void TerrainTessellator::MeshBuilder::triToward(
         n = -n;
     }
 
-    const uint32_t base = static_cast<uint32_t>(pos.size() / 3);
+    const uint32_t base = vertexBase + static_cast<uint32_t>(pos.size() / 3);
     pos.insert(pos.end(), { A.x(), A.y(), A.z(), B.x(), B.y(), B.z(), C.x(), C.y(), C.z() });
     col.insert(col.end(), { color.x(), color.y(), color.z(), color.x(), color.y(), color.z(), color.x(), color.y(), color.z() });
     // Keep face winding above; only the lighting normals change on level surfaces.
@@ -440,24 +436,24 @@ void TerrainTessellator::buildCorners(
     }
 }
 
-void TerrainTessellator::registerEdgeSide(
-    EdgeRegistry& reg,
+void TerrainTessellator::buildEdgeSide(
     size_t cid,
     const Cell& c,
     int iEdge,
     const PreCell& pc,
     const TrimDirs& td,
-    const EdgeHeights& eh) const {
+    const EdgeHeights& eh,
+    EdgeInsertion& out) const {
     const int deg = static_cast<int>(c.poly.size());
     const int j = (iEdge + 1) % deg;
     const int iPrev = (iEdge + deg - 1) % deg;
 
     const int dv_i = c.poly[static_cast<size_t>(iEdge)];
     const int dv_j = c.poly[static_cast<size_t>(j)];
-    const EdgeKey key{ std::min(dv_i, dv_j), std::max(dv_i, dv_j) };
+    out.key = EdgeKey{ std::min(dv_i, dv_j), std::max(dv_i, dv_j) };
     const bool canon = (dv_i <= dv_j);
 
-    EdgeSide S;
+    EdgeSide& S = out.side;
     S.cellId = static_cast<int>(cid);
     S.hCell = c.height;
     S.Hedge = eh.edgeH[static_cast<size_t>(iEdge)];
@@ -486,14 +482,29 @@ void TerrainTessellator::registerEdgeSide(
     S.P_edgeR = liftUnit(S.sideR, S.Hedge);
     S.P_apexL = liftUnit(S.apexDirL, S.apexL);
     S.P_apexR = liftUnit(S.apexDirR, S.apexR);
+}
 
-    auto& rec = reg[key];
+void TerrainTessellator::insertEdgeSide(EdgeRegistry& reg, EdgeInsertion&& insertion) {
+    auto& rec = reg[insertion.key];
     if (!rec.A) {
-        rec.A = S;
+        rec.A = std::move(insertion.side);
     }
     else {
-        rec.B = S;
+        rec.B = std::move(insertion.side);
     }
+}
+
+void TerrainTessellator::registerEdgeSide(
+    EdgeRegistry& reg,
+    size_t cid,
+    const Cell& c,
+    int iEdge,
+    const PreCell& pc,
+    const TrimDirs& td,
+    const EdgeHeights& eh) const {
+    EdgeInsertion insertion;
+    buildEdgeSide(cid, c, iEdge, pc, td, eh, insertion);
+    insertEdgeSide(reg, std::move(insertion));
 }
 
 void TerrainTessellator::finalizeCliffs(
@@ -566,44 +577,229 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
     TerrainMesh M;
     const auto& cells = model.cells();
     const auto& dual = model.dualVerts();
+    const std::size_t cellCount = cells.size();
 
-    MeshBuilder mb{ M.pos, M.col, M.norm, M.ore, M.idx };
-    mb.owner = &M.triOwner;
-    mb.surfaceRole = &M.triSurfaceRole;
-    mb.beachTriCount = &M.beachTriCount;
-    mb.cells = &cells;
-    EdgeRegistry reg;
-
-    for (size_t cid = 0; cid < cells.size(); ++cid) {
+    // Count main geometry and non-flat edges first: exact reserves, chunk
+    // vertex offsets and the final index space must be known before workers
+    // write into the shared output.
+    std::vector<std::uint32_t> cellTriangles(cellCount, 0u);
+    std::size_t mainTriangles = 0;
+    std::size_t cliffTriangleBound = 0;
+    std::size_t nonFlatEdges = 0;
+    for (size_t cid = 0; cid < cellCount; ++cid) {
         const Cell& c = cells[cid];
         const int deg = static_cast<int>(c.poly.size());
-        if (deg < 3) {
+        if (deg < 3 || deg > kMaxCellDegree) {
             continue;
         }
-
-        const PreCell pc = makePreCell(c, dual);
-        const TrimDirs td = makeTrimDirs(pc);
-        const EdgeHeights eh = makeHeights(c, pc, cells);
-
+        std::uint32_t localTriangles = 0;
         if (doCaps) {
-            buildInnerFan(mb, c, pc);
+            localTriangles += static_cast<std::uint32_t>(deg);
         }
         if (doBlades) {
-            buildBlades(mb, c, pc, td, eh);
+            localTriangles += static_cast<std::uint32_t>(2 * deg);
         }
         if (doCornerTris) {
-            buildCorners(mb, c, pc, td, eh);
+            localTriangles += static_cast<std::uint32_t>(2 * deg);
         }
-        if (doEdgeCliffs) {
-            for (int i = 0; i < deg; ++i) {
-                registerEdgeSide(reg, cid, c, i, pc, td, eh);
+        cellTriangles[cid] = localTriangles;
+        mainTriangles += localTriangles;
+        if (!doEdgeCliffs) {
+            continue;
+        }
+        for (int i = 0; i < deg; ++i) {
+            const int nId = i < static_cast<int>(c.neighbors.size())
+                ? c.neighbors[static_cast<std::size_t>(i)]
+                : -1;
+            if (nId < 0 || nId >= static_cast<int>(cellCount)
+                || cells[static_cast<std::size_t>(nId)].id <= c.id) {
+                continue;
+            }
+            const EdgeMode mode = classifyEdge(
+                c.height, cells[static_cast<std::size_t>(nId)].height, smoothMaxDelta);
+            if (mode == EdgeMode::Flat) {
+                continue;
+            }
+            ++nonFlatEdges;
+            cliffTriangleBound += mode == EdgeMode::Cliff ? 6u : 2u;
+        }
+    }
+    const std::size_t totalTriangles = mainTriangles + cliffTriangleBound;
+
+    int workerCount = 1;
+    if (parallel && cellCount >= kParallelCellThreshold) {
+        workerCount = std::min(
+            QThreadPool::globalInstance()->maxThreadCount(),
+            static_cast<int>(cellCount / kParallelCellThreshold) + 1);
+        workerCount = std::max(workerCount, 1);
+    }
+
+    struct CellChunk {
+        TerrainMesh mesh;
+        std::vector<EdgeInsertion> edges;
+    };
+
+    auto buildRange = [&](size_t begin, size_t end, std::uint32_t vertexBase) {
+        CellChunk chunk;
+        std::size_t chunkTriangles = 0;
+        for (size_t cid = begin; cid < end; ++cid) {
+            chunkTriangles += cellTriangles[cid];
+        }
+        chunk.mesh.pos.reserve(chunkTriangles * 9u);
+        chunk.mesh.col.reserve(chunkTriangles * 9u);
+        chunk.mesh.norm.reserve(chunkTriangles * 9u);
+        chunk.mesh.ore.reserve(chunkTriangles * 6u);
+        chunk.mesh.idx.reserve(chunkTriangles * 3u);
+        chunk.mesh.triOwner.reserve(chunkTriangles);
+        chunk.mesh.triSurfaceRole.reserve(chunkTriangles);
+
+        MeshBuilder mb{ chunk.mesh.pos, chunk.mesh.col, chunk.mesh.norm, chunk.mesh.ore, chunk.mesh.idx };
+        mb.owner = &chunk.mesh.triOwner;
+        mb.surfaceRole = &chunk.mesh.triSurfaceRole;
+        mb.beachTriCount = &chunk.mesh.beachTriCount;
+        mb.cells = &cells;
+        mb.vertexBase = vertexBase;
+
+        for (size_t cid = begin; cid < end; ++cid) {
+            const Cell& c = cells[cid];
+            const int deg = static_cast<int>(c.poly.size());
+            if (deg < 3 || deg > kMaxCellDegree) {
+                continue;
+            }
+
+            const PreCell pc = makePreCell(c, dual);
+            const TrimDirs td = makeTrimDirs(pc);
+            const EdgeHeights eh = makeHeights(c, pc, cells);
+
+            if (doCaps) {
+                buildInnerFan(mb, c, pc);
+            }
+            if (doBlades) {
+                buildBlades(mb, c, pc, td, eh);
+            }
+            if (doCornerTris) {
+                buildCorners(mb, c, pc, td, eh);
+            }
+            if (doEdgeCliffs) {
+                for (int i = 0; i < deg; ++i) {
+                    const int nId = i < static_cast<int>(c.neighbors.size())
+                        ? c.neighbors[static_cast<std::size_t>(i)]
+                        : -1;
+                    if (nId < 0 || nId >= static_cast<int>(cellCount)) {
+                        continue;
+                    }
+                    // Flat edges produce no cliff/slope geometry; registering
+                    // them used to fill the registry with ~1M unused entries.
+                    if (classifyEdge(c.height, cells[static_cast<std::size_t>(nId)].height,
+                            smoothMaxDelta) == EdgeMode::Flat) {
+                        continue;
+                    }
+                    EdgeInsertion insertion;
+                    buildEdgeSide(cid, c, i, pc, td, eh, insertion);
+                    chunk.edges.push_back(std::move(insertion));
+                }
+            }
+        }
+        return chunk;
+    };
+
+    EdgeRegistry reg;
+    reg.reserve(nonFlatEdges);
+
+    std::vector<CellChunk> chunks(static_cast<std::size_t>(workerCount));
+    std::vector<std::uint32_t> chunkVertexBase(static_cast<std::size_t>(workerCount), 0u);
+    std::vector<size_t> chunkBegin(static_cast<std::size_t>(workerCount), 0);
+    std::vector<size_t> chunkEnd(static_cast<std::size_t>(workerCount), 0);
+    std::uint32_t nextVertexBase = 0;
+    for (int w = 0; w < workerCount; ++w) {
+        const size_t begin = cellCount * static_cast<size_t>(w) / static_cast<size_t>(workerCount);
+        const size_t end = cellCount * static_cast<size_t>(w + 1) / static_cast<size_t>(workerCount);
+        chunkBegin[static_cast<std::size_t>(w)] = begin;
+        chunkEnd[static_cast<std::size_t>(w)] = end;
+        chunkVertexBase[static_cast<std::size_t>(w)] = nextVertexBase;
+        std::size_t chunkTriangles = 0;
+        for (size_t cid = begin; cid < end; ++cid) {
+            chunkTriangles += cellTriangles[cid];
+        }
+        nextVertexBase += static_cast<std::uint32_t>(chunkTriangles * 3u);
+    }
+
+    if (workerCount == 1) {
+        chunks[0] = buildRange(0, cellCount, 0u);
+        M = std::move(chunks[0].mesh);
+        for (EdgeInsertion& insertion : chunks[0].edges) {
+            insertEdgeSide(reg, std::move(insertion));
+        }
+    }
+    else {
+        std::vector<QFuture<void>> futures;
+        futures.reserve(static_cast<std::size_t>(workerCount));
+        for (int w = 0; w < workerCount; ++w) {
+            const size_t begin = chunkBegin[static_cast<std::size_t>(w)];
+            const size_t end = chunkEnd[static_cast<std::size_t>(w)];
+            const std::uint32_t vertexBase = chunkVertexBase[static_cast<std::size_t>(w)];
+            futures.push_back(QtConcurrent::run(
+                QThreadPool::globalInstance(),
+                [&, w, begin, end, vertexBase]() {
+                    chunks[static_cast<std::size_t>(w)] = buildRange(begin, end, vertexBase);
+                }));
+        }
+        for (QFuture<void>& future : futures) {
+            future.waitForFinished();
+        }
+
+        M.pos.reserve(totalTriangles * 9u);
+        M.col.reserve(totalTriangles * 9u);
+        M.norm.reserve(totalTriangles * 9u);
+        M.ore.reserve(totalTriangles * 6u);
+        M.idx.reserve(totalTriangles * 3u);
+        M.triOwner.reserve(totalTriangles);
+        M.triSurfaceRole.reserve(totalTriangles);
+        for (CellChunk& chunk : chunks) {
+            M.pos.insert(M.pos.end(), chunk.mesh.pos.begin(), chunk.mesh.pos.end());
+            M.col.insert(M.col.end(), chunk.mesh.col.begin(), chunk.mesh.col.end());
+            M.norm.insert(M.norm.end(), chunk.mesh.norm.begin(), chunk.mesh.norm.end());
+            M.ore.insert(M.ore.end(), chunk.mesh.ore.begin(), chunk.mesh.ore.end());
+            M.idx.insert(M.idx.end(), chunk.mesh.idx.begin(), chunk.mesh.idx.end());
+            M.triOwner.insert(M.triOwner.end(), chunk.mesh.triOwner.begin(), chunk.mesh.triOwner.end());
+            M.triSurfaceRole.insert(
+                M.triSurfaceRole.end(), chunk.mesh.triSurfaceRole.begin(), chunk.mesh.triSurfaceRole.end());
+            M.beachTriCount += chunk.mesh.beachTriCount;
+            for (EdgeInsertion& insertion : chunk.edges) {
+                insertEdgeSide(reg, std::move(insertion));
             }
         }
     }
 
     if (doEdgeCliffs) {
-        finalizeCliffs(reg, mb, cells);
+        MeshBuilder cliffBuilder{ M.pos, M.col, M.norm, M.ore, M.idx };
+        cliffBuilder.owner = &M.triOwner;
+        cliffBuilder.surfaceRole = &M.triSurfaceRole;
+        cliffBuilder.beachTriCount = &M.beachTriCount;
+        cliffBuilder.cells = &cells;
+        finalizeCliffs(reg, cliffBuilder, cells);
     }
+
+    // Per-cell triangle ranges are needed by river mesh sampling. Building the
+    // CSR once here avoids rescanning millions of triangles during upload.
+    M.cellTriStart.assign(cellCount + 1u, 0u);
+    for (int owner : M.triOwner) {
+        if (owner >= 0 && owner < static_cast<int>(cellCount)) {
+            ++M.cellTriStart[static_cast<std::size_t>(owner) + 1u];
+        }
+    }
+    for (std::size_t cellId = 0; cellId < cellCount; ++cellId) {
+        M.cellTriStart[cellId + 1u] += M.cellTriStart[cellId];
+    }
+    M.triByCell.resize(M.cellTriStart.back());
+    std::vector<std::uint32_t> cursor(M.cellTriStart.begin(), M.cellTriStart.end() - 1);
+    for (std::size_t tri = 0; tri < M.triOwner.size(); ++tri) {
+        const int owner = M.triOwner[tri];
+        if (owner >= 0 && owner < static_cast<int>(cellCount)) {
+            M.triByCell[cursor[static_cast<std::size_t>(owner)]++] = static_cast<std::uint32_t>(tri);
+        }
+    }
+
     surfaceModel_ = nullptr;
     return M;
 }

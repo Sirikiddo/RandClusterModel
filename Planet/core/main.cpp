@@ -14,6 +14,7 @@
 #include "tests/ClimateBiomeGeneratorTests.h"
 #include "tests/DagTransportBenchmark.h"
 #include "tests/RiverGeneratorTests.h"
+#include "tests/SurfaceAtlasDistanceTests.h"
 #include "tests/TopologyTests.h"
 
 extern "C" {
@@ -35,6 +36,7 @@ int main(int argc, char** argv) {
     bool runClimateTests = false;
     bool runRiverTests = false;
     bool runTopologyTests = false;
+    bool runSurfaceAtlasTests = false;
     for (int i = 1; i < argc; ++i) {
         if (QString::fromLocal8Bit(argv[i]) == "--benchmark") {
             runBenchmark = true;
@@ -51,17 +53,21 @@ int main(int argc, char** argv) {
         if (QString::fromLocal8Bit(argv[i]) == "--topology-tests") {
             runTopologyTests = true;
         }
+        if (QString::fromLocal8Bit(argv[i]) == "--surface-atlas-tests") {
+            runSurfaceAtlasTests = true;
+        }
     }
     runBenchmark = runBenchmark || QString::fromWCharArray(GetCommandLineW()).contains("--benchmark");
     runBenchmark = runBenchmark || qEnvironmentVariableIsSet("GAME_NEW_BENCHMARK");
 
-    if (runWaterTests || runClimateTests || runRiverTests || runTopologyTests) {
+    if (runWaterTests || runClimateTests || runRiverTests || runTopologyTests || runSurfaceAtlasTests) {
         QCoreApplication app(argc, argv);
         try {
             if (runWaterTests) runWaterWaveModelUnitTests();
             if (runClimateTests) runClimateBiomeGeneratorUnitTests();
             if (runRiverTests) runRiverGeneratorUnitTests();
             if (runTopologyTests) runTopologyUnitTests();
+            if (runSurfaceAtlasTests) runSurfaceAtlasDistanceUnitTests();
             return 0;
         }
         catch (const std::exception& error) {

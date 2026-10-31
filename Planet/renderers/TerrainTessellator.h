@@ -28,6 +28,9 @@ struct TerrainMesh {
     std::vector<uint32_t> idx;
     std::vector<int> triOwner;
     std::vector<TriangleSurfaceRole> triSurfaceRole;
+    // CSR: triangles owned by each cell, built once during tessellation.
+    std::vector<std::uint32_t> cellTriStart;
+    std::vector<std::uint32_t> triByCell;
     int beachTriCount = 0;
 };
 
@@ -44,6 +47,9 @@ public:
     bool doBlades = true;
     bool doCornerTris = true;
     bool doEdgeCliffs = true;
+    // Cells are independent for caps/blades/corners; only the cliff pass is
+    // serial. Disable in tests to compare the serial reference output.
+    bool parallel = true;
     const CoastalBandData* coastalBand = nullptr;
     const WaterParams* waterParams = nullptr;
 
@@ -92,26 +98,34 @@ public:
     bool isBeachLikeCell(const Cell& c) const;
     float beachBlendForCell(const Cell& c) const;
 
+    // Icosphere dual cells are pentagons or hexagons, so per-cell scratch
+    // storage is fixed-size: at L7 this removes ~1.5M heap allocations.
+    static constexpr int kMaxCellDegree = 6;
+    static constexpr std::size_t kParallelCellThreshold = 4096;
+
     struct PreCell {
-        std::vector<QVector3D> inner;
-        std::vector<QVector3D> outerUnit;
+        std::array<QVector3D, kMaxCellDegree> inner{};
+        std::array<QVector3D, kMaxCellDegree> outerUnit{};
         QVector3D center;
         QVector3D color;
         float h = 0.0f;
+        int degree = 0;
         bool beachLike = false;
     };
     PreCell makePreCell(const Cell& c, const std::vector<QVector3D>& dual) const;
 
     struct TrimDirs {
-        std::vector<QVector3D> sideL, sideR;
-        std::vector<QVector3D> prevU, currU;
-        std::vector<QVector3D> apexU;
+        std::array<QVector3D, kMaxCellDegree> sideL{};
+        std::array<QVector3D, kMaxCellDegree> sideR{};
+        std::array<QVector3D, kMaxCellDegree> prevU{};
+        std::array<QVector3D, kMaxCellDegree> currU{};
+        std::array<QVector3D, kMaxCellDegree> apexU{};
     };
     TrimDirs makeTrimDirs(const PreCell& pc) const;
 
     struct EdgeHeights {
-        std::vector<float> edgeH;
-        std::vector<float> apexH;
+        std::array<float, kMaxCellDegree> edgeH{};
+        std::array<float, kMaxCellDegree> apexH{};
     };
     EdgeHeights makeHeights(const Cell& c, const PreCell& pc, const std::vector<Cell>& cells) const;
 
@@ -127,6 +141,8 @@ public:
         std::vector<TriangleSurfaceRole>* surfaceRole = nullptr;
         int* beachTriCount = nullptr;
         const std::vector<Cell>* cells = nullptr;
+        // Global vertex offset for workers writing into one final index space.
+        std::uint32_t vertexBase = 0;
 
         void triToward(
             QVector3D A,
@@ -189,6 +205,22 @@ public:
         std::optional<EdgeSide> B;
     };
     using EdgeRegistry = std::unordered_map<EdgeKey, EdgeRec, EdgeKeyHash>;
+
+    struct EdgeInsertion {
+        EdgeKey key;
+        EdgeSide side;
+    };
+
+    void buildEdgeSide(
+        size_t cid,
+        const Cell& c,
+        int iEdge,
+        const PreCell& pc,
+        const TrimDirs& td,
+        const EdgeHeights& eh,
+        EdgeInsertion& out) const;
+
+    static void insertEdgeSide(EdgeRegistry& reg, EdgeInsertion&& insertion);
 
     void registerEdgeSide(
         EdgeRegistry& reg,

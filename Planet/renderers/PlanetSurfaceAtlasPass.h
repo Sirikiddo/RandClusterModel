@@ -22,7 +22,7 @@ public:
     void initialize(QOpenGLFunctions_3_3_Core* gl);
     void release();
 
-    void updateMesh(const TerrainMesh& mesh, const HexSphereModel& model, uint64_t terrainRevision = 0);
+    void updateMesh(const HexSphereModel& model, uint64_t terrainRevision = 0);
     void renderIfDirty();
 
     GLuint radiusTexture() const { return radiusCubemap_; }
@@ -44,6 +44,7 @@ private:
     GLuint vboPos_ = 0;
     GLuint vboKind_ = 0;
     GLuint vboShoreDistance_ = 0;
+    GLuint iboIndices_ = 0;
     GLuint fbo_ = 0;
     GLuint depthRbo_ = 0;
     GLuint radiusCubemap_ = 0;
@@ -54,6 +55,7 @@ private:
 
     int resolution_ = 512;
     GLsizei vertexCount_ = 0;
+    GLsizei indexCount_ = 0;
     bool dirty_ = false;
     bool initializationFailed_ = false;
     BuildStats stats_{};

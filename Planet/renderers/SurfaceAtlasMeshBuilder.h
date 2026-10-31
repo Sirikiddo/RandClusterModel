@@ -32,6 +32,10 @@ float bruteForceNearestShoreDistance(
     ShoreDistanceQueryStats* stats = nullptr);
 std::vector<ShoreArc> buildShoreArcs(const HexSphereModel& model);
 
+// Cell caps at cell height: the atlas only needs per-cell radius/kind, so there
+// is no reason to feed it the full render mesh with blades, corners and cliffs.
+TerrainMesh buildAtlasSourceMesh(const HexSphereModel& model);
+
 class ShoreDistanceIndex {
 public:
     explicit ShoreDistanceIndex(std::vector<ShoreArc> arcs);
@@ -39,6 +43,7 @@ public:
     float nearestAngularDistance(
         const QVector3D& direction,
         ShoreDistanceQueryStats* stats = nullptr) const;
+    bool hasArcWithin(const QVector3D& direction, float angularRadius) const;
 
     const std::vector<ShoreArc>& arcs() const { return arcs_; }
     std::size_t nodeCount() const { return nodes_.size(); }
@@ -62,6 +67,7 @@ private:
         const QVector3D& directionUnit,
         float& best,
         ShoreDistanceQueryStats& stats) const;
+    bool anyWithin(int nodeIndex, const QVector3D& directionUnit, float angularRadius) const;
 
     std::vector<ShoreArc> arcs_;
     std::vector<Node> nodes_;
@@ -90,6 +96,7 @@ struct SurfaceAtlasBuildStats {
     float maximumSeaDepth = 0.0f;
     std::uint64_t atlasVertices = 0;
     std::uint64_t uniqueDirections = 0;
+    std::uint64_t exactDirections = 0;
     std::uint64_t cacheHits = 0;
     std::uint64_t bvhNodes = 0;
     std::uint64_t bvhNodeVisits = 0;
@@ -99,13 +106,16 @@ struct SurfaceAtlasBuildStats {
     int workers = 1;
     double shorelineMs = 0.0;
     double indexBuildMs = 0.0;
+    double shoreGateMs = 0.0;
     double distanceQueryMs = 0.0;
 };
 
 struct SurfaceAtlasMeshData {
+    // One entry per unique direction; triangles reference these through indices.
     std::vector<float> positions;
     std::vector<float> kinds;
     std::vector<float> shoreDistances;
+    std::vector<std::uint32_t> indices;
     SurfaceAtlasBuildStats stats;
 };
 

@@ -857,11 +857,10 @@ void HexSphereRenderer::uploadPathInternal(const std::vector<QVector3D>& points)
 }
 
 void HexSphereRenderer::rebuildPlanetSurfaceAtlas(
-    const TerrainMesh& mesh,
     const HexSphereModel& model,
     uint64_t terrainRevision) {
     if (!surfaceAtlasPass_) return;
-    surfaceAtlasPass_->updateMesh(mesh, model, terrainRevision);
+    surfaceAtlasPass_->updateMesh(model, terrainRevision);
     planetRadiusAtlas_ = surfaceAtlasPass_->radiusTexture();
     planetSurfaceKindAtlas_ = surfaceAtlasPass_->kindTexture();
     planetShoreDistanceAtlas_ = surfaceAtlasPass_->shoreDistanceTexture();
@@ -971,18 +970,51 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
     qDebug() << "uploadScene called, setting lastScene_";
     lastScene_ = const_cast<HexSphereSceneController*>(&scene);
 
+    double terrainMs = 0.0;
+    double atlasMs = 0.0;
+    double selectionMs = 0.0;
+    double pathMs = 0.0;
+    double riverMs = 0.0;
     withContext([&]() {
+        QElapsedTimer timer;
+        timer.start();
         uploadTerrainInternal(scene.terrain(), options.terrainUsage);
-        rebuildPlanetSurfaceAtlas(scene.terrain(), scene.model(), scene.terrainRevision());
+        terrainMs = timer.nsecsElapsed() / 1000000.0;
+        timer.restart();
+        rebuildPlanetSurfaceAtlas(scene.model(), scene.terrainRevision());
+        atlasMs = timer.nsecsElapsed() / 1000000.0;
+        timer.restart();
         uploadSelectionOutlineInternal(scene.buildSelectionOutlineVertices());
+        selectionMs = timer.nsecsElapsed() / 1000000.0;
+        timer.restart();
         uploadPathInternal({});
+        pathMs = timer.nsecsElapsed() / 1000000.0;
+        timer.restart();
         if (uploadedRiverRevision_ != scene.riverRevision()) {
             std::vector<float> centerline;
-            uploadRiverInternal(scene.buildRiverMesh(&centerline));
+            std::vector<float> riverMesh = scene.buildRiverMesh(&centerline);
+            const double riverBuildMs = timer.nsecsElapsed() / 1000000.0;
+            timer.restart();
+            uploadRiverInternal(riverMesh);
             uploadRiverLineInternal(centerline);
             uploadedRiverRevision_ = scene.riverRevision();
+            const double riverUploadMs = timer.nsecsElapsed() / 1000000.0;
+            riverMs = riverBuildMs + riverUploadMs;
+            qInfo().nospace() << "[Perf][Generation] stage=river_upload"
+                << " build_ms=" << riverBuildMs
+                << " upload_ms=" << riverUploadMs;
+        }
+        else {
+            riverMs = 0.0;
         }
         });
+    qInfo().nospace() << "[Perf][Generation] stage=scene_upload"
+        << " terrain_upload_ms=" << terrainMs
+        << " atlas_ms=" << atlasMs
+        << " selection_ms=" << selectionMs
+        << " path_ms=" << pathMs
+        << " river_ms=" << riverMs
+        << " total_ms=" << (terrainMs + atlasMs + selectionMs + pathMs + riverMs);
     qDebug() << "Buffer strategy:" << (options.useStaticBuffers ? "STATIC" : "DYNAMIC")
         << "(terrain" << options.terrainUsage << ")";
 }
@@ -1530,7 +1562,7 @@ void HexSphereRenderer::uploadTerrainHydrology(
     GLenum terrainUsage) {
     withContext([&]() {
         uploadTerrainInternal(scene.terrain(), terrainUsage);
-        rebuildPlanetSurfaceAtlas(scene.terrain(), scene.model(), scene.terrainRevision());
+        rebuildPlanetSurfaceAtlas(scene.model(), scene.terrainRevision());
         });
 }
 

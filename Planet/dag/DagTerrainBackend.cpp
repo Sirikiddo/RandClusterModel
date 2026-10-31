@@ -1,5 +1,6 @@
 ﻿#include "DagTerrainBackend.h"
 
+#include <QElapsedTimer>
 #include <QtDebug>
 
 #include <optional>
@@ -42,6 +43,8 @@ struct TerrainSnapshotHandoff {
 };
 
 TerrainSnapshot buildBaseTerrainSnapshot(int generatorIndex, int subdivisionLevel, const TerrainParams& params, HexSphereModel& model) {
+    QElapsedTimer timer;
+    timer.start();
     // The same model instance survives seed changes, so only a level switch
     // materializes new cells; otherwise just clear the previous seed's state.
     if (!model.topology() || model.subdivisions() != subdivisionLevel) {
@@ -50,10 +53,14 @@ TerrainSnapshot buildBaseTerrainSnapshot(int generatorIndex, int subdivisionLeve
     else {
         model.resetCellStates();
     }
+    const double topologyMs = timer.nsecsElapsed() / 1000000.0;
 
+    timer.restart();
     auto generator = createTerrainGeneratorByIndex(generatorIndex);
     generateCanonicalTerrain(*generator, model, params);
+    const double terrainMs = timer.nsecsElapsed() / 1000000.0;
 
+    timer.restart();
     TerrainSnapshot snapshot;
     snapshot.generatorIndex = normalizeTerrainGeneratorIndex(generatorIndex);
     snapshot.subdivisionLevel = subdivisionLevel;
@@ -72,7 +79,12 @@ TerrainSnapshot buildBaseTerrainSnapshot(int generatorIndex, int subdivisionLeve
         cellSnapshot.oreType = cell.oreType;
         snapshot.cells.push_back(cellSnapshot);
     }
-
+    qInfo().nospace() << "[Perf][Generation] stage=dag_terrain_build"
+        << " level=" << subdivisionLevel
+        << " cells=" << model.cellCount()
+        << " topology_ms=" << topologyMs
+        << " terrain_ms=" << terrainMs
+        << " snapshot_ms=" << timer.nsecsElapsed() / 1000000.0;
     return snapshot;
 }
 
@@ -259,8 +271,12 @@ struct DagTerrainBackend::Impl {
                 if (!snapshot->topology) {
                     throw std::runtime_error("Missing terrain topology in this DAG run");
                 }
+                QElapsedTimer oreTimer;
+                oreTimer.start();
                 handoff->final = std::make_shared<const TerrainSnapshot>(
                     generateOreField(*snapshot, *model));
+                qInfo().nospace() << "[Perf][Generation] stage=dag_ore_generate"
+                    << " ms=" << oreTimer.nsecsElapsed() / 1000000.0;
                 commit.set(
                     outputSlot,
                     std::string(TerrainSnapshotHandoff::finalToken),

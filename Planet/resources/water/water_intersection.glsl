@@ -189,7 +189,10 @@ WaterHit traceWater(vec2 screenUv) {
         hit.reason = WATER_REASON_INVALID_ATLAS;
         return hit;
     }
-    if (surfaceHit.terrain.kind != SURFACE_SEA || surfaceHit.terrain.shoreDistance <= 0.0) {
+    // Shore distance is a signed field with linear filtering, so its zero crossing
+    // gives a smooth anti-aliased coastline instead of the nearest-filtered cell
+    // mask that used to produce texel-level stair steps.
+    if (surfaceHit.terrain.shoreDistance <= 0.0) {
         hit.reason = WATER_REASON_LAND_MASK;
         return hit;
     }

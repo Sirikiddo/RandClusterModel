@@ -195,6 +195,7 @@
     <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp" />
     <ClCompile Include="tests\DagTransportBenchmark.cpp" />
     <ClCompile Include="tests\TopologyTests.cpp" />
+    <ClCompile Include="tests\SurfaceAtlasDistanceTests.cpp" />
     <ClCompile Include="tests\WaterScreenPassTests.cpp" />
     <ClCompile Include="tests\WaterWaveModelTests.cpp" />
   </ItemGroup>
@@ -263,6 +264,7 @@
     <ClInclude Include="tests\ClimateBiomeGeneratorTests.h" />
     <ClInclude Include="tests\DagTransportBenchmark.h" />
     <ClInclude Include="tests\TopologyTests.h" />
+    <ClInclude Include="tests\SurfaceAtlasDistanceTests.h" />
     <ClInclude Include="tests\WaterScreenPassTests.h" />
     <ClInclude Include="tests\WaterWaveModelTests.h" />
     <ClInclude Include="scene\Entity.h" />

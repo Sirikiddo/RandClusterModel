@@ -11,7 +11,7 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
-#include <unordered_map>
+#include <utility>
 
 #include "model/HexSphereModel.h"
 
@@ -63,25 +63,86 @@ struct PositionKeyHash {
     }
 };
 
-PositionKey positionKey(const QVector3D& value, float quantization) {
-    // Atlas shore distance is sampled into a 512^2 cubemap. The caller lowers
-    // this quantization for L6/L7, giving the shore-distance field a coarse
-    // LOD while keeping the full atlas geometry and continuous shoreline.
-    auto quantize = [quantization](float component) -> std::uint32_t {
-        const int value = static_cast<int>(std::lround(component * quantization));
-        return static_cast<std::uint32_t>(value);
+PositionKey exactPositionKey(const QVector3D& value) {
+    // Geometry must never be snapped to a coarse grid: doing so collapses
+    // distinct cap vertices and produces jagged coastlines. Shared cap vertices
+    // are produced by identical math, so their bit patterns already match.
+    auto bits = [](float component) -> std::uint32_t {
+        return std::bit_cast<std::uint32_t>(component + 0.0f);
     };
-    return {
-        quantize(value.x()),
-        quantize(value.y()),
-        quantize(value.z()),
-    };
+    return { bits(value.x()), bits(value.y()), bits(value.z()) };
 }
 
 struct DistanceWorkItem {
     QVector3D position;
     float distance = kPi;
+    float kind = 1.0f;
+    float sign = -1.0f;
+    // False for vertices whose cell is far enough from the coast that the
+    // shore fade is already saturated; those skip the BVH entirely.
+    bool exact = true;
     ShoreDistanceQueryStats stats;
+};
+
+// Open-addressing table for position deduplication. The old unordered_map
+// allocated a node per unique direction and rehashed millions of buckets.
+class PositionTable {
+public:
+    explicit PositionTable(std::size_t expected) {
+        std::size_t capacity = 64;
+        const std::size_t wanted = std::max<std::size_t>(expected * 2u, 64u);
+        while (capacity < wanted) {
+            capacity <<= 1;
+        }
+        slots_.assign(capacity, Slot{});
+        mask_ = capacity - 1u;
+    }
+
+    // Returns (unique index, inserted).
+    std::pair<std::uint32_t, bool> findOrInsert(const PositionKey& key, std::uint32_t nextIndex) {
+        if ((used_ + 1u) * 10u >= slots_.size() * 7u) {
+            grow();
+        }
+        std::size_t slot = PositionKeyHash{}(key) & mask_;
+        while (slots_[slot].valuePlusOne != 0u) {
+            if (slots_[slot].key == key) {
+                return { slots_[slot].valuePlusOne - 1u, false };
+            }
+            slot = (slot + 1u) & mask_;
+        }
+        slots_[slot].key = key;
+        slots_[slot].valuePlusOne = nextIndex + 1u;
+        ++used_;
+        return { nextIndex, true };
+    }
+
+private:
+    struct Slot {
+        PositionKey key;
+        std::uint32_t valuePlusOne = 0u;
+    };
+
+    void grow() {
+        std::vector<Slot> old = std::move(slots_);
+        slots_.assign(old.size() * 2u, Slot{});
+        mask_ = slots_.size() - 1u;
+        used_ = 0;
+        for (const Slot& slot : old) {
+            if (slot.valuePlusOne == 0u) {
+                continue;
+            }
+            std::size_t pos = PositionKeyHash{}(slot.key) & mask_;
+            while (slots_[pos].valuePlusOne != 0u) {
+                pos = (pos + 1u) & mask_;
+            }
+            slots_[pos] = slot;
+            ++used_;
+        }
+    }
+
+    std::vector<Slot> slots_;
+    std::size_t mask_ = 0;
+    std::size_t used_ = 0;
 };
 
 float angularDistanceToShoreArcUnit(const QVector3D& p, const ShoreArc& arc) {
@@ -169,6 +230,52 @@ std::vector<ShoreArc> buildShoreArcs(const HexSphereModel& model) {
         }
     }
     return arcs;
+}
+
+TerrainMesh buildAtlasSourceMesh(const HexSphereModel& model) {
+    TerrainMesh mesh;
+    const auto& cells = model.cells();
+    const auto& dual = model.dualVerts();
+
+    std::size_t triangleCount = 0;
+    for (const Cell& cell : cells) {
+        if (cell.poly.size() >= 3) {
+            triangleCount += cell.poly.size();
+        }
+    }
+    mesh.pos.reserve(triangleCount * 9u);
+    mesh.idx.reserve(triangleCount * 3u);
+    mesh.triOwner.reserve(triangleCount);
+    mesh.triSurfaceRole.reserve(triangleCount);
+
+    for (const Cell& cell : cells) {
+        const int degree = static_cast<int>(cell.poly.size());
+        if (degree < 3) {
+            continue;
+        }
+        const float height = static_cast<float>(cell.height);
+        const QVector3D center = model.positionOnSurface(cell.centroid, height);
+        for (int i = 0; i < degree; ++i) {
+            const int a = cell.poly[static_cast<std::size_t>(i)];
+            const int b = cell.poly[static_cast<std::size_t>((i + 1) % degree)];
+            if (a < 0 || b < 0
+                || static_cast<std::size_t>(a) >= dual.size()
+                || static_cast<std::size_t>(b) >= dual.size()) {
+                continue;
+            }
+            const QVector3D pa = model.positionOnSurface(dual[static_cast<std::size_t>(a)], height);
+            const QVector3D pb = model.positionOnSurface(dual[static_cast<std::size_t>(b)], height);
+            const std::uint32_t base = static_cast<std::uint32_t>(mesh.pos.size() / 3u);
+            mesh.pos.insert(mesh.pos.end(), {
+                center.x(), center.y(), center.z(),
+                pa.x(), pa.y(), pa.z(),
+                pb.x(), pb.y(), pb.z() });
+            mesh.idx.insert(mesh.idx.end(), { base, base + 1u, base + 2u });
+            mesh.triOwner.push_back(cell.id);
+            mesh.triSurfaceRole.push_back(TriangleSurfaceRole::Top);
+        }
+    }
+    return mesh;
 }
 
 ShoreDistanceIndex::ShoreDistanceIndex(std::vector<ShoreArc> arcs)
@@ -293,14 +400,40 @@ float ShoreDistanceIndex::nearestAngularDistance(
     return best;
 }
 
+bool ShoreDistanceIndex::hasArcWithin(
+    const QVector3D& direction,
+    float angularRadius) const {
+    if (root_ < 0) {
+        return false;
+    }
+    return anyWithin(root_, direction.normalized(), angularRadius);
+}
+
+bool ShoreDistanceIndex::anyWithin(
+    int nodeIndex,
+    const QVector3D& directionUnit,
+    float angularRadius) const {
+    const Node& node = nodes_[static_cast<std::size_t>(nodeIndex)];
+    if (lowerBound(directionUnit, node) > angularRadius) {
+        return false;
+    }
+    if (node.isLeaf()) {
+        for (std::uint32_t i = node.begin; i < node.begin + node.count; ++i) {
+            if (angularDistanceToShoreArcUnit(directionUnit, arcs_[i]) <= angularRadius) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return anyWithin(node.left, directionUnit, angularRadius)
+        || anyWithin(node.right, directionUnit, angularRadius);
+}
+
 SurfaceAtlasMeshData SurfaceAtlasMeshBuilder::build(
     const TerrainMesh& mesh,
     const HexSphereModel& model,
     const SurfaceAtlasBuildOptions& options) {
     SurfaceAtlasMeshData result;
-    result.positions.reserve(mesh.idx.size() * 3u);
-    result.kinds.reserve(mesh.idx.size());
-    result.shoreDistances.reserve(mesh.idx.size());
 
     QElapsedTimer timer;
     timer.start();
@@ -322,23 +455,39 @@ SurfaceAtlasMeshData SurfaceAtlasMeshBuilder::build(
     result.stats.indexBuildMs = timer.nsecsElapsed() / 1000000.0;
     result.stats.bvhNodes = index.nodeCount();
 
-    std::unordered_map<PositionKey, std::uint32_t, PositionKeyHash> uniqueLookup;
-    uniqueLookup.reserve(mesh.idx.size());
+    const std::size_t uniqueEstimate = std::max<std::size_t>(16u, mesh.idx.size() / 3u);
+    PositionTable uniqueLookup(uniqueEstimate);
     std::vector<DistanceWorkItem> workItems;
-    workItems.reserve(mesh.idx.size());
-    std::vector<std::uint32_t> outputToUnique;
-    outputToUnique.reserve(mesh.idx.size());
-    std::vector<float> outputSigns;
-    outputSigns.reserve(mesh.idx.size());
+    workItems.reserve(uniqueEstimate);
+    result.positions.reserve(uniqueEstimate * 3u);
+    result.kinds.reserve(uniqueEstimate);
+    result.shoreDistances.reserve(uniqueEstimate);
+    // One index per emitted triangle corner; the vertex arrays stay per-unique.
+    result.indices.reserve(mesh.idx.size());
+
+    // The water shader fades waves over roughly a tenth of a cell, so any
+    // shoreline distance beyond half a cell only has to stay "far enough".
+    // Mark cells whose caps can still contain such near-shore vertices and let
+    // the rest use a constant, skipping their BVH queries.
+    const std::size_t cellCount = model.cells().size();
+    const float angularCellWidth = cellCount > 0
+        ? std::sqrt(4.0f * kPi / static_cast<float>(cellCount))
+        : 0.0f;
+    const float clampAngularDistance = 0.5f * angularCellWidth;
+    const float cellRadiusAngular = 0.8f * angularCellWidth;
+    std::vector<char> cellNearShore(cellCount, 0);
+    if (!shoreline.empty() && cellCount > 0) {
+        QElapsedTimer gateTimer;
+        gateTimer.start();
+        const float exactRadius = clampAngularDistance + cellRadiusAngular;
+        for (std::size_t i = 0; i < cellCount; ++i) {
+            cellNearShore[i] = index.hasArcWithin(
+                model.cells()[i].centroid, exactRadius) ? 1 : 0;
+        }
+        result.stats.shoreGateMs = gateTimer.nsecsElapsed() / 1000000.0;
+    }
 
     const std::size_t triangleCount = mesh.idx.size() / 3u;
-    // Explicit atlas LOD by logical subdivision. Keeping this tied to L makes
-    // the quality/performance tradeoff stable even when terrain tessellation
-    // options change the number of render triangles.
-    const int level = model.subdivisions();
-    const float directionQuantization = level >= 7
-        ? 250.0f
-        : (level >= 6 ? 1000.0f : 2000.0f);
     for (std::size_t tri = 0; tri < triangleCount; ++tri) {
         const TriangleSurfaceRole role = tri < mesh.triSurfaceRole.size()
             ? mesh.triSurfaceRole[tri]
@@ -351,33 +500,51 @@ SurfaceAtlasMeshData SurfaceAtlasMeshBuilder::build(
         const int owner = tri < mesh.triOwner.size() ? mesh.triOwner[tri] : -1;
         const float surfaceKind = classifySurfaceKind(model, owner);
         const float shoreSign = surfaceKind == 3.0f ? 1.0f : -1.0f;
+        const bool ownerNearShore = owner >= 0
+            && static_cast<std::size_t>(owner) < cellNearShore.size()
+            && cellNearShore[static_cast<std::size_t>(owner)] != 0;
         for (std::size_t corner = 0; corner < 3u; ++corner) {
             const std::uint32_t vertexIndex = mesh.idx[tri * 3u + corner];
             const QVector3D position = loadVec3(mesh.pos, vertexIndex);
-            result.positions.push_back(position.x());
-            result.positions.push_back(position.y());
-            result.positions.push_back(position.z());
-            result.kinds.push_back(surfaceKind);
-            outputSigns.push_back(shoreSign);
 
-            const PositionKey key = positionKey(position, directionQuantization);
-            const auto [it, inserted] = uniqueLookup.try_emplace(key, static_cast<std::uint32_t>(workItems.size()));
+            const PositionKey key = exactPositionKey(position);
+            const auto [uniqueIndex, inserted] = uniqueLookup.findOrInsert(
+                key, static_cast<std::uint32_t>(workItems.size()));
             if (inserted) {
-                workItems.push_back(DistanceWorkItem{ position });
+                DistanceWorkItem item;
+                item.position = position;
+                item.kind = surfaceKind;
+                item.sign = shoreSign;
+                item.exact = ownerNearShore;
+                workItems.push_back(item);
             }
-            outputToUnique.push_back(it->second);
+            else if (ownerNearShore) {
+                // Shared vertex first seen from a far cell but owned by a near
+                // cell elsewhere: it still needs an exact distance.
+                workItems[uniqueIndex].exact = true;
+            }
+            result.indices.push_back(uniqueIndex);
         }
         ++result.stats.keptTriangles;
     }
 
-    result.stats.atlasVertices = outputToUnique.size();
+    result.stats.atlasVertices = result.indices.size();
     result.stats.uniqueDirections = workItems.size();
     result.stats.cacheHits = result.stats.atlasVertices - result.stats.uniqueDirections;
+    for (const DistanceWorkItem& item : workItems) {
+        if (item.exact) {
+            ++result.stats.exactDirections;
+        }
+    }
     result.stats.bruteForceTests = result.stats.uniqueDirections * shoreline.size();
 
     timer.restart();
     auto evaluateRange = [&](std::size_t begin, std::size_t end, ShoreDistanceQueryStats& workerStats) {
         for (std::size_t i = begin; i < end; ++i) {
+            if (!workItems[i].exact) {
+                workItems[i].distance = shoreline.empty() ? kPi : clampAngularDistance;
+                continue;
+            }
             ShoreDistanceQueryStats queryStats;
             if (options.searchMode == ShoreDistanceSearchMode::BruteForce) {
                 workItems[i].distance = bruteForceNearestShoreDistance(workItems[i].position, shoreline, &queryStats);
@@ -428,11 +595,17 @@ SurfaceAtlasMeshData SurfaceAtlasMeshBuilder::build(
     }
     result.stats.candidateArcs = result.stats.exactDistanceTests;
 
-    result.shoreDistances.resize(outputToUnique.size());
-    for (std::size_t i = 0; i < outputToUnique.size(); ++i) {
-        result.shoreDistances[i] = outputSigns[i]
-            * workItems[outputToUnique[i]].distance
-            * waterRadius;
+    const std::size_t uniqueCount = workItems.size();
+    result.positions.resize(uniqueCount * 3u);
+    result.kinds.resize(uniqueCount);
+    result.shoreDistances.resize(uniqueCount);
+    for (std::size_t i = 0; i < uniqueCount; ++i) {
+        const DistanceWorkItem& item = workItems[i];
+        result.positions[i * 3u] = item.position.x();
+        result.positions[i * 3u + 1u] = item.position.y();
+        result.positions[i * 3u + 2u] = item.position.z();
+        result.kinds[i] = item.kind;
+        result.shoreDistances[i] = item.sign * item.distance * waterRadius;
     }
     result.stats.distanceQueryMs = timer.nsecsElapsed() / 1000000.0;
     return result;

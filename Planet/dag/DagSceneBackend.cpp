@@ -1,6 +1,10 @@
 #include "DagSceneBackend.h"
 
+#include <QElapsedTimer>
+#include <QFuture>
 #include <QSet>
+#include <QThreadPool>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QtDebug>
 
 #include <algorithm>
@@ -19,6 +23,17 @@
 #include <proc/Logging.h>
 
 namespace {
+
+    struct ScopedTimer {
+        QElapsedTimer timer;
+        double* elapsedMs = nullptr;
+        explicit ScopedTimer(double* out) : elapsedMs(out) { timer.start(); }
+        ~ScopedTimer() {
+            if (elapsedMs) {
+                *elapsedMs = timer.nsecsElapsed() / 1000000.0;
+            }
+        }
+    };
 
     std::string readStringField(
         const proc::RuntimeOperationRegistry::ReadHandleFn& readHandle,
@@ -184,70 +199,115 @@ namespace {
         const auto& cells = snapshot.cells;
         const size_t count = std::min(topologyCells.size(), cells.size());
 
-        std::vector<TreePlacement> placements;
-        placements.reserve(count / 6);
+        if (count == 0) {
+            return {};
+        }
 
         const uint32_t baseSeed =
             snapshot.params.seed ^
             (static_cast<uint32_t>(snapshot.generatorIndex + 1) * 0x9e3779b9u) ^
             (static_cast<uint32_t>(snapshot.subdivisionLevel + 1) * 0x85ebca6bu);
 
-        for (size_t i = 0; i < count; ++i) {
-            const auto& cell = topologyCells[i];
-            const auto& state = cells[i];
-            std::mt19937 gen(baseSeed ^ (static_cast<uint32_t>(i + 1) * 0x27d4eb2du));
+        auto buildRange = [&](size_t begin, size_t end, std::vector<TreePlacement>& out) {
+            out.reserve((end - begin) / 6 + 1);
+            for (size_t i = begin; i < end; ++i) {
+                const auto& cell = topologyCells[i];
+                const auto& state = cells[i];
+                // Per-cell seed keeps the layout stable; constructing MT is
+                // expensive, so ranges are evaluated in parallel below.
+                std::mt19937 gen(baseSeed ^ (static_cast<uint32_t>(i + 1) * 0x27d4eb2du));
 
-            if (!shouldPlaceTree(state.biome, gen)) {
-                continue;
-            }
-            if (state.height >= 2) {
-                continue;
-            }
-
-            bool hasWaterNeighbor = false;
-            for (int neighborId : cell.neighbors) {
-                if (neighborId >= 0 && static_cast<size_t>(neighborId) < count
-                    && cells[static_cast<size_t>(neighborId)].biome == Biome::Sea) {
-                    hasWaterNeighbor = true;
-                    break;
+                if (!shouldPlaceTree(state.biome, gen)) {
+                    continue;
                 }
-            }
-            if (hasWaterNeighbor) {
-                continue;
-            }
+                if (state.height >= 2) {
+                    continue;
+                }
 
-            std::uniform_real_distribution<float> baryDist(0.1f, 0.8f);
-            std::uniform_real_distribution<float> scaleDist(0.7f, 1.3f);
-            std::uniform_real_distribution<float> rotationDist(0.0f, 6.28318f);
+                bool hasWaterNeighbor = false;
+                for (int neighborId : cell.neighbors) {
+                    if (neighborId >= 0 && static_cast<size_t>(neighborId) < count
+                        && cells[static_cast<size_t>(neighborId)].biome == Biome::Sea) {
+                        hasWaterNeighbor = true;
+                        break;
+                    }
+                }
+                if (hasWaterNeighbor) {
+                    continue;
+                }
 
-            TreePlacement placement;
-            placement.cellId = static_cast<int>(i);
-            placement.triangleIdx = cell.poly.empty()
-                ? 0
-                : std::uniform_int_distribution<int>(
-                    0, static_cast<int>(cell.poly.size()) - 1)(gen);
+                std::uniform_real_distribution<float> baryDist(0.1f, 0.8f);
+                std::uniform_real_distribution<float> scaleDist(0.7f, 1.3f);
+                std::uniform_real_distribution<float> rotationDist(0.0f, 6.28318f);
 
-            placement.baryU = baryDist(gen);
-            placement.baryV = baryDist(gen);
-            if (placement.baryU + placement.baryV > 1.0f) {
-                placement.baryU = 1.0f - placement.baryU;
-                placement.baryV = 1.0f - placement.baryV;
+                TreePlacement placement;
+                placement.cellId = static_cast<int>(i);
+                placement.triangleIdx = cell.poly.empty()
+                    ? 0
+                    : std::uniform_int_distribution<int>(
+                        0, static_cast<int>(cell.poly.size()) - 1)(gen);
+
+                placement.baryU = baryDist(gen);
+                placement.baryV = baryDist(gen);
+                if (placement.baryU + placement.baryV > 1.0f) {
+                    placement.baryU = 1.0f - placement.baryU;
+                    placement.baryV = 1.0f - placement.baryV;
+                }
+                placement.baryW = 1.0f - placement.baryU - placement.baryV;
+                placement.rotation = rotationDist(gen);
+
+                float s = scaleDist(gen);
+                if (state.biome == Biome::Jungle && state.humidity > 0.7f) {
+                    s *= 1.15f;
+                }
+                else if (state.biome == Biome::Savanna && state.humidity < 0.3f) {
+                    s *= 0.85f;
+                }
+                placement.scale = s;
+
+                out.push_back(placement);
             }
-            placement.baryW = 1.0f - placement.baryU - placement.baryV;
-            placement.rotation = rotationDist(gen);
+        };
 
-            float s = scaleDist(gen);
-            if (state.biome == Biome::Jungle && state.humidity > 0.7f) {
-                s *= 1.15f;
-            }
-            else if (state.biome == Biome::Savanna && state.humidity < 0.3f) {
-                s *= 0.85f;
-            }
-            placement.scale = s;
-
-            placements.push_back(placement);
+        constexpr std::size_t kTreeParallelThreshold = 4096;
+        const int maxWorkers = QThreadPool::globalInstance()->maxThreadCount();
+        std::size_t workerCount = 1;
+        if (maxWorkers > 1 && count >= kTreeParallelThreshold) {
+            workerCount = std::min<std::size_t>(
+                static_cast<std::size_t>(maxWorkers),
+                (count + kTreeParallelThreshold - 1) / kTreeParallelThreshold);
+            workerCount = std::max<std::size_t>(workerCount, 1);
         }
 
+        if (workerCount == 1) {
+            std::vector<TreePlacement> placements;
+            buildRange(0, count, placements);
+            return placements;
+        }
+
+        std::vector<std::vector<TreePlacement>> partial(workerCount);
+        std::vector<QFuture<void>> futures;
+        futures.reserve(workerCount);
+        for (std::size_t worker = 0; worker < workerCount; ++worker) {
+            const size_t begin = count * worker / workerCount;
+            const size_t end = count * (worker + 1) / workerCount;
+            futures.push_back(QtConcurrent::run(
+                QThreadPool::globalInstance(),
+                [&, worker, begin, end]() { buildRange(begin, end, partial[worker]); }));
+        }
+        for (QFuture<void>& future : futures) {
+            future.waitForFinished();
+        }
+
+        std::size_t total = 0;
+        for (const auto& range : partial) {
+            total += range.size();
+        }
+        std::vector<TreePlacement> placements;
+        placements.reserve(total);
+        for (auto& range : partial) {
+            placements.insert(placements.end(), range.begin(), range.end());
+        }
         return placements;
     }
 
@@ -499,7 +559,9 @@ struct DagSceneBackend::Impl {
                     const std::string visualToken = readStringField(readHandle, visualSlot);
                     const std::string key = terrainToken + "|" + selectedToken + "|" + visualToken;
 
+                    double buildMs = 0.0;
                     const auto [value, cacheHit] = selectionCache.get(key, [&] {
+                        ScopedTimer timer(&buildMs);
                         const auto snapshot = terrainPayloads.resolve(terrainToken);
                         const auto selected = selectionInputs.resolve(selectedToken);
                         const auto visual = visualInputs.resolve(visualToken);
@@ -509,6 +571,8 @@ struct DagSceneBackend::Impl {
                         if (!activeModel) return std::vector<float>{};
                         return buildSelectionOutline(*activeModel, *selected, *visual);
                     });
+                    qInfo().nospace() << "[Perf][Generation] stage=dag_scene_node node=selection"
+                        << " cache_hit=" << (cacheHit ? 1 : 0) << " build_ms=" << buildMs;
                     const std::string encoded = selectionOutputs.put(value);
 
                     cacheHit ? ++lastStats.cacheHits : ++lastStats.cacheMisses;
@@ -532,7 +596,9 @@ struct DagSceneBackend::Impl {
                     const std::string terrainToken = readStringField(readHandle, terrainSlot);
                     const std::string key = terrainToken;
 
+                    double buildMs = 0.0;
                     const auto [value, cacheHit] = treeCache.get(key, [&] {
+                        ScopedTimer timer(&buildMs);
                         const auto snapshot = terrainPayloads.resolve(terrainToken);
                         if (snapshot && snapshot->topology) {
                             return buildTreePlacementsFromSnapshot(*snapshot);
@@ -540,6 +606,8 @@ struct DagSceneBackend::Impl {
                         if (!snapshot || !activeModel) return std::vector<TreePlacement>{};
                         return buildTreePlacements(*snapshot, *activeModel);
                     });
+                    qInfo().nospace() << "[Perf][Generation] stage=dag_scene_node node=trees"
+                        << " cache_hit=" << (cacheHit ? 1 : 0) << " build_ms=" << buildMs;
                     const std::string encoded = treeOutputs.put(value);
 
                     cacheHit ? ++lastStats.cacheHits : ++lastStats.cacheMisses;
@@ -567,7 +635,9 @@ struct DagSceneBackend::Impl {
                     const std::string requestsToken = readStringField(readHandle, modelRequestsSlotLocal);
                     const std::string key = terrainToken + "|" + visualToken + "|" + requestsToken;
 
+                    double buildMs = 0.0;
                     const auto [value, cacheHit] = modelCache.get(key, [&] {
+                        ScopedTimer timer(&buildMs);
                         const auto snapshot = terrainPayloads.resolve(terrainToken);
                         const auto requests = modelInputs.resolve(requestsToken);
                         const auto visual = visualInputs.resolve(visualToken);
@@ -577,6 +647,8 @@ struct DagSceneBackend::Impl {
                         if (!activeModel) return std::vector<ModelPlacement>{};
                         return buildModelPlacements(*activeModel, *requests, *visual);
                     });
+                    qInfo().nospace() << "[Perf][Generation] stage=dag_scene_node node=models"
+                        << " cache_hit=" << (cacheHit ? 1 : 0) << " build_ms=" << buildMs;
                     const std::string encoded = modelOutputs.put(value);
 
                     cacheHit ? ++lastStats.cacheHits : ++lastStats.cacheMisses;

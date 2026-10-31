@@ -161,18 +161,38 @@ void HexSphereSceneController::regenerateTerrain() {
         return;
     }
 
+    QElapsedTimer timer;
+    timer.start();
+    double terrainMs = 0.0;
+    double oreMs = 0.0;
     if (generator_) {
         generateCanonicalTerrain(*generator_, model_, genParams_);
+        terrainMs = timer.nsecsElapsed() / 1000000.0;
+        timer.restart();
         if (generatorIndex_ == 0) {
             OreGenerator::clear(model_);
         }
         else {
             OreGenerator::generate(model_, genParams_.seed);
         }
+        oreMs = timer.nsecsElapsed() / 1000000.0;
     }
+    timer.restart();
     updateTerrainMesh();
+    const double meshMs = timer.nsecsElapsed() / 1000000.0;
+    timer.restart();
     generateRivers();
+    const double riversMs = timer.nsecsElapsed() / 1000000.0;
+    timer.restart();
     generateTreePlacements();
+    const double treesMs = timer.nsecsElapsed() / 1000000.0;
+    qInfo().nospace() << "[Perf][Generation] stage=scene_regenerate"
+        << " terrain_ms=" << terrainMs
+        << " ore_ms=" << oreMs
+        << " mesh_ms=" << meshMs
+        << " rivers_ms=" << riversMs
+        << " trees_ms=" << treesMs
+        << " total_ms=" << (terrainMs + oreMs + meshMs + riversMs + treesMs);
 }
 
 void HexSphereSceneController::rebuildDerivedGeometry() {
@@ -313,6 +333,8 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
         return;
     }
 
+    QElapsedTimer timer;
+    timer.start();
     const bool topologyChanged =
         L_ != snapshot.subdivisionLevel || model_.cells().empty();
 
@@ -340,6 +362,9 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
         }
     }
 
+    const double topologyMs = timer.nsecsElapsed() / 1000000.0;
+    timer.restart();
+
     auto& cells = model_.cells();
     const size_t count = std::min(cells.size(), snapshot.cells.size());
     for (size_t i = 0; i < count; ++i) {
@@ -353,13 +378,27 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
         target.oreDensity = source.oreDensity;
         target.oreType = source.oreType;
     }
+    const double stateMs = timer.nsecsElapsed() / 1000000.0;
 
     selectedCells_.clear();
     selectionOutlineVertices_.clear();
     selectionOutlineDirty_ = true;
+    timer.restart();
     updateTerrainMesh();
+    const double meshMs = timer.nsecsElapsed() / 1000000.0;
+    timer.restart();
     generateRivers();
+    const double riversMs = timer.nsecsElapsed() / 1000000.0;
+    timer.restart();
     generateTreePlacements();
+    const double treesMs = timer.nsecsElapsed() / 1000000.0;
+    qInfo().nospace() << "[Perf][Generation] stage=scene_apply_snapshot"
+        << " topology_ms=" << topologyMs
+        << " state_ms=" << stateMs
+        << " mesh_ms=" << meshMs
+        << " rivers_ms=" << riversMs
+        << " trees_ms=" << treesMs
+        << " total_ms=" << (topologyMs + stateMs + meshMs + riversMs + treesMs);
 }
 
 float HexSphereSceneController::autoHeightStep() const {
@@ -379,12 +418,24 @@ void HexSphereSceneController::updateTerrainMesh() {
         return;
     }
 
+    QElapsedTimer timer;
+    timer.start();
     heightStep_ = autoHeightStep();
     ++terrainRevision_;
     model_.setHeightStep(heightStep_);
     rebuildCoastalBand();
+    const double coastMs = timer.nsecsElapsed() / 1000000.0;
+    timer.restart();
     buildTerrainMeshFromCurrentCoast();
+    const double meshMs = timer.nsecsElapsed() / 1000000.0;
+    timer.restart();
     refreshResolvedWaterState();
+    const double waterMs = timer.nsecsElapsed() / 1000000.0;
+    qInfo().nospace() << "[Perf][Generation] stage=terrain_presentation"
+        << " coastal_band_ms=" << coastMs
+        << " tessellation_ms=" << meshMs
+        << " water_resolve_ms=" << waterMs
+        << " total_ms=" << (coastMs + meshMs + waterMs);
 }
 
 void HexSphereSceneController::buildTerrainMeshFromCurrentCoast() {
@@ -400,7 +451,14 @@ void HexSphereSceneController::buildTerrainMeshFromCurrentCoast() {
     options.coastalBand = &coastalBand_;
     options.waterParams = &waterParams_;
 
+    QElapsedTimer timer;
+    timer.start();
     terrainCPU_ = TerrainMeshGenerator::buildTerrainMesh(model_, options);
+    qInfo().nospace() << "[Perf][Generation] stage=terrain_tessellation"
+        << " cells=" << model_.cellCount()
+        << " triangles=" << terrainCPU_.idx.size() / 3u
+        << " vertices=" << terrainCPU_.pos.size() / 3u
+        << " ms=" << timer.nsecsElapsed() / 1000000.0;
     cacheValid_ = false;
     triangleCache_.clear();
     selectionOutlineDirty_ = true;
@@ -472,6 +530,8 @@ void HexSphereSceneController::updateTreeOccupiedCells() {
 }
 
 void HexSphereSceneController::generateTreePlacements() {
+    QElapsedTimer timer;
+    timer.start();
     treePlacements_.clear();
 
     // ========== CONTRIBUTOR MODE ==========
@@ -612,11 +672,12 @@ void HexSphereSceneController::generateTreePlacements() {
         treePlacements_.push_back(placement);
     }
 
-    qDebug() << "Generated" << treePlacements_.size() << "tree placements";
-    qDebug() << "  - Green trees (Grass/Jungle):" << greenCount;
-    qDebug() << "  - Savanna trees:" << savannaCount;
-
     updateTreeOccupiedCells();
+    qInfo().nospace() << "[Perf][Generation] stage=tree_placements"
+        << " count=" << treePlacements_.size()
+        << " green=" << greenCount
+        << " savanna=" << savannaCount
+        << " ms=" << timer.nsecsElapsed() / 1000000.0;
 }
 
 void HexSphereSceneController::regenerateTreePlacements() {
@@ -624,6 +685,8 @@ void HexSphereSceneController::regenerateTreePlacements() {
 }
 
 void HexSphereSceneController::generateRivers() {
+    QElapsedTimer timer;
+    timer.start();
     rivers_.clear();
     riverOccupiedCells_.clear();
 
@@ -654,7 +717,9 @@ void HexSphereSceneController::generateRivers() {
     }
 
     ++riverRevision_;
-    qDebug() << "Generated" << rivers_.size() << "rivers";
+    qInfo().nospace() << "[Perf][Generation] stage=rivers"
+        << " count=" << rivers_.size()
+        << " ms=" << timer.nsecsElapsed() / 1000000.0;
 }
 
 std::vector<float> HexSphereSceneController::buildRiverMesh(std::vector<float>* centerlineOut) const {
@@ -690,21 +755,18 @@ std::vector<float> HexSphereSceneController::buildRiverMesh(std::vector<float>* 
     // клиффы, поэтому расчётная высота на неровных клетках не совпадает с
     // мешем. Сэмплируем реальные треугольники террейна по направлению и
     // приподнимаем воду ровно на surfaceBias.
+    // The tessellator already built the per-cell triangle CSR once per heat
+    // rebuild; reuse it instead of rescanning millions of triangles here.
     const bool hasTerrainMesh = !terrainCPU_.pos.empty()
         && !terrainCPU_.idx.empty()
-        && !terrainCPU_.triOwner.empty();
-    std::vector<std::vector<uint32_t>> cellTriangles;
-    if (hasTerrainMesh) {
-        const size_t triCount = std::min(
-            terrainCPU_.idx.size() / 3, terrainCPU_.triOwner.size());
-        cellTriangles.resize(static_cast<size_t>(cellCount));
-        for (size_t tri = 0; tri < triCount; ++tri) {
-            const int owner = terrainCPU_.triOwner[tri];
-            if (owner >= 0 && owner < cellCount) {
-                cellTriangles[static_cast<size_t>(owner)].push_back(static_cast<uint32_t>(tri));
-            }
-        }
-    }
+        && !terrainCPU_.triOwner.empty()
+        && terrainCPU_.cellTriStart.size() == static_cast<size_t>(cellCount) + 1u;
+    const std::uint32_t* cellTriStart = hasTerrainMesh
+        ? terrainCPU_.cellTriStart.data()
+        : nullptr;
+    const std::uint32_t* triByCell = hasTerrainMesh
+        ? terrainCPU_.triByCell.data()
+        : nullptr;
 
     auto terrainRadiusAt = [&](const QVector3D& direction, int hintCell) -> float {
         if (!hasTerrainMesh || hintCell < 0 || hintCell >= cellCount) {
@@ -727,7 +789,10 @@ std::vector<float> HexSphereSceneController::buildRiverMesh(std::vector<float>* 
             if (cellId < 0 || cellId >= cellCount) {
                 return;
             }
-            for (uint32_t tri : cellTriangles[static_cast<size_t>(cellId)]) {
+            const uint32_t begin = cellTriStart[static_cast<std::size_t>(cellId)];
+            const uint32_t end = cellTriStart[static_cast<std::size_t>(cellId) + 1u];
+            for (uint32_t slot = begin; slot < end; ++slot) {
+                const uint32_t tri = triByCell[slot];
                 const QVector3D v0 = vertex(indices[tri * 3 + 0]);
                 const QVector3D v1 = vertex(indices[tri * 3 + 1]);
                 const QVector3D v2 = vertex(indices[tri * 3 + 2]);

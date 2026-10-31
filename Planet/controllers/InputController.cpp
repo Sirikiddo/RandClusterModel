@@ -646,8 +646,12 @@ InputController::Response InputController::setSubdivisionLevel(int L) {
             });
 
         if (engine_) {
+            QElapsedTimer terrainTimer;
+            terrainTimer.start();
             engine_->setSubdivisionLevel(L);
             const auto result = engine_->regenerateTerrain();
+            qInfo().nospace() << "[Perf][Generation] stage=dag_terrain_regenerate ms="
+                << terrainTimer.nsecsElapsed() / 1000000.0;
             if (!result) {
                 response.hudMessage = QString::fromStdString(result.message);
                 return response;
@@ -882,10 +886,20 @@ void InputController::uploadSelection() {
 }
 
 void InputController::uploadBuffers() {
+    QElapsedTimer timer;
+    timer.start();
     refreshSceneDagOutputs();
+    const double dagOutputsMs = timer.nsecsElapsed() / 1000000.0;
+    double sceneUploadMs = 0.0;
     if (renderer_) {
+        timer.restart();
         renderer_->uploadScene(scene_, uploadOptions_);
+        sceneUploadMs = timer.nsecsElapsed() / 1000000.0;
     }
+    qInfo().nospace() << "[Perf][Generation] stage=upload_pipeline"
+        << " dag_scene_outputs_ms=" << dagOutputsMs
+        << " scene_upload_ms=" << sceneUploadMs
+        << " total_ms=" << (dagOutputsMs + sceneUploadMs);
 }
 
 void InputController::refreshSceneDagOutputs() {
@@ -893,8 +907,11 @@ void InputController::refreshSceneDagOutputs() {
         return;
     }
 
+    QElapsedTimer timer;
+    timer.start();
     SceneDagRequest request;
     request.terrain = scene_.captureTerrainSnapshot();
+    const double captureMs = timer.nsecsElapsed() / 1000000.0;
     // Деревья — выход scene DAG, а не его вход: набор treeCells нужен только
     // path backend. Если оставить его в ключе запроса, кэш DAG будет промахиваться
     // на каждом обновлении набора деревьев и считать BuildTreePlacements лишний раз.
@@ -918,7 +935,11 @@ void InputController::refreshSceneDagOutputs() {
         request.modelRequests.push_back(std::move(placement));
         });
 
+    timer.restart();
     SceneDagResult result = engine_->rebuildSceneDerived(request);
+    const double dagMs = timer.nsecsElapsed() / 1000000.0;
+    const std::size_t dagTreeCount = result.treePlacements.size();
+    timer.restart();
 
     // Keep the legacy selection outline path as a fallback so the UI does not
     // lose cell highlighting if the scene DAG skips or returns an empty result.
@@ -944,6 +965,11 @@ void InputController::refreshSceneDagOutputs() {
             syncPathBackendFromScene();
         }
     }
+    qInfo().nospace() << "[Perf][Generation] stage=dag_scene_outputs"
+        << " capture_ms=" << captureMs
+        << " dag_ms=" << dagMs
+        << " post_ms=" << timer.nsecsElapsed() / 1000000.0
+        << " dag_trees=" << dagTreeCount;
 }
 
 void InputController::syncPathBackendFromScene() {

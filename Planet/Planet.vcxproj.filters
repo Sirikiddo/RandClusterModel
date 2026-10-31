@@ -547,5 +547,7 @@
     <ClInclude Include="tests\RiverGeneratorTests.h"><Filter>Header Files</Filter></ClInclude>
     <ClCompile Include="tests\TopologyTests.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClInclude Include="tests\TopologyTests.h"><Filter>Header Files</Filter></ClInclude>
+    <ClCompile Include="tests\SurfaceAtlasDistanceTests.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClInclude Include="tests\SurfaceAtlasDistanceTests.h"><Filter>Header Files</Filter></ClInclude>
   </ItemGroup>
 </Project>
