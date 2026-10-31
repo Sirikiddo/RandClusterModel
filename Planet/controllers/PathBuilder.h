@@ -20,8 +20,12 @@ public:
     static constexpr int kMaxClimbDelta = 2;
 
     explicit PathBuilder(const HexSphereModel& model, int smoothMaxDelta = 1)
-        : model_(model)
+        : model_(&model)
         , smoothMaxDelta_(effectiveMaxClimbDelta(smoothMaxDelta)) {}
+
+    PathBuilder(const HexSphereTopology& topology,
+        const std::vector<TerrainCellState>& state,
+        int smoothMaxDelta = 1);
 
     // Клетки-препятствия (деревья): через них путь не проходит, и закончиться
     // на такой клетке он тоже не может. Индексы вне модели игнорируются.
@@ -44,7 +48,9 @@ public:
     float traversalCost(const Cell& from, const Cell& to) const;
 
 private:
-    const HexSphereModel& model_;
+    const HexSphereModel* model_ = nullptr;
+    const HexSphereTopology* topology_ = nullptr;
+    const std::vector<TerrainCellState>* state_ = nullptr;
     const int smoothMaxDelta_;
     mutable std::vector<std::vector<Adj>> g_;
     std::vector<char> blocked_;

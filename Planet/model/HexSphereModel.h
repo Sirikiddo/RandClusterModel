@@ -9,6 +9,9 @@
 #include <limits>
 #include <memory>
 
+#include "model/HexSphereTopology.h"
+#include <cstddef>
+
 struct Tri { int a, b, c; };
 
 // Simple 64-bit key for undirected edge (i<j)
@@ -108,31 +111,21 @@ struct TreePlacement {
             && worldScale == other.worldScale;
     }
 };
-// Dual (hex/pent) sphere data
-struct Cell {
-    int id = -1;                 // equals primal vertex index
-    bool isPentagon = false;     // degree==5
-    std::vector<int> poly;       // indices into dualVerts (centers of triangles), CCW around cell
-    std::vector<int> neighbors;  // neighbor cell ids CCW (same length as poly)
-    int height = 0;                 // Ð´Ð¸ÑÐºÑ€ÐµÑ‚Ð½Ð°Ñ Ð²Ñ‹ÑÐ¾Ñ‚Ð°
-    Biome biome = Biome::Grass;     // Ñ‚Ð¸Ð¿ Ð±Ð¸Ð¾Ð¼Ð°
-    QVector3D centroid;          // normalized average of poly vertices
-    float area = 0.0f;           // euclidean triangle-fan area (for info)
-    uint32_t stateMask = 0;      // bit 0 => selected
-
-    // ÐšÐ»Ð¸Ð¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸Ðµ Ð´Ð°Ð½Ð½Ñ‹Ðµ (Ð¸Ð· ÑÑ‚Ð°Ñ€Ð¾Ð¹ Ð²ÐµÑ€ÑÐ¸Ð¸)
-    float temperature = 0.0f;    // Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ð° [0..1]
-    float humidity = 0.0f;       // Ð²Ð»Ð°Ð¶Ð½Ð¾ÑÑ‚ÑŒ [0..1] 
-    float pressure = 0.0f;       // Ð´Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ [0..1]
-
-    // Ð”Ð°Ð½Ð½Ñ‹Ðµ Ð¾ Ñ€ÑƒÐ´Ðµ (Ð¸Ð· ÑÑ‚Ð°Ñ€Ð¾Ð¹ Ð²ÐµÑ€ÑÐ¸Ð¸)
-    float oreDensity = 0.0f;     // Ð¿Ð»Ð¾Ñ‚Ð½Ð¾ÑÑ‚ÑŒ Ñ€ÑƒÐ´Ñ‹ [0..1]
+// Mutable simulation/render state for one logical cell. Kept separate from
+// topology so terrain/ore updates do not change adjacency or geometry.
+struct TerrainCellState {
+    int height = 0;
+    Biome biome = Biome::Grass;
+    float temperature = 0.0f;
+    float humidity = 0.0f;
+    float pressure = 0.0f;
+    float oreDensity = 0.0f;
     OreType oreType = OreType::None;
 };
 
-struct PickTri { // geometry for ray picking
-    int cellId;
-    QVector3D v0, v1, v2; // triangle positions (world)
+// Dual (hex/pent) sphere data
+struct Cell : TopologyCell, TerrainCellState {
+    uint32_t stateMask = 0;      // bit 0 => selected
 };
 
 class HexSphereModel {
@@ -140,14 +133,34 @@ public:
     static constexpr float kDefaultBaseRadius = 1.0f;
     static constexpr float kDefaultWaterSurfaceLevel = -0.5f;
 
-    void rebuildFromIcosphere(const IcoMesh& ico);
+    HexSphereModel() = default;
 
-    const std::vector<QVector3D>& dualVerts() const { return dualVerts_; }
-    const std::vector<std::pair<int, int>>& wireEdges() const { return wireEdges_; }
+    void rebuildFromIcosphere(const IcoMesh& ico, int subdivisionLevel = 0);
+    explicit HexSphereModel(HexSphereTopologyPtr topology);
+    void setTopology(HexSphereTopologyPtr topology);
+
+    HexSphereTopologyPtr topology() const noexcept { return topology_; }
+    bool hasSharedTopology() const noexcept { return static_cast<bool>(topology_); }
+
+    // Diagnostic counter for topology work. It counts actual dual/topology
+    // reconstruction calls, not terrain-field updates.
+    static std::size_t topologyBuildCount() noexcept;
+    static void resetTopologyBuildCount() noexcept;
+
+    const std::vector<QVector3D>& dualVerts() const {
+        return topology_ ? topology_->dualVerts : dualVerts_;
+    }
+    const std::vector<std::pair<int, int>>& wireEdges() const {
+        return topology_ ? topology_->wireEdges : wireEdges_;
+    }
     const std::vector<Cell>& cells() const { return cells_; }
     std::vector<Cell>& cells() { return cells_; }
-    const std::vector<PickTri>& pickTris() const { return pickTris_; }
-    const std::vector<std::array<int, 3>>& dualOwners() const { return dualOwners_; }
+    const std::vector<PickTri>& pickTris() const {
+        return topology_ ? topology_->pickTris : pickTris_;
+    }
+    const std::vector<std::array<int, 3>>& dualOwners() const {
+        return topology_ ? topology_->dualOwners : dualOwners_;
+    }
 
     int subdivisions() const { return L_; }
     int pentagonCount() const { return pentCount_; }
@@ -195,9 +208,12 @@ public:
         dualVerts_ = std::move(d);
     }
 
+    // Resets mutable terrain fields while keeping topology and geometry.
+    void resetCellStates();
     void rebuildPickTris();
 
 private:
+    HexSphereTopologyPtr topology_;
     int L_ = 0;
     int pentCount_ = 0;
     float baseRadius_ = kDefaultBaseRadius;

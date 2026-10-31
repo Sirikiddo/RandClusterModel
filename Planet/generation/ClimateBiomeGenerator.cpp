@@ -9,11 +9,9 @@ void ClimateBiomeGenerator::generate(HexSphereModel& model, const ClimateParams&
     Perlin3D pressureNoise(params.seed + 3000);
 
     auto& cells = model.cells();
-
-
     for (auto& cell : cells) {
 
-        const QVector3D& position = cell.centroid.normalized();
+        const QVector3D position = cell.centroid.normalized();
 
         // 1. Высота (основной рельеф)
         float elevation = calculateElevation(position, params, elevationNoise);
@@ -40,6 +38,24 @@ void ClimateBiomeGenerator::generate(HexSphereModel& model, const ClimateParams&
         cell.temperature = temperature;
         cell.humidity = humidity;
         cell.pressure = pressure;
+    }
+}
+
+void ClimateBiomeGenerator::generate(const HexSphereTopology& topology, std::vector<TerrainCellState>& state, const ClimateParams& params) {
+    Perlin3D elevationNoise(params.seed);
+    Perlin3D tempNoise(params.seed + 1000);
+    Perlin3D humidityNoise(params.seed + 2000);
+    Perlin3D pressureNoise(params.seed + 3000);
+    const size_t count = std::min(topology.cells.size(), state.size());
+    for (size_t i = 0; i < count; ++i) {
+        const QVector3D position = topology.cells[i].centroid.normalized();
+        const float elevation = calculateElevation(position, params, elevationNoise);
+        auto& cell = state[i];
+        cell.height = static_cast<int>((elevation - params.seaLevel) * 10.0f);
+        cell.temperature = calculateTemperature(position, elevation, params, tempNoise);
+        cell.humidity = calculateHumidity(position, params, humidityNoise);
+        cell.pressure = calculatePressure(position, params, pressureNoise);
+        cell.biome = determineBiome(elevation, cell.temperature, cell.humidity, params.seaLevel);
     }
 }
 

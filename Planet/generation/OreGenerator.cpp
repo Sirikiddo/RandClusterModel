@@ -41,15 +41,31 @@ void OreGenerator::generate(HexSphereModel& model, uint32_t terrainSeed,
     const OreGenerationParams& params) {
     Perlin3D depositNoise(terrainSeed + 4000u);
     Perlin3D typeNoise(terrainSeed + 5000u);
-
     for (auto& cell : model.cells()) {
+        if (cell.biome != Biome::Rock) { cell.oreDensity = 0.0f; cell.oreType = OreType::None; continue; }
+        const QVector3D p = cell.centroid.normalized();
+        const float density = smoothstep(params.depositThreshold, params.richThreshold,
+            fbm(depositNoise, p, params.scale));
+        if (density <= 0.0f) { cell.oreDensity = 0.0f; cell.oreType = OreType::None; continue; }
+        cell.oreDensity = density;
+        cell.oreType = selectOreType(fbm(typeNoise, p, 1.3f));
+    }
+}
+
+void OreGenerator::generate(const HexSphereTopology& topology,
+    std::vector<TerrainCellState>& state, uint32_t terrainSeed,
+    const OreGenerationParams& params) {
+    Perlin3D depositNoise(terrainSeed + 4000u);
+    Perlin3D typeNoise(terrainSeed + 5000u);
+    const size_t count = std::min(state.size(), topology.cells.size());
+    for (size_t i = 0; i < count; ++i) {
+        auto& cell = state[i];
         if (cell.biome != Biome::Rock) {
             cell.oreDensity = 0.0f;
             cell.oreType = OreType::None;
             continue;
         }
-
-        const QVector3D p = cell.centroid.normalized();
+        const QVector3D p = topology.cells[i].centroid.normalized();
         const float geology = fbm(depositNoise, p, params.scale);
         const float density = smoothstep(params.depositThreshold, params.richThreshold, geology);
         if (density <= 0.0f) {
@@ -57,7 +73,6 @@ void OreGenerator::generate(HexSphereModel& model, uint32_t terrainSeed,
             cell.oreType = OreType::None;
             continue;
         }
-
         cell.oreDensity = density;
         cell.oreType = selectOreType(fbm(typeNoise, p, 1.3f));
     }
@@ -65,6 +80,13 @@ void OreGenerator::generate(HexSphereModel& model, uint32_t terrainSeed,
 
 void OreGenerator::clear(HexSphereModel& model) {
     for (auto& cell : model.cells()) {
+        cell.oreDensity = 0.0f;
+        cell.oreType = OreType::None;
+    }
+}
+
+void OreGenerator::clear(std::vector<TerrainCellState>& state) {
+    for (auto& cell : state) {
         cell.oreDensity = 0.0f;
         cell.oreType = OreType::None;
     }

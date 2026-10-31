@@ -640,3 +640,4 @@ void TerrainTessellator::updateOreData(TerrainMesh& mesh, const HexSphereModel& 
         }
     }
 }
+

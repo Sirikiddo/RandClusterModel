@@ -152,7 +152,9 @@ public:
         else if (camDist < 2.0f) {
             adaptiveThreshold *= (camDist / 2.0f);
         }
-        adaptiveThreshold = std::max(adaptiveThreshold, 0.05f);
+        // Rotation changes the world-space camera direction by only a few
+        // millimetres per mouse event; a 0.05 floor made culling visibly lag.
+        adaptiveThreshold = std::max(adaptiveThreshold, 0.005f);
 
         float thresholdSq = adaptiveThreshold * adaptiveThreshold;
         return distSq > thresholdSq;
@@ -231,8 +233,6 @@ private:
 
     SceneViewMode viewMode_ = SceneViewMode::Planet;
 
-    IcosphereBuilder icoBuilder_;
-    IcoMesh ico_;
     HexSphereModel model_;
     TerrainMesh terrainCPU_;
     CoastalBandData coastalBand_;

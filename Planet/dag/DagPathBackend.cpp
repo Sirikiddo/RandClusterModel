@@ -3,6 +3,7 @@
 #include <QtDebug>
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <stdexcept>
 #include <utility>
@@ -20,6 +21,11 @@ namespace {
     struct PathPayloads {
         InProcessDagPayloads<TerrainSnapshot> terrain{"path-terrain"};
         InProcessDagPayloads<PathResult> results{"path-result"};
+        // Legacy fallback only: snapshots without a shared topology.
+        std::shared_ptr<const HexSphereModel> model;
+        // Height/biome view over the active snapshot, rebuilt once per token.
+        std::shared_ptr<const std::vector<TerrainCellState>> state;
+        std::string activeTerrainToken;
     };
 
 
@@ -28,9 +34,10 @@ namespace {
     // ============================================================
 
     HexSphereModel buildModelFromSnapshot(const TerrainSnapshot& snapshot) {
-        IcosphereBuilder builder;
-        HexSphereModel model;
-        model.rebuildFromIcosphere(builder.build(snapshot.subdivisionLevel));
+        if (!snapshot.topology || snapshot.topology->subdivisionLevel != snapshot.subdivisionLevel) {
+            throw std::runtime_error("TerrainSnapshot is missing a matching immutable topology");
+        }
+        HexSphereModel model(snapshot.topology);
 
         // Получаем НЕ-const ссылку на ячейки (см. HexSphereModel.h)
         auto& cells = model.cells();
@@ -48,7 +55,7 @@ namespace {
             dst.pressure = src.pressure;
             dst.oreDensity = src.oreDensity;
             dst.oreType = src.oreType;
-            // centroid уже установлен в rebuildFromIcosphere
+            // Centroids are supplied by the shared immutable topology.
         }
 
         return model;
@@ -106,27 +113,46 @@ namespace {
         const int startId = readIntField(readHandle, fieldName, startCellSlot, 0);
         const int goalId = readIntField(readHandle, fieldName, goalCellSlot, 0);
 
-        // Строим модель
-        HexSphereModel model = buildModelFromSnapshot(*snapshot);
-
         // Строим граф и ищем путь.
         // Деревья и реки из снапшота — препятствия: дорога не проходит через
         // занятые ими клетки, и закончиться на такой клетке она тоже не может.
-        PathBuilder builder(model, smoothMaxDelta);
+        std::unique_ptr<PathBuilder> builder;
+        if (snapshot->topology && payloads->state) {
+            builder = std::make_unique<PathBuilder>(
+                *snapshot->topology, *payloads->state, smoothMaxDelta);
+        }
+        else if (payloads->model) {
+            builder = std::make_unique<PathBuilder>(*payloads->model, smoothMaxDelta);
+        }
+        else {
+            return {};
+        }
         std::vector<int> blockedCells = snapshot->treeCells;
         blockedCells.insert(blockedCells.end(),
             snapshot->riverCells.begin(), snapshot->riverCells.end());
-        builder.setBlockedCells(blockedCells);
-        builder.build();
-        std::vector<int> path = builder.astar(startId, goalId);
+        builder->setBlockedCells(blockedCells);
+        builder->build();
+        std::vector<int> path = builder->astar(startId, goalId);
 
         PathResult result;
         result.found = !path.empty();
         result.cellIds = std::move(path);
-        const auto& cells = model.cells();
-        for (size_t i = 1; i < result.cellIds.size(); ++i) {
-            result.length += PathBuilder::edgeAngularDistance(
-                cells[result.cellIds[i - 1]], cells[result.cellIds[i]]);
+        if (snapshot->topology) {
+            const auto& topologyCells = snapshot->topology->cells;
+            for (size_t i = 1; i < result.cellIds.size(); ++i) {
+                const QVector3D& a = topologyCells[static_cast<size_t>(result.cellIds[i - 1])].centroid;
+                const QVector3D& b = topologyCells[static_cast<size_t>(result.cellIds[i])].centroid;
+                const float dot = std::clamp(
+                    QVector3D::dotProduct(a.normalized(), b.normalized()), -1.0f, 1.0f);
+                result.length += std::acos(dot);
+            }
+        }
+        else if (payloads->model) {
+            const auto& cells = payloads->model->cells();
+            for (size_t i = 1; i < result.cellIds.size(); ++i) {
+                result.length += PathBuilder::edgeAngularDistance(
+                    cells[result.cellIds[i - 1]], cells[result.cellIds[i]]);
+            }
         }
 
         proc::Commit commit;
@@ -279,10 +305,29 @@ struct DagPathBackend::Impl {
     }
 
     void pushTerrainSnapshot(const TerrainSnapshot& snapshot) {
+        const std::string token = payloads->terrain.intern(snapshot, sameTerrainSnapshot);
+        if (token != payloads->activeTerrainToken) {
+            payloads->activeTerrainToken = token;
+            payloads->model.reset();
+            payloads->state.reset();
+            if (snapshot.topology) {
+                auto state = std::make_shared<std::vector<TerrainCellState>>(snapshot.cells.size());
+                for (size_t i = 0; i < snapshot.cells.size(); ++i) {
+                    (*state)[i].height = snapshot.cells[i].height;
+                    (*state)[i].biome = snapshot.cells[i].biome;
+                }
+                payloads->state = std::move(state);
+            }
+            else {
+                // Restored/legacy snapshot: materialize a model once per token.
+                payloads->model = std::make_shared<const HexSphereModel>(
+                    buildModelFromSnapshot(snapshot));
+            }
+        }
         proc::Commit c;
         c.set(
             terrainSnapshotSlot,                               // ← ИСПОЛЬЗУЕМ СЛОТ
-            payloads->terrain.intern(snapshot, sameTerrainSnapshot),
+            token,
             proc::v2::WriteLifetime::Persistent,
             std::string(schema.field_name(terrainSnapshotSlot)));
         engine.push_input(c);

@@ -164,6 +164,7 @@
     <ClCompile Include="model\CarModelHandler.cpp" />
     <ClCompile Include="model\FactoryModelHandler.cpp" />
     <ClCompile Include="model\HexSphereModel.cpp" />
+    <ClCompile Include="model\HexSphereTopology.cpp" />
     <ClCompile Include="model\MineModelHandler.cpp" />
     <ClCompile Include="model\ModelHandler.cpp" />
     <ClCompile Include="model\OreSystem.cpp" />
@@ -193,6 +194,7 @@
     <ClCompile Include="ui\PlanetSettingsPanel.cpp" />
     <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp" />
     <ClCompile Include="tests\DagTransportBenchmark.cpp" />
+    <ClCompile Include="tests\TopologyTests.cpp" />
     <ClCompile Include="tests\WaterScreenPassTests.cpp" />
     <ClCompile Include="tests\WaterWaveModelTests.cpp" />
   </ItemGroup>
@@ -242,6 +244,7 @@
     <ClInclude Include="model\DebugModel.h" />
     <ClInclude Include="model\FactoryModelHandler.h" />
     <ClInclude Include="model\HexSphereModel.h" />
+    <ClInclude Include="model\HexSphereTopology.h" />
     <ClInclude Include="model\MineModelHandler.h" />
     <ClInclude Include="model\ModelHandler.h" />
     <ClInclude Include="model\OreSystem.h" />
@@ -259,6 +262,7 @@
     <ClInclude Include="resources\HexSphereWidget_shaders.h" />
     <ClInclude Include="tests\ClimateBiomeGeneratorTests.h" />
     <ClInclude Include="tests\DagTransportBenchmark.h" />
+    <ClInclude Include="tests\TopologyTests.h" />
     <ClInclude Include="tests\WaterScreenPassTests.h" />
     <ClInclude Include="tests\WaterWaveModelTests.h" />
     <ClInclude Include="scene\Entity.h" />

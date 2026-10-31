@@ -1,6 +1,7 @@
 #include "model/HexSphereModel.h"
 #include <cmath>
 #include <algorithm>
+#include <atomic>
 
 // Icosahedron base vertices/faces
 std::pair<std::vector<QVector3D>, std::vector<Tri>> IcosphereBuilder::baseIcosahedron() {
@@ -72,6 +73,18 @@ IcoMesh IcosphereBuilder::build(int level) const {
     return mesh;
 }
 
+namespace {
+std::atomic<std::size_t> g_topologyBuildCount{0};
+}
+
+std::size_t HexSphereModel::topologyBuildCount() noexcept {
+    return g_topologyBuildCount.load(std::memory_order_relaxed);
+}
+
+void HexSphereModel::resetTopologyBuildCount() noexcept {
+    g_topologyBuildCount.store(0, std::memory_order_relaxed);
+}
+
 static inline QVector3D triCenter(const QVector3D& a, const QVector3D& b, const QVector3D& c) {
     QVector3D m = (a + b + c) / 3.0f; m.normalize(); return m;
 }
@@ -105,8 +118,42 @@ QVector3D HexSphereModel::cellSurfacePosition(int cellId, float bias) const {
     return positionOnSurface(cell.centroid, static_cast<float>(cell.height), bias);
 }
 
-void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
-    L_ = 0; // we don't store level; optional
+HexSphereModel::HexSphereModel(HexSphereTopologyPtr topology) {
+    setTopology(std::move(topology));
+}
+
+void HexSphereModel::setTopology(HexSphereTopologyPtr topology) {
+    topology_ = std::move(topology);
+    if (!topology_) {
+        cells_.clear();
+        dualVerts_.clear();
+        dualOwners_.clear();
+        wireEdges_.clear();
+        pickTris_.clear();
+        pentCount_ = 0;
+        return;
+    }
+    L_ = topology_->subdivisionLevel;
+    pentCount_ = topology_->pentagonCount;
+    cells_.clear();
+    cells_.reserve(topology_->cells.size());
+    for (const auto& source : topology_->cells) {
+        Cell cell;
+        cell.id = source.id;
+        cell.isPentagon = source.isPentagon;
+        cell.poly = source.poly;
+        cell.neighbors = source.neighbors;
+        cell.centroid = source.centroid;
+        cell.area = source.area;
+        cells_.push_back(std::move(cell));
+    }
+    resetCellStates();
+    pickTris_.clear();
+}
+
+void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico, int subdivisionLevel) {
+    g_topologyBuildCount.fetch_add(1, std::memory_order_relaxed);
+    L_ = subdivisionLevel;
     // 1) Dual vertices: one per primal triangle (center on sphere)
     dualVerts_.resize(ico.F.size());
     for (int i = 0; i < (int)ico.F.size(); ++i) {
@@ -201,21 +248,47 @@ void HexSphereModel::rebuildFromIcosphere(const IcoMesh& ico) {
         wireEdges_.push_back({ a,b });
     }
 
-    // 4) Build triangle fans for picking (center + edges) per cell
-    pickTris_.clear();
+    // 4) Materialize immutable topology, including the picking fans that derive
+    // from it. Model instances built from this topology reuse them as-is.
+    auto topology = std::make_shared<HexSphereTopology>();
+    topology->subdivisionLevel = L_;
+    topology->pentagonCount = pentCount_;
+    topology->dualVerts = dualVerts_;
+    topology->dualOwners = dualOwners_;
+    topology->wireEdges = wireEdges_;
+    topology->cells.reserve(cells_.size());
     for (const auto& cell : cells_) {
+        TopologyCell topologyCell;
+        topologyCell.id = cell.id;
+        topologyCell.isPentagon = cell.isPentagon;
+        topologyCell.poly = cell.poly;
+        topologyCell.neighbors = cell.neighbors;
+        topologyCell.centroid = cell.centroid;
+        topologyCell.area = cell.area;
+        topology->cells.push_back(std::move(topologyCell));
+    }
+
+    topology->pickTris.reserve(topology->cells.size() * 6);
+    for (const TopologyCell& cell : topology->cells) {
         if (cell.poly.size() < 3) continue;
         QVector3D center(0, 0, 0);
-        for (int f : cell.poly) center += dualVerts_[f];
+        for (int f : cell.poly) center += topology->dualVerts[static_cast<size_t>(f)];
         center /= float(cell.poly.size());
         if (!center.isNull()) center.normalize();
         for (size_t i = 0; i < cell.poly.size(); ++i) {
-            int i0 = cell.poly[i];
-            int i1 = cell.poly[(i + 1) % cell.poly.size()];
-            PickTri pt; pt.cellId = cell.id; pt.v0 = center; pt.v1 = dualVerts_[i0]; pt.v2 = dualVerts_[i1];
-            pickTris_.push_back(pt);
+            const int i0 = cell.poly[i];
+            const int i1 = cell.poly[(i + 1) % cell.poly.size()];
+            PickTri pt;
+            pt.cellId = cell.id;
+            pt.v0 = center;
+            pt.v1 = topology->dualVerts[static_cast<size_t>(i0)];
+            pt.v2 = topology->dualVerts[static_cast<size_t>(i1)];
+            topology->pickTris.push_back(pt);
         }
     }
+
+    topology_ = std::move(topology);
+    pickTris_.clear();
 }
 
 void HexSphereModel::setHeight(int cellId, int h) {
@@ -330,8 +403,25 @@ QVector3D HexSphereModel::biomeColor(Biome b, float temperature) {
 }
 
 
+void HexSphereModel::resetCellStates() {
+    for (auto& cell : cells_) {
+        cell.height = 0;
+        cell.biome = Biome::Grass;
+        cell.temperature = 0.5f;
+        cell.humidity = 0.5f;
+        cell.pressure = 0.5f;
+        cell.oreDensity = 0.0f;
+        cell.oreType = OreType::None;
+    }
+}
+
 void HexSphereModel::rebuildPickTris() {
+    if (topology_) {
+        // Shared topology already owns immutable, level-derived picking fans.
+        return;
+    }
     pickTris_.clear();
+    const auto& dual = dualVerts();
     pickTris_.reserve(cells_.size() * 6);
 
     for (const auto& cell : cells_) {
@@ -339,7 +429,7 @@ void HexSphereModel::rebuildPickTris() {
 
         QVector3D center(0, 0, 0);
         for (int f : cell.poly) {
-            center += dualVerts_[static_cast<size_t>(f)];
+            center += dual[static_cast<size_t>(f)];
         }
         center /= float(cell.poly.size());
         if (!center.isNull()) center.normalize();
@@ -350,8 +440,8 @@ void HexSphereModel::rebuildPickTris() {
             PickTri pt;
             pt.cellId = cell.id;
             pt.v0 = center;
-            pt.v1 = dualVerts_[static_cast<size_t>(i0)];
-            pt.v2 = dualVerts_[static_cast<size_t>(i1)];
+            pt.v1 = dual[static_cast<size_t>(i0)];
+            pt.v2 = dual[static_cast<size_t>(i1)];
             pickTris_.push_back(pt);
         }
     }

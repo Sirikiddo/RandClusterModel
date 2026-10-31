@@ -15,3 +15,4 @@ TerrainMesh TerrainMeshGenerator::buildTerrainMesh(const HexSphereModel& model, 
 
     return tt.build(model);
 }
+

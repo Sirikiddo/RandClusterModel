@@ -737,11 +737,24 @@ void HexSphereRenderer::updateVisibility(const QVector3D& cameraPos) {
         return;
     }
 
+    // At high subdivision the triangle-center approximation is too coarse:
+    // tiny triangles can straddle the silhouette while their centers fall on
+    // the hidden side. CPU filtering then creates pinholes and scans millions
+    // of triangles on every rotation. Let GPU depth/back-face tests handle
+    // L6 and above.
+    if (lastScene_->subdivisionLevel() >= 6) {
+        terrainIndexCount_ = static_cast<GLsizei>(totalIndexCount_);
+        lastScene_->updateLastCameraPosition();
+        return;
+    }
+
     // Р Р€Р вЂќР С’Р вЂєР ВР СћР В¬ РЎРЊРЎвЂљРЎС“ РЎРѓРЎвЂљРЎР‚Р С•Р С”РЎС“:
     // lastScene_->updatePrediction(cameraPos);
 
     // Р ВРЎРѓР С—Р С•Р В»РЎРЉР В·РЎС“Р ВµР С Р В°Р Т‘Р В°Р С—РЎвЂљР С‘Р Р†Р Р…РЎС“РЎР‹ Р В»Р С•Р С–Р С‘Р С”РЎС“ Р Т‘Р В»РЎРЏ Р С•Р С—РЎР‚Р ВµР Т‘Р ВµР В»Р ВµР Р…Р С‘РЎРЏ Р Р…Р ВµР С•Р В±РЎвЂ¦Р С•Р Т‘Р С‘Р СР С•РЎРѓРЎвЂљР С‘ Р С•Р В±Р Р…Р С•Р Р†Р В»Р ВµР Р…Р С‘РЎРЏ
-    if (lastScene_->shouldUpdateVisibility() && lastScene_->hasCameraMoved(0.1f)) {
+    // Follow rotation continuously. The previous speed-based gate allowed
+    // 0.2--1.0 s between updates and ignored most small mouse rotations.
+    if (lastScene_->hasCameraMoved(0.01f)) {
         QElapsedTimer filterTimer;
         filterTimer.start();
 
@@ -1142,7 +1155,6 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
         // непрозрачна и полностью закрывает линию; линия остаётся видимой
         // только в реальных просветах, куда не попал ни один пиксель русла.
         if (riverLineVertexCount_ > 0 && progRiverLine_ != 0) {
-            const GLboolean lineDepthWasEnabled = gl_->glIsEnabled(GL_DEPTH_TEST);
             gl_->glUseProgram(progRiverLine_);
             gl_->glUniformMatrix4fv(uMVP_RiverLine_, 1, GL_FALSE, ctx.mvp.constData());
             gl_->glUniform3f(uViewPos_RiverLine_,
@@ -1151,14 +1163,15 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
                 static_cast<float>(ctx.viewportSize.width()),
                 static_cast<float>(ctx.viewportSize.height()));
             gl_->glUniform1f(uWidthPx_RiverLine_, 3.5f);
-            gl_->glDisable(GL_DEPTH_TEST);
+            // The terrain depth buffer is already populated. Keep depth test
+            // enabled so the diagnostic/underlay line cannot show through the
+            // far side of the planet.
+            gl_->glEnable(GL_DEPTH_TEST);
+            gl_->glDepthMask(GL_FALSE);
             gl_->glLineWidth(1.0f);
             gl_->glBindVertexArray(vaoRiverLine_);
             gl_->glDrawArrays(GL_LINES, 0, riverLineVertexCount_);
             gl_->glBindVertexArray(0);
-            if (lineDepthWasEnabled) {
-                gl_->glEnable(GL_DEPTH_TEST);
-            }
             gl_->glUseProgram(progTerrain_);
         }
 
@@ -1174,7 +1187,11 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
             gl_->glBindTexture(GL_TEXTURE_2D, sceneDepthTexture_);
             gl_->glUniform1i(uSceneDepthTex_Terrain_, 1);
             if (uRiverDepthTolerance_ >= 0) {
-                gl_->glUniform1f(uRiverDepthTolerance_, 0.25f);
+                // This is only a small rasterization cushion at cliff edges.
+                // A quarter world unit lets rivers survive in front of real
+                // terrain on the far side and makes them bleed through.
+                gl_->glUniform1f(uRiverDepthTolerance_,
+                    std::max(0.002f, 0.10f * scene.heightStep()));
             }
         }
         else if (uRiverDepthTolerance_ >= 0) {

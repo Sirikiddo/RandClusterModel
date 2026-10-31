@@ -137,8 +137,7 @@ void HexSphereSceneController::setOutlineBias(float value) {
 }
 
 void HexSphereSceneController::rebuildTopology() {
-    ico_ = icoBuilder_.build(L_);
-    model_.rebuildFromIcosphere(ico_);
+    model_.setTopology(buildHexSphereTopology(L_));
     model_.setBaseRadius(HexSphereModel::kDefaultBaseRadius);
     model_.setHeightStep(autoHeightStep());
     model_.setWaterSurfaceLevel(HexSphereModel::kDefaultWaterSurfaceLevel);
@@ -204,7 +203,6 @@ void HexSphereSceneController::clearForShutdown() {
     terrainCPU_ = TerrainMesh{};
     coastalBand_ = CoastalBandData{};
     model_ = HexSphereModel{};
-    ico_ = IcoMesh{};
     generator_.reset();
 }
 
@@ -272,6 +270,7 @@ TerrainSnapshot HexSphereSceneController::captureTerrainSnapshot() const {
     snapshot.subdivisionLevel = L_;
     snapshot.generatorIndex = generatorIndex_;
     snapshot.params = genParams_;
+    snapshot.topology = model_.topology();
     snapshot.cells.reserve(model_.cells().size());
 
     for (const auto& cell : model_.cells()) {
@@ -314,13 +313,32 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
         return;
     }
 
+    const bool topologyChanged =
+        L_ != snapshot.subdivisionLevel || model_.cells().empty();
+
     generatorIndex_ = normalizeTerrainGeneratorIndex(snapshot.generatorIndex);
     generator_ = createTerrainGeneratorByIndex(generatorIndex_);
     genParams_ = snapshot.params;
     L_ = snapshot.subdivisionLevel;
     topologyDirty_ = false;
 
-    rebuildTopology();
+    // Terrain snapshots produced for a new seed keep the same subdivision.
+    // Preserve the already-built topology and replace only mutable cell state.
+    // When the snapshot carries its own immutable topology, adopt it instead of
+    // rebuilding the same level a second time.
+    if (topologyChanged) {
+        if (snapshot.topology && snapshot.topology->subdivisionLevel == snapshot.subdivisionLevel) {
+            if (model_.topology() != snapshot.topology || model_.cells().empty()) {
+                model_.setTopology(snapshot.topology);
+            }
+            model_.setBaseRadius(HexSphereModel::kDefaultBaseRadius);
+            model_.setHeightStep(autoHeightStep());
+            model_.setWaterSurfaceLevel(HexSphereModel::kDefaultWaterSurfaceLevel);
+        }
+        else {
+            rebuildTopology();
+        }
+    }
 
     auto& cells = model_.cells();
     const size_t count = std::min(cells.size(), snapshot.cells.size());
@@ -345,6 +363,8 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
 }
 
 float HexSphereSceneController::autoHeightStep() const {
+    // Reduce the radial height step as subdivision increases so the finer
+    // terrain stays visually flatter and does not overpower the sphere.
     const float baseStep = 0.05f;
     const float reductionFactor = 0.4f;
     return baseStep / (1.0f + L_ * reductionFactor);
@@ -1052,9 +1072,16 @@ std::vector<uint32_t> HexSphereSceneController::getVisibleIndices(const QVector3
     std::vector<uint32_t> visibleIndices;
     visibleIndices.reserve(terrainCPU_.idx.size() / 2);
 
+    // A triangle whose center is just behind the analytic horizon can still
+    // contribute visible pixels because its vertices span the silhouette.
+    // The old zero threshold cut those triangles wholesale; at L6/L7 that
+    // produced a grainy horizon and large holes. Keep a conservative band and
+    // let depth/back-face testing remove the truly hidden fragments.
+    constexpr float kHorizonGuardBand = -0.05f;
+
     for (const auto& tri : triangleCache_) {
         QVector3D normal = tri.center.normalized();
-        if (QVector3D::dotProduct(normal, toCam) > 0.0f) {
+        if (QVector3D::dotProduct(normal, toCam) > kHorizonGuardBand) {
             visibleIndices.push_back(tri.i0);
             visibleIndices.push_back(tri.i1);
             visibleIndices.push_back(tri.i2);

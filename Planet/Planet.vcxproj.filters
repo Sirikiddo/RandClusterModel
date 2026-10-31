@@ -114,6 +114,9 @@
     <ClCompile Include="model\HexSphereModel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="model\HexSphereTopology.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="model\MineModelHandler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -306,6 +309,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="model\HexSphereModel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="model\HexSphereTopology.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="model\MineModelHandler.h">
@@ -539,5 +545,7 @@
   <ItemGroup>
     <ClCompile Include="tests\RiverGeneratorTests.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClInclude Include="tests\RiverGeneratorTests.h"><Filter>Header Files</Filter></ClInclude>
+    <ClCompile Include="tests\TopologyTests.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClInclude Include="tests\TopologyTests.h"><Filter>Header Files</Filter></ClInclude>
   </ItemGroup>
 </Project>

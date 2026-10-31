@@ -41,6 +41,14 @@ void TerrainRenderer::render(const HexSphereRenderer::RenderContext& ctx, GLsize
 
     gl_->glBindVertexArray(vao_);
 
+    // TerrainTessellator emits caps, blades and cliff strips with locally
+    // oriented winding. At high subdivision some tiny edge triangles can have
+    // the opposite winding after floating-point normalization; global back
+    // face culling then creates pinholes in the surface. Depth testing still
+    // removes the hidden hemisphere, so keep culling disabled only here.
+    const GLboolean cullWasEnabled = gl_->glIsEnabled(GL_CULL_FACE);
+    if (cullWasEnabled) gl_->glDisable(GL_CULL_FACE);
+
     GLenum err = gl_->glGetError();
     if (err != GL_NO_ERROR) {
         qDebug() << "OpenGL error ignored before draw:" << err;
@@ -54,4 +62,5 @@ void TerrainRenderer::render(const HexSphereRenderer::RenderContext& ctx, GLsize
     }
 
     gl_->glBindVertexArray(0);
+    if (cullWasEnabled) gl_->glEnable(GL_CULL_FACE);
 }

@@ -19,6 +19,7 @@ public:
     };
 
     void generate(HexSphereModel& model, const ClimateParams& params);
+    void generate(const HexSphereTopology& topology, std::vector<TerrainCellState>& state, const ClimateParams& params);
 
 private:
     float calculateElevation(const QVector3D& position, const ClimateParams& params, Perlin3D& elevationNoise);

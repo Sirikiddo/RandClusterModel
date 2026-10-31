@@ -14,12 +14,21 @@ namespace {
 
 } // namespace
 
+PathBuilder::PathBuilder(const HexSphereTopology& topology,
+    const std::vector<TerrainCellState>& state,
+    int smoothMaxDelta)
+    : smoothMaxDelta_(effectiveMaxClimbDelta(smoothMaxDelta))
+    , topology_(&topology)
+    , state_(&state) {
+}
+
 int PathBuilder::effectiveMaxClimbDelta(int smoothMaxDelta) {
     return std::clamp(smoothMaxDelta, 0, kMaxClimbDelta);
 }
 
 void PathBuilder::setBlockedCells(const std::vector<int>& cellIds) {
-    blocked_.assign(model_.cells().size(), 0);
+    const size_t count = topology_ ? topology_->cells.size() : model_->cells().size();
+    blocked_.assign(count, 0);
     for (int cellId : cellIds) {
         if (cellId >= 0 && cellId < static_cast<int>(blocked_.size())) {
             blocked_[static_cast<size_t>(cellId)] = 1;
@@ -34,7 +43,31 @@ bool PathBuilder::isBlocked(int cellId) const {
 }
 
 void PathBuilder::build(PathBuilder::WeightFn w) const {
-    const auto& cells = model_.cells();
+    if (topology_ && state_) {
+        const int n = static_cast<int>(std::min(topology_->cells.size(), state_->size()));
+        g_.assign(n, {});
+        for (int u = 0; u < n; ++u) {
+            const auto& from = topology_->cells[static_cast<size_t>(u)];
+            for (int v : from.neighbors) {
+                if (v < 0 || v >= n) continue;
+                const auto& to = topology_->cells[static_cast<size_t>(v)];
+                if (to.id < 0) continue;
+                const auto& fs = (*state_)[static_cast<size_t>(u)];
+                const auto& ts = (*state_)[static_cast<size_t>(v)];
+                if (ts.biome == Biome::Sea || isBlocked(v)) continue;
+                const int climb = ts.height - fs.height;
+                if (std::abs(climb) > smoothMaxDelta_) continue;
+                const float dot = std::clamp(QVector3D::dotProduct(
+                    from.centroid.normalized(), to.centroid.normalized()), -1.0f, 1.0f);
+                const float distance = std::acos(dot);
+                const float terrainFactor = 0.5f * (biomeTraversalFactor(fs.biome) + biomeTraversalFactor(ts.biome));
+                g_[u].push_back({v, distance * terrainFactor * slopePenalty(climb)});
+            }
+        }
+        return;
+    }
+
+    const auto& cells = model_->cells();
     const int n = static_cast<int>(cells.size());
     g_.assign(n, {});
 
@@ -115,8 +148,15 @@ std::vector<int> PathBuilder::astar(int startId, int goalId) const {
     }
 
     auto heuristic = [&](int a, int b) {
-        return edgeAngularDistance(model_.cells()[static_cast<size_t>(a)],
-            model_.cells()[static_cast<size_t>(b)]);
+        if (topology_) {
+            const auto& ca = topology_->cells[static_cast<size_t>(a)];
+            const auto& cb = topology_->cells[static_cast<size_t>(b)];
+            const float dot = std::clamp(QVector3D::dotProduct(
+                ca.centroid.normalized(), cb.centroid.normalized()), -1.0f, 1.0f);
+            return std::acos(dot);
+        }
+        return edgeAngularDistance(model_->cells()[static_cast<size_t>(a)],
+            model_->cells()[static_cast<size_t>(b)]);
         };
 
     constexpr float INF = std::numeric_limits<float>::infinity();
@@ -202,7 +242,29 @@ std::vector<QVector3D> PathBuilder::polylineOnSphere(const std::vector<int>& pat
             (std::sin(t * angle) / sinAngle) * bn;
         };
 
-    const auto& cells = model_.cells();
+    if (topology_ && state_) {
+        std::vector<QVector3D> out;
+        out.reserve((path.size() - 1) * static_cast<size_t>(segmentsPerEdge) + 1);
+        for (size_t i = 0; i + 1 < path.size(); ++i) {
+            const auto& from = topology_->cells[static_cast<size_t>(path[i])];
+            const auto& to = topology_->cells[static_cast<size_t>(path[i + 1])];
+            for (int k = 0; k < segmentsPerEdge; ++k) {
+                const float t = float(k) / float(segmentsPerEdge);
+                const float h = (1.0f - t) * float((*state_)[static_cast<size_t>(path[i])].height)
+                    + t * float((*state_)[static_cast<size_t>(path[i + 1])].height);
+                out.push_back(slerp(from.centroid, to.centroid, t).normalized()
+                    * (1.0f + h * heightStep + bias));
+            }
+        }
+        if (!path.empty()) {
+            const auto& last = topology_->cells[static_cast<size_t>(path.back())];
+            const float h = float((*state_)[static_cast<size_t>(path.back())].height);
+            out.push_back(last.centroid.normalized() * (1.0f + h * heightStep + bias));
+        }
+        return out;
+    }
+
+    const auto& cells = model_->cells();
     out.reserve((path.size() - 1) * static_cast<size_t>(segmentsPerEdge) + 1);
 
     for (size_t i = 0; i + 1 < path.size(); ++i) {

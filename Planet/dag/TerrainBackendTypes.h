@@ -20,6 +20,10 @@ struct TerrainSnapshot {
     int subdivisionLevel = kDefaultTerrainSubdivisionLevel;
     int generatorIndex = kDefaultTerrainGeneratorIndex;
     TerrainParams params = defaultTerrainParams();
+    // In-process immutable topology handle. It is intentionally absent from
+    // serialized JSON; deserialized snapshots must be attached to a topology
+    // before they can enter Scene or Path DAG.
+    HexSphereTopologyPtr topology;
     std::vector<TerrainCellSnapshot> cells;
 
     // Клетки, занятые деревьями (отсортированные, без повторов). Дерево — препятствие

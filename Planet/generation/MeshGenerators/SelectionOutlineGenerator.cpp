@@ -75,6 +75,63 @@ std::vector<float> SelectionOutlineGenerator::buildSelectionOutlineVertices(cons
     return lineVertices;
 }
 
+
+std::vector<float> SelectionOutlineGenerator::buildSelectionOutlineVertices(
+    const HexSphereTopology& topology,
+    const std::vector<TerrainCellState>& state,
+    const QSet<int>& selectedCells,
+    float heightStep,
+    float outlineBias,
+    bool smoothOneStep) {
+    return buildSelectionOutlineVertices(
+        topology,
+        [&state](int cellId) {
+            return cellId >= 0 && static_cast<size_t>(cellId) < state.size()
+                ? state[static_cast<size_t>(cellId)].height
+                : 0;
+        },
+        selectedCells, heightStep, outlineBias, smoothOneStep);
+}
+
+std::vector<float> SelectionOutlineGenerator::buildSelectionOutlineVertices(
+    const HexSphereTopology& topology,
+    const CellHeightProvider& heightOf,
+    const QSet<int>& selectedCells,
+    float heightStep,
+    float outlineBias,
+    bool smoothOneStep) {
+    SelectionOutlineInput input;
+    input.heightStep = heightStep;
+    input.outlineBias = outlineBias;
+    input.smoothOneStep = smoothOneStep;
+    std::vector<int> sortedIds(selectedCells.cbegin(), selectedCells.cend());
+    std::sort(sortedIds.begin(), sortedIds.end());
+    for (int cellId : sortedIds) {
+        if (cellId < 0 || static_cast<size_t>(cellId) >= topology.cells.size()) continue;
+        const auto& cell = topology.cells[static_cast<size_t>(cellId)];
+        for (size_t edgeIndex = 0; edgeIndex < cell.poly.size(); ++edgeIndex) {
+            const int next = static_cast<int>((edgeIndex + 1) % cell.poly.size());
+            const int a = cell.poly[edgeIndex];
+            const int b = cell.poly[static_cast<size_t>(next)];
+            if (a < 0 || b < 0 || static_cast<size_t>(a) >= topology.dualVerts.size()
+                || static_cast<size_t>(b) >= topology.dualVerts.size()) continue;
+            SelectionOutlineEdge edge;
+            edge.startUnit = topology.dualVerts[static_cast<size_t>(a)].normalized();
+            edge.endUnit = topology.dualVerts[static_cast<size_t>(b)].normalized();
+            edge.cellHeight = heightOf(cellId);
+            if (edgeIndex < cell.neighbors.size()) {
+                const int neighbor = cell.neighbors[edgeIndex];
+                if (neighbor >= 0) {
+                    edge.neighborHeight = heightOf(neighbor);
+                    edge.hasNeighbor = true;
+                }
+            }
+            input.edges.push_back(edge);
+        }
+    }
+    return buildSelectionOutlineVertices(input);
+}
+
 std::vector<float> SelectionOutlineGenerator::buildSelectionOutlineVertices(
     const HexSphereModel& model,
     const QSet<int>& selectedCells,

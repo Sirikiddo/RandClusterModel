@@ -35,9 +35,10 @@ namespace {
     };
 
     HexSphereModel buildModelFromSnapshot(const TerrainSnapshot& snapshot) {
-        IcosphereBuilder builder;
-        HexSphereModel model;
-        model.rebuildFromIcosphere(builder.build(snapshot.subdivisionLevel));
+        if (!snapshot.topology || snapshot.topology->subdivisionLevel != snapshot.subdivisionLevel) {
+            throw std::runtime_error("TerrainSnapshot is missing a matching immutable topology");
+        }
+        HexSphereModel model(snapshot.topology);
 
         auto& cells = model.cells();
         const size_t count = std::min(snapshot.cells.size(), cells.size());
@@ -56,11 +57,8 @@ namespace {
         return model;
     }
 
-    std::vector<float> buildSelectionOutline(
-        const TerrainSnapshot& snapshot,
-        const std::vector<int>& selectedCells,
-        const VisualParams& visual) {
-        HexSphereModel model = buildModelFromSnapshot(snapshot);
+    std::vector<float> buildSelectionOutline(const HexSphereModel& model,
+        const std::vector<int>& selectedCells, const VisualParams& visual) {
         QSet<int> selected;
         for (int cell : selectedCells) {
             selected.insert(cell);
@@ -71,6 +69,23 @@ namespace {
             visual.heightStep,
             visual.outlineBias,
             visual.smoothOneStep);
+    }
+
+    std::vector<float> buildSelectionOutlineFromSnapshot(
+        const TerrainSnapshot& snapshot,
+        const std::vector<int>& selectedCells,
+        const VisualParams& visual) {
+        if (!snapshot.topology) return {};
+        QSet<int> selected;
+        for (int cell : selectedCells) selected.insert(cell);
+        return SelectionOutlineGenerator::buildSelectionOutlineVertices(
+            *snapshot.topology,
+            [&snapshot](int cellId) {
+                return cellId >= 0 && static_cast<size_t>(cellId) < snapshot.cells.size()
+                    ? snapshot.cells[static_cast<size_t>(cellId)].height
+                    : 0;
+            },
+            selected, visual.heightStep, visual.outlineBias, visual.smoothOneStep);
     }
 
     // ======================= TREE PLACEMENTS =======================
@@ -85,8 +100,7 @@ namespace {
         }
     }
 
-    std::vector<TreePlacement> buildTreePlacements(const TerrainSnapshot& snapshot) {
-        HexSphereModel model = buildModelFromSnapshot(snapshot);
+    std::vector<TreePlacement> buildTreePlacements(const TerrainSnapshot& snapshot, const HexSphereModel& model) {
         const auto& cells = model.cells();
 
         std::vector<TreePlacement> placements;
@@ -105,12 +119,12 @@ namespace {
                 continue;
             }
 
-            // Не сажаем на высоте >= 2
+            // пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ >= 2
             if (cell.height >= 2) {
                 continue;
             }
 
-            // Не сажаем рядом с водой
+            // пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅ
             bool hasWaterNeighbor = false;
             for (int neighborId : cell.neighbors) {
                 if (neighborId >= 0 && neighborId < static_cast<int>(cells.size())) {
@@ -144,7 +158,7 @@ namespace {
             placement.baryW = 1.0f - placement.baryU - placement.baryV;
             placement.rotation = rotationDist(gen);
 
-            // Масштаб: базовый ±20%, + коррекция по влажности
+            // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ: пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ20%, + пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
             float s = scaleDist(gen);
             if (cell.biome == Biome::Jungle && cell.humidity > 0.7f) {
                 s *= 1.15f;
@@ -154,18 +168,91 @@ namespace {
             }
             placement.scale = s;
 
-            // Цвета НЕ хранятся в placement — их берёт рендерер из TreeVariant.
+            // пїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ placement пїЅ пїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ TreeVariant.
             placements.push_back(placement);
         }
 
         return placements;
     }
 
-    std::vector<ModelPlacement> buildModelPlacements(
-        const TerrainSnapshot& snapshot,
-        const std::vector<ModelPlacementRequest>& requests,
-        const VisualParams& visual) {
-        HexSphereModel model = buildModelFromSnapshot(snapshot);
+    std::vector<TreePlacement> buildTreePlacementsFromSnapshot(
+        const TerrainSnapshot& snapshot) {
+        if (!snapshot.topology) {
+            return {};
+        }
+        const auto& topologyCells = snapshot.topology->cells;
+        const auto& cells = snapshot.cells;
+        const size_t count = std::min(topologyCells.size(), cells.size());
+
+        std::vector<TreePlacement> placements;
+        placements.reserve(count / 6);
+
+        const uint32_t baseSeed =
+            snapshot.params.seed ^
+            (static_cast<uint32_t>(snapshot.generatorIndex + 1) * 0x9e3779b9u) ^
+            (static_cast<uint32_t>(snapshot.subdivisionLevel + 1) * 0x85ebca6bu);
+
+        for (size_t i = 0; i < count; ++i) {
+            const auto& cell = topologyCells[i];
+            const auto& state = cells[i];
+            std::mt19937 gen(baseSeed ^ (static_cast<uint32_t>(i + 1) * 0x27d4eb2du));
+
+            if (!shouldPlaceTree(state.biome, gen)) {
+                continue;
+            }
+            if (state.height >= 2) {
+                continue;
+            }
+
+            bool hasWaterNeighbor = false;
+            for (int neighborId : cell.neighbors) {
+                if (neighborId >= 0 && static_cast<size_t>(neighborId) < count
+                    && cells[static_cast<size_t>(neighborId)].biome == Biome::Sea) {
+                    hasWaterNeighbor = true;
+                    break;
+                }
+            }
+            if (hasWaterNeighbor) {
+                continue;
+            }
+
+            std::uniform_real_distribution<float> baryDist(0.1f, 0.8f);
+            std::uniform_real_distribution<float> scaleDist(0.7f, 1.3f);
+            std::uniform_real_distribution<float> rotationDist(0.0f, 6.28318f);
+
+            TreePlacement placement;
+            placement.cellId = static_cast<int>(i);
+            placement.triangleIdx = cell.poly.empty()
+                ? 0
+                : std::uniform_int_distribution<int>(
+                    0, static_cast<int>(cell.poly.size()) - 1)(gen);
+
+            placement.baryU = baryDist(gen);
+            placement.baryV = baryDist(gen);
+            if (placement.baryU + placement.baryV > 1.0f) {
+                placement.baryU = 1.0f - placement.baryU;
+                placement.baryV = 1.0f - placement.baryV;
+            }
+            placement.baryW = 1.0f - placement.baryU - placement.baryV;
+            placement.rotation = rotationDist(gen);
+
+            float s = scaleDist(gen);
+            if (state.biome == Biome::Jungle && state.humidity > 0.7f) {
+                s *= 1.15f;
+            }
+            else if (state.biome == Biome::Savanna && state.humidity < 0.3f) {
+                s *= 0.85f;
+            }
+            placement.scale = s;
+
+            placements.push_back(placement);
+        }
+
+        return placements;
+    }
+
+    std::vector<ModelPlacement> buildModelPlacements(const HexSphereModel& model,
+        const std::vector<ModelPlacementRequest>& requests, const VisualParams& visual) {
         const auto& cells = model.cells();
 
         std::vector<ModelPlacement> result;
@@ -186,6 +273,36 @@ namespace {
             }
 
             result.push_back(placement);
+        }
+        return result;
+    }
+
+    std::vector<ModelPlacement> buildModelPlacementsFromSnapshot(
+        const TerrainSnapshot& snapshot,
+        const std::vector<ModelPlacementRequest>& requests,
+        const VisualParams& visual) {
+        std::vector<ModelPlacement> result;
+        result.reserve(requests.size());
+        if (!snapshot.topology) return result;
+        for (const auto& request : requests) {
+            ModelPlacement placement;
+            placement.entityId = request.entityId;
+            placement.meshId = request.meshId;
+            placement.cellId = request.cellId;
+            placement.selected = request.selected;
+            if (request.cellId >= 0
+                && static_cast<size_t>(request.cellId) < snapshot.topology->cells.size()
+                && static_cast<size_t>(request.cellId) < snapshot.cells.size()) {
+                const auto& cell = snapshot.topology->cells[static_cast<size_t>(request.cellId)];
+                const float radius = 1.0f
+                    + static_cast<float>(snapshot.cells[static_cast<size_t>(request.cellId)].height)
+                        * visual.heightStep
+                    + request.surfaceOffset;
+                placement.position = cell.centroid.normalized() * radius;
+                placement.up = placement.position.normalized();
+                placement.valid = true;
+            }
+            result.push_back(std::move(placement));
         }
         return result;
     }
@@ -296,6 +413,8 @@ struct DagSceneBackend::Impl {
     std::string lastSelectionKey;
     std::string lastTreeKey;
     std::string lastModelKey;
+    std::string activeTerrainToken;
+    std::shared_ptr<const HexSphereModel> activeModel;
     DagDebugStats lastStats;
 
     Impl()
@@ -381,8 +500,14 @@ struct DagSceneBackend::Impl {
                     const std::string key = terrainToken + "|" + selectedToken + "|" + visualToken;
 
                     const auto [value, cacheHit] = selectionCache.get(key, [&] {
-                        return buildSelectionOutline(*terrainPayloads.resolve(terrainToken),
-                            *selectionInputs.resolve(selectedToken), *visualInputs.resolve(visualToken));
+                        const auto snapshot = terrainPayloads.resolve(terrainToken);
+                        const auto selected = selectionInputs.resolve(selectedToken);
+                        const auto visual = visualInputs.resolve(visualToken);
+                        if (snapshot && snapshot->topology) {
+                            return buildSelectionOutlineFromSnapshot(*snapshot, *selected, *visual);
+                        }
+                        if (!activeModel) return std::vector<float>{};
+                        return buildSelectionOutline(*activeModel, *selected, *visual);
                     });
                     const std::string encoded = selectionOutputs.put(value);
 
@@ -408,7 +533,12 @@ struct DagSceneBackend::Impl {
                     const std::string key = terrainToken;
 
                     const auto [value, cacheHit] = treeCache.get(key, [&] {
-                        return buildTreePlacements(*terrainPayloads.resolve(terrainToken));
+                        const auto snapshot = terrainPayloads.resolve(terrainToken);
+                        if (snapshot && snapshot->topology) {
+                            return buildTreePlacementsFromSnapshot(*snapshot);
+                        }
+                        if (!snapshot || !activeModel) return std::vector<TreePlacement>{};
+                        return buildTreePlacements(*snapshot, *activeModel);
                     });
                     const std::string encoded = treeOutputs.put(value);
 
@@ -438,8 +568,14 @@ struct DagSceneBackend::Impl {
                     const std::string key = terrainToken + "|" + visualToken + "|" + requestsToken;
 
                     const auto [value, cacheHit] = modelCache.get(key, [&] {
-                        return buildModelPlacements(*terrainPayloads.resolve(terrainToken),
-                            *modelInputs.resolve(requestsToken), *visualInputs.resolve(visualToken));
+                        const auto snapshot = terrainPayloads.resolve(terrainToken);
+                        const auto requests = modelInputs.resolve(requestsToken);
+                        const auto visual = visualInputs.resolve(visualToken);
+                        if (snapshot && snapshot->topology) {
+                            return buildModelPlacementsFromSnapshot(*snapshot, *requests, *visual);
+                        }
+                        if (!activeModel) return std::vector<ModelPlacement>{};
+                        return buildModelPlacements(*activeModel, *requests, *visual);
                     });
                     const std::string encoded = modelOutputs.put(value);
 
@@ -457,6 +593,16 @@ struct DagSceneBackend::Impl {
         const std::size_t planCacheHitsBefore = engine.plan_cache_hits();
         const std::size_t planCacheMissesBefore = engine.plan_cache_misses();
         const std::string terrainToken = terrainPayloads.intern(request.terrain, sameTerrainSnapshot);
+        if (terrainToken != activeTerrainToken) {
+            activeTerrainToken = terrainToken;
+            activeModel.reset();
+            // Snapshots with shared topology drive every node directly; only
+            // restored/legacy snapshots need the materialized model fallback.
+            if (!request.terrain.topology) {
+                activeModel = std::make_shared<const HexSphereModel>(
+                    buildModelFromSnapshot(request.terrain));
+            }
+        }
         const std::string selectedToken = selectionInputs.intern(request.selectedCells,
             [](const auto& a, const auto& b) { return a == b; });
         const std::string visualToken = visualInputs.intern(

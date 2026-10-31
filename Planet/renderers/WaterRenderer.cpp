@@ -40,7 +40,7 @@ void WaterRenderer::render(
     const HexSphereRenderer::RenderContext& ctx,
     const Resources& resources) const {
     if (resources.vao == 0 || program_ == 0 || !gl_) return;
-    if (ctx.graph.scene.isContributorMode() || ctx.graph.scene.model().cells().empty()) return;
+    if (ctx.graph.scene.isContributorMode() || ctx.graph.scene.model().cellCount() == 0) return;
 
     const HexSphereModel& model = ctx.graph.scene.model();
     const WaterParams& water = ctx.graph.scene.resolvedWaterParamsValue();
