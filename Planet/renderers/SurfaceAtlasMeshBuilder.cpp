@@ -210,9 +210,18 @@ int ShoreDistanceIndex::buildNode(std::uint32_t begin, std::uint32_t count) {
 
     float radius = 0.0f;
     for (std::uint32_t i = begin; i < begin + count; ++i) {
-        radius = std::max(
-            radius,
-            clampedAcos(QVector3D::dotProduct(center, arcs_[i].midpoint)) + arcs_[i].halfLength);
+        // The previous midpoint + halfLength bound was safe but very loose:
+        // for short shore arcs it expanded every node by almost the whole arc
+        // length. Endpoints provide a much tighter cap; retain a conservative
+        // midpoint check for long arcs and a tiny numeric cushion.
+        const float endpointBound = std::max(
+            clampedAcos(QVector3D::dotProduct(center, arcs_[i].a)),
+            clampedAcos(QVector3D::dotProduct(center, arcs_[i].b)));
+        const float bound = arcs_[i].halfLength <= 0.25f
+            ? endpointBound + 1.0e-3f
+            : clampedAcos(QVector3D::dotProduct(center, arcs_[i].midpoint))
+                + arcs_[i].halfLength;
+        radius = std::max(radius, std::min(kPi, bound));
     }
 
     Node& node = nodes_[static_cast<std::size_t>(nodeIndex)];
