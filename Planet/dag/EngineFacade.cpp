@@ -64,6 +64,10 @@ TerrainRegenerationResult EngineFacade::regenerateTerrain() {
     return result;
 }
 
+void EngineFacade::setGeometry(SphereGeometry geometry) {
+    impl_->terrainBackend.setGeometry(geometry);
+}
+
 const TerrainSnapshot* EngineFacade::currentTerrainSnapshot() const {
     return impl_->terrainBackend.currentTerrainSnapshot();
 }

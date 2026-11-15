@@ -1,11 +1,14 @@
 #include "renderers/TerrainTessellator.h"
 
 #include <QFuture>
+#include <QElapsedTimer>
+#include <QDebug>
 #include <QThreadPool>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <cmath>
 #include <numeric>
+#include <stdexcept>
 
 namespace {
 } // namespace
@@ -308,6 +311,16 @@ TerrainTessellator::EdgeHeights TerrainTessellator::makeHeights(
     return eh;
 }
 
+void TerrainTessellator::MeshBuilder::setDirectRange(size_t begin, size_t end) {
+    direct = true;
+    triangleCursor = begin;
+    triangleLimit = end;
+    directPos = pos.data(); directCol = col.data(); directNorm = norm.data();
+    directOre = ore.data(); directIdx = idx.data();
+    directOwner = owner ? owner->data() : nullptr;
+    directRole = surfaceRole ? surfaceRole->data() : nullptr;
+}
+
 void TerrainTessellator::MeshBuilder::triToward(
     QVector3D A,
     QVector3D B,
@@ -327,14 +340,12 @@ void TerrainTessellator::MeshBuilder::triToward(
         n = -n;
     }
 
-    const uint32_t base = vertexBase + static_cast<uint32_t>(pos.size() / 3);
-    pos.insert(pos.end(), { A.x(), A.y(), A.z(), B.x(), B.y(), B.z(), C.x(), C.y(), C.z() });
-    col.insert(col.end(), { color.x(), color.y(), color.z(), color.x(), color.y(), color.z(), color.x(), color.y(), color.z() });
+    const uint32_t base = direct ? static_cast<uint32_t>(triangleCursor * 3u)
+        : vertexBase + static_cast<uint32_t>(pos.size() / 3);
     // Keep face winding above; only the lighting normals change on level surfaces.
     const QVector3D nA = normalMode == NormalMode::Radial ? A.normalized() : n;
     const QVector3D nB = normalMode == NormalMode::Radial ? B.normalized() : n;
     const QVector3D nC = normalMode == NormalMode::Radial ? C.normalized() : n;
-    norm.insert(norm.end(), { nA.x(), nA.y(), nA.z(), nB.x(), nB.y(), nB.z(), nC.x(), nC.y(), nC.z() });
 
     float oreDensity = 0.0f;
     float oreType = 0.0f;
@@ -345,6 +356,27 @@ void TerrainTessellator::MeshBuilder::triToward(
             oreType = static_cast<float>(cell.oreType);
         }
     }
+    if (direct) {
+        if (triangleCursor >= triangleLimit) throw std::logic_error("Terrain writer exceeded its assigned range");
+        const float positions[]{A.x(), A.y(), A.z(), B.x(), B.y(), B.z(), C.x(), C.y(), C.z()};
+        const float colors[]{color.x(), color.y(), color.z(), color.x(), color.y(), color.z(), color.x(), color.y(), color.z()};
+        const float normals[]{nA.x(), nA.y(), nA.z(), nB.x(), nB.y(), nB.z(), nC.x(), nC.y(), nC.z()};
+        const float ores[]{oreDensity, oreType, oreDensity, oreType, oreDensity, oreType};
+        std::copy_n(positions, 9, directPos + triangleCursor * 9u);
+        std::copy_n(colors, 9, directCol + triangleCursor * 9u);
+        std::copy_n(normals, 9, directNorm + triangleCursor * 9u);
+        std::copy_n(ores, 6, directOre + triangleCursor * 6u);
+        directIdx[triangleCursor * 3u] = base;
+        directIdx[triangleCursor * 3u + 1] = base + 1;
+        directIdx[triangleCursor * 3u + 2] = base + 2;
+        if (directOwner) directOwner[triangleCursor] = cellOwner;
+        if (directRole) directRole[triangleCursor] = role;
+        ++triangleCursor;
+        return;
+    }
+    pos.insert(pos.end(), { A.x(), A.y(), A.z(), B.x(), B.y(), B.z(), C.x(), C.y(), C.z() });
+    col.insert(col.end(), { color.x(), color.y(), color.z(), color.x(), color.y(), color.z(), color.x(), color.y(), color.z() });
+    norm.insert(norm.end(), { nA.x(), nA.y(), nA.z(), nB.x(), nB.y(), nB.z(), nC.x(), nC.y(), nC.z() });
     ore.insert(ore.end(), {
         oreDensity, oreType,
         oreDensity, oreType,
@@ -578,6 +610,8 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
     const auto& cells = model.cells();
     const auto& dual = model.dualVerts();
     const std::size_t cellCount = cells.size();
+    QElapsedTimer phaseTimer;
+    phaseTimer.start();
 
     // Count main geometry and non-flat edges first: exact reserves, chunk
     // vertex offsets and the final index space must be known before workers
@@ -625,6 +659,19 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
         }
     }
     const std::size_t totalTriangles = mainTriangles + cliffTriangleBound;
+    const double countMs = phaseTimer.nsecsElapsed() / 1000000.0;
+    phaseTimer.restart();
+    auto resizeMesh = [](TerrainMesh& mesh, size_t triangles) {
+        mesh.pos.resize(triangles * 9u); mesh.col.resize(triangles * 9u);
+        mesh.norm.resize(triangles * 9u); mesh.ore.resize(triangles * 6u);
+        mesh.idx.resize(triangles * 3u); mesh.triOwner.resize(triangles);
+        mesh.triSurfaceRole.resize(triangles);
+    };
+    if (directWrite) resizeMesh(M, totalTriangles);
+    const double allocateMs = phaseTimer.nsecsElapsed() / 1000000.0;
+    phaseTimer.restart();
+    double buildMs = 0.0;
+    double mergeMs = 0.0;
 
     int workerCount = 1;
     if (parallel && cellCount >= kParallelCellThreshold) {
@@ -645,20 +692,24 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
         for (size_t cid = begin; cid < end; ++cid) {
             chunkTriangles += cellTriangles[cid];
         }
-        chunk.mesh.pos.reserve(chunkTriangles * 9u);
-        chunk.mesh.col.reserve(chunkTriangles * 9u);
-        chunk.mesh.norm.reserve(chunkTriangles * 9u);
-        chunk.mesh.ore.reserve(chunkTriangles * 6u);
-        chunk.mesh.idx.reserve(chunkTriangles * 3u);
-        chunk.mesh.triOwner.reserve(chunkTriangles);
-        chunk.mesh.triSurfaceRole.reserve(chunkTriangles);
+        if (!directWrite) {
+            chunk.mesh.pos.reserve(chunkTriangles * 9u);
+            chunk.mesh.col.reserve(chunkTriangles * 9u);
+            chunk.mesh.norm.reserve(chunkTriangles * 9u);
+            chunk.mesh.ore.reserve(chunkTriangles * 6u);
+            chunk.mesh.idx.reserve(chunkTriangles * 3u);
+            chunk.mesh.triOwner.reserve(chunkTriangles);
+            chunk.mesh.triSurfaceRole.reserve(chunkTriangles);
+        }
 
-        MeshBuilder mb{ chunk.mesh.pos, chunk.mesh.col, chunk.mesh.norm, chunk.mesh.ore, chunk.mesh.idx };
-        mb.owner = &chunk.mesh.triOwner;
-        mb.surfaceRole = &chunk.mesh.triSurfaceRole;
+        TerrainMesh& target = directWrite ? M : chunk.mesh;
+        MeshBuilder mb{ target.pos, target.col, target.norm, target.ore, target.idx };
+        mb.owner = &target.triOwner;
+        mb.surfaceRole = &target.triSurfaceRole;
         mb.beachTriCount = &chunk.mesh.beachTriCount;
         mb.cells = &cells;
         mb.vertexBase = vertexBase;
+        if (directWrite) mb.setDirectRange(vertexBase / 3u, vertexBase / 3u + chunkTriangles);
 
         for (size_t cid = begin; cid < end; ++cid) {
             const Cell& c = cells[cid];
@@ -700,6 +751,8 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
                 }
             }
         }
+        if (directWrite && mb.triangleCursor != mb.triangleLimit)
+            throw std::logic_error("Terrain writer did not fill its assigned range");
         return chunk;
     };
 
@@ -726,7 +779,10 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
 
     if (workerCount == 1) {
         chunks[0] = buildRange(0, cellCount, 0u);
-        M = std::move(chunks[0].mesh);
+        buildMs = phaseTimer.nsecsElapsed() / 1000000.0;
+        phaseTimer.restart();
+        if (!directWrite) M = std::move(chunks[0].mesh);
+        else M.beachTriCount = chunks[0].mesh.beachTriCount;
         for (EdgeInsertion& insertion : chunks[0].edges) {
             insertEdgeSide(reg, std::move(insertion));
         }
@@ -747,23 +803,29 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
         for (QFuture<void>& future : futures) {
             future.waitForFinished();
         }
+        buildMs = phaseTimer.nsecsElapsed() / 1000000.0;
+        phaseTimer.restart();
 
-        M.pos.reserve(totalTriangles * 9u);
-        M.col.reserve(totalTriangles * 9u);
-        M.norm.reserve(totalTriangles * 9u);
-        M.ore.reserve(totalTriangles * 6u);
-        M.idx.reserve(totalTriangles * 3u);
-        M.triOwner.reserve(totalTriangles);
-        M.triSurfaceRole.reserve(totalTriangles);
+        if (!directWrite) {
+            M.pos.reserve(totalTriangles * 9u);
+            M.col.reserve(totalTriangles * 9u);
+            M.norm.reserve(totalTriangles * 9u);
+            M.ore.reserve(totalTriangles * 6u);
+            M.idx.reserve(totalTriangles * 3u);
+            M.triOwner.reserve(totalTriangles);
+            M.triSurfaceRole.reserve(totalTriangles);
+        }
         for (CellChunk& chunk : chunks) {
-            M.pos.insert(M.pos.end(), chunk.mesh.pos.begin(), chunk.mesh.pos.end());
-            M.col.insert(M.col.end(), chunk.mesh.col.begin(), chunk.mesh.col.end());
-            M.norm.insert(M.norm.end(), chunk.mesh.norm.begin(), chunk.mesh.norm.end());
-            M.ore.insert(M.ore.end(), chunk.mesh.ore.begin(), chunk.mesh.ore.end());
-            M.idx.insert(M.idx.end(), chunk.mesh.idx.begin(), chunk.mesh.idx.end());
-            M.triOwner.insert(M.triOwner.end(), chunk.mesh.triOwner.begin(), chunk.mesh.triOwner.end());
-            M.triSurfaceRole.insert(
-                M.triSurfaceRole.end(), chunk.mesh.triSurfaceRole.begin(), chunk.mesh.triSurfaceRole.end());
+            if (!directWrite) {
+                M.pos.insert(M.pos.end(), chunk.mesh.pos.begin(), chunk.mesh.pos.end());
+                M.col.insert(M.col.end(), chunk.mesh.col.begin(), chunk.mesh.col.end());
+                M.norm.insert(M.norm.end(), chunk.mesh.norm.begin(), chunk.mesh.norm.end());
+                M.ore.insert(M.ore.end(), chunk.mesh.ore.begin(), chunk.mesh.ore.end());
+                M.idx.insert(M.idx.end(), chunk.mesh.idx.begin(), chunk.mesh.idx.end());
+                M.triOwner.insert(M.triOwner.end(), chunk.mesh.triOwner.begin(), chunk.mesh.triOwner.end());
+                M.triSurfaceRole.insert(
+                    M.triSurfaceRole.end(), chunk.mesh.triSurfaceRole.begin(), chunk.mesh.triSurfaceRole.end());
+            }
             M.beachTriCount += chunk.mesh.beachTriCount;
             for (EdgeInsertion& insertion : chunk.edges) {
                 insertEdgeSide(reg, std::move(insertion));
@@ -771,14 +833,20 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
         }
     }
 
+    mergeMs = phaseTimer.nsecsElapsed() / 1000000.0;
+    phaseTimer.restart();
     if (doEdgeCliffs) {
         MeshBuilder cliffBuilder{ M.pos, M.col, M.norm, M.ore, M.idx };
         cliffBuilder.owner = &M.triOwner;
         cliffBuilder.surfaceRole = &M.triSurfaceRole;
         cliffBuilder.beachTriCount = &M.beachTriCount;
         cliffBuilder.cells = &cells;
+        if (directWrite) cliffBuilder.setDirectRange(mainTriangles, totalTriangles);
         finalizeCliffs(reg, cliffBuilder, cells);
+        if (directWrite) resizeMesh(M, cliffBuilder.triangleCursor);
     }
+    const double cliffsMs = phaseTimer.nsecsElapsed() / 1000000.0;
+    phaseTimer.restart();
 
     // Per-cell triangle ranges are needed by river mesh sampling. Building the
     // CSR once here avoids rescanning millions of triangles during upload.
@@ -801,6 +869,13 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
     }
 
     surfaceModel_ = nullptr;
+    qInfo().nospace() << "[Perf][Generation] stage=tessellation_phases cells=" << cellCount
+        << " direct_write=" << directWrite
+        << " workers=" << workerCount << " main_triangles=" << mainTriangles
+        << " nonflat_edges=" << nonFlatEdges << " count_ms=" << countMs
+        << " allocate_ms=" << allocateMs
+        << " build_ms=" << buildMs << " merge_ms=" << mergeMs
+        << " cliffs_ms=" << cliffsMs << " cell_index_ms=" << phaseTimer.nsecsElapsed() / 1000000.0;
     return M;
 }
 

@@ -264,8 +264,9 @@ void testAtlasSourceIsCellCaps() {
             expectedTriangles += cell.poly.size();
         }
     }
-    require(source.idx.size() == expectedTriangles * 3u, "atlas source is not one fan per cell");
-    require(source.triOwner.size() == expectedTriangles, "atlas source lost cell owners");
+    require(source.idx.size() >= expectedTriangles * 3u && source.idx.size() <= expectedTriangles * 6u,
+        "atlas refinement left its one-split-per-fan-triangle budget");
+    require(source.triOwner.size() * 3u == source.idx.size(), "atlas source lost cell owners");
 
     for (std::size_t tri = 0; tri < source.triOwner.size(); ++tri) {
         const int owner = source.triOwner[tri];
@@ -278,6 +279,54 @@ void testAtlasSourceIsCellCaps() {
             const QVector3D position = loadPosition(source.pos, index);
             require(close(position.length(), expectedRadius, 1.0e-5f),
                 "atlas source vertex does not use the cell height");
+        }
+    }
+}
+
+float interpolatedAtlasDistance(const SurfaceAtlasMeshData& atlas, const QVector3D& direction) {
+    const auto ray = direction.normalized();
+    for (size_t i = 0; i < atlas.indices.size(); i += 3) {
+        const auto ia = atlas.indices[i], ib = atlas.indices[i+1], ic = atlas.indices[i+2];
+        const auto a = loadPosition(atlas.positions, ia);
+        const auto e1 = loadPosition(atlas.positions, ib) - a;
+        const auto e2 = loadPosition(atlas.positions, ic) - a;
+        const auto h = QVector3D::crossProduct(ray, e2);
+        const float det = QVector3D::dotProduct(e1, h);
+        if (std::abs(det) < 1e-12f) continue;
+        const float u = QVector3D::dotProduct(-a, h) / det;
+        const auto q = QVector3D::crossProduct(-a, e1);
+        const float v = QVector3D::dotProduct(ray, q) / det;
+        const float t = QVector3D::dotProduct(e2, q) / det;
+        if (t > 0 && u >= -1e-5f && v >= -1e-5f && u+v <= 1.00001f)
+            return (1-u-v)*atlas.shoreDistances[ia] + u*atlas.shoreDistances[ib] + v*atlas.shoreDistances[ic];
+    }
+    throw std::runtime_error("Atlas interpolation query missed all triangles");
+}
+
+void testConnectedSeaCellsHaveNoInternalShore() {
+    for (auto geometry : {SphereGeometry::RecursiveCentroid, SphereGeometry::GlobalVoronoi}) {
+        for (int level : {1, 2, 4}) {
+            for (int firstId : {0, 20}) {
+                HexSphereModel model(buildHexSphereTopology(level, geometry));
+                for (auto& cell : model.cells()) { cell.biome = Biome::Grass; cell.height = 0; }
+                // A pentagon/hexagon or hexagon/hexagon pair forms one lake.
+                // Other neighbors are dry; both ends of the shared edge are shore.
+                auto& first = model.cells()[firstId];
+                const int neighbor = first.neighbors[0];
+                first.biome = model.cells()[neighbor].biome = Biome::Sea;
+                first.height = model.cells()[neighbor].height = -1;
+                const auto a = model.dualVerts()[first.poly[0]];
+                const auto b = model.dualVerts()[first.poly[1]];
+                const auto shore = buildShoreArcs(model);
+                const auto atlas = SurfaceAtlasMeshBuilder::build(buildAtlasSourceMesh(model), model);
+                for (float t : {0.25f, 0.5f, 0.75f}) {
+                    const auto direction = (a*(1-t) + b*t).normalized();
+                    const float exact = bruteForceNearestShoreDistance(direction, shore) * model.waterSurfaceRadius();
+                    require(exact > 0.001f, "Connected lake test point is not inside water");
+                    const float actual = interpolatedAtlasDistance(atlas, direction);
+                    require(actual > exact * 0.75f, "Atlas interpolated a false shore across connected sea cells");
+                }
+            }
         }
     }
 }
@@ -379,6 +428,7 @@ void testCellCapStructuralReduction() {
 } // namespace
 
 void runSurfaceAtlasDistanceUnitTests() {
+    testConnectedSeaCellsHaveNoInternalShore();
     testSingleArcGeometry();
     testEmptyDegenerateAndExtremeInputs();
     testDeterministicRandomOracle();

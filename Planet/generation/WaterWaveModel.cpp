@@ -582,7 +582,7 @@ WaterWaveSpec makeWaterWaveSpec(
     WaterWaveSpec result;
     const float waterRadius = std::max(model.waterSurfaceRadius(), 1e-5f);
     const SphericalPrimaryWaveScale scale = deriveSphericalPrimaryWaveScale(
-        params.shellWaveAmplitude, params.shellWaveFrequency, waterRadius, model.cells().size());
+        params.shellWaveAmplitude, params.shellWaveFrequency, waterRadius, kWaterWaveReferenceCellCount);
     result.relativeHeightPerArea = scale.relativeHeightPerArea;
     result.primaryWavesPerCell = scale.wavesPerCell;
     result.averageCellArea = scale.averageCellArea;

@@ -7,14 +7,14 @@ void TerrainCulling::setFullMesh(const TerrainMesh& mesh) {
     fullMesh_ = mesh;
     totalTriangles_ = mesh.idx.size() / 3;
 
-    // Инициализируем culledMesh с теми же позициями/цветами/нормалями
+    // РРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј culledMesh СЃ С‚РµРјРё Р¶Рµ РїРѕР·РёС†РёСЏРјРё/С†РІРµС‚Р°РјРё/РЅРѕСЂРјР°Р»СЏРјРё
     culledMesh_.pos = mesh.pos;
     culledMesh_.col = mesh.col;
     culledMesh_.norm = mesh.norm;
 
     buildTriangleCenters();
 
-    // Изначально показываем все треугольники
+    // РР·РЅР°С‡Р°Р»СЊРЅРѕ РїРѕРєР°Р·С‹РІР°РµРј РІСЃРµ С‚СЂРµСѓРіРѕР»СЊРЅРёРєРё
     culledMesh_.idx = mesh.idx;
     culledMesh_.triOwner = mesh.triOwner;
     visibleTriangles_ = totalTriangles_;
@@ -60,7 +60,7 @@ void TerrainCulling::filterIndices(const QVector3D& cameraPos,
     std::vector<uint32_t> newIndices;
     std::vector<int> newOwners;
 
-    newIndices.reserve(fullMesh_.idx.size() / 2); // Ожидаем ~50%
+    newIndices.reserve(fullMesh_.idx.size() / 2); // РћР¶РёРґР°РµРј ~50%
     if (!fullMesh_.triOwner.empty()) {
         newOwners.reserve(triangleCenters_.size() / 2);
     }
@@ -73,7 +73,7 @@ void TerrainCulling::filterIndices(const QVector3D& cameraPos,
         QVector3D n = (center - planetCenter).normalized();
 
         if (QVector3D::dotProduct(n, toCam) > eps) {
-            // Треугольник видим - добавляем его индексы
+            // РўСЂРµСѓРіРѕР»СЊРЅРёРє РІРёРґРёРј - РґРѕР±Р°РІР»СЏРµРј РµРіРѕ РёРЅРґРµРєСЃС‹
             size_t idxPos = i * 3;
             newIndices.push_back(fullMesh_.idx[idxPos]);
             newIndices.push_back(fullMesh_.idx[idxPos + 1]);

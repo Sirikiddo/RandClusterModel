@@ -163,6 +163,7 @@ public:
     }
 
     int subdivisions() const { return L_; }
+    SphereGeometry geometry() const { return topology_ ? topology_->geometry : SphereGeometry::RecursiveCentroid; }
     int pentagonCount() const { return pentCount_; }
     int cellCount() const { return static_cast<int>(cells_.size()); }
 

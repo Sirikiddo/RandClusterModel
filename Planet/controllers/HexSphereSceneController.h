@@ -56,6 +56,10 @@ public:
     WaterUpdateKind setWaterParams(const WaterParams& params);
     void setSubdivisionLevel(int level);
     void stageSubdivisionLevel(int level);
+    void stageGeometry(SphereGeometry geometry);
+    SphereGeometry geometry() const { return geometry_; }
+    bool directMeshWrite() const { return directMeshWrite_; }
+    void setDirectMeshWrite(bool enabled) { directMeshWrite_ = enabled; }
     void rebuildTerrainFromInputs();
     void regenerateTreePlacements();
 
@@ -247,6 +251,8 @@ private:
 
     int L_ = kDefaultTerrainSubdivisionLevel;
     bool topologyDirty_ = false;
+    SphereGeometry geometry_ = SphereGeometry::RecursiveCentroid;
+    bool directMeshWrite_ = false;
     float heightStep_ = 0.06f;
     bool smoothOneStep_ = true;
     float outlineBias_ = 0.004f;

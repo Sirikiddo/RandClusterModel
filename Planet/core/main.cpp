@@ -16,6 +16,10 @@
 #include "tests/RiverGeneratorTests.h"
 #include "tests/SurfaceAtlasDistanceTests.h"
 #include "tests/TopologyTests.h"
+#include "tests/IcosahedralGridTests.h"
+#include "tests/SubdivisionSwitchBenchmark.h"
+#include "tests/GeometryComparisonTests.h"
+#include "tests/ParticleMotionTests.h"
 
 extern "C" {
     __declspec(dllexport) DWORD NvOptimusEnablement = 1;
@@ -37,10 +41,15 @@ int main(int argc, char** argv) {
     bool runRiverTests = false;
     bool runTopologyTests = false;
     bool runSurfaceAtlasTests = false;
+    bool runIcosahedralTests = false;
+    bool runGeometryTests = false;
+    bool runParticleTests = false;
     for (int i = 1; i < argc; ++i) {
         if (QString::fromLocal8Bit(argv[i]) == "--benchmark") {
             runBenchmark = true;
         }
+        if (QString::fromLocal8Bit(argv[i]) == "--geometry-comparison-tests") runGeometryTests = true;
+        if (QString::fromLocal8Bit(argv[i]) == "--particle-motion-tests") runParticleTests = true;
         if (QString::fromLocal8Bit(argv[i]) == "--water-tests") {
             runWaterTests = true;
         }
@@ -56,11 +65,14 @@ int main(int argc, char** argv) {
         if (QString::fromLocal8Bit(argv[i]) == "--surface-atlas-tests") {
             runSurfaceAtlasTests = true;
         }
+        if (QString::fromLocal8Bit(argv[i]) == "--icosahedral-grid-tests") {
+            runIcosahedralTests = true;
+        }
     }
     runBenchmark = runBenchmark || QString::fromWCharArray(GetCommandLineW()).contains("--benchmark");
     runBenchmark = runBenchmark || qEnvironmentVariableIsSet("GAME_NEW_BENCHMARK");
 
-    if (runWaterTests || runClimateTests || runRiverTests || runTopologyTests || runSurfaceAtlasTests) {
+    if (runWaterTests || runClimateTests || runRiverTests || runTopologyTests || runSurfaceAtlasTests || runIcosahedralTests || runGeometryTests || runParticleTests) {
         QCoreApplication app(argc, argv);
         try {
             if (runWaterTests) runWaterWaveModelUnitTests();
@@ -68,6 +80,9 @@ int main(int argc, char** argv) {
             if (runRiverTests) runRiverGeneratorUnitTests();
             if (runTopologyTests) runTopologyUnitTests();
             if (runSurfaceAtlasTests) runSurfaceAtlasDistanceUnitTests();
+            if (runIcosahedralTests) runIcosahedralGridUnitTests();
+            if (runGeometryTests) runGeometryComparisonTests();
+            if (runParticleTests) runParticleMotionTests();
             return 0;
         }
         catch (const std::exception& error) {
@@ -92,6 +107,12 @@ int main(int argc, char** argv) {
     }
 
     QApplication app(argc, argv);
+    if (app.arguments().contains("--subdivision-switch-benchmark")) {
+        const int index = app.arguments().indexOf("--subdivision-switch-benchmark");
+        const QString path = index + 1 < app.arguments().size() ? app.arguments().at(index + 1)
+            : QStringLiteral("build/subdivision-switch.log");
+        return runSubdivisionSwitchBenchmark(app, path);
+    }
     if (app.arguments().contains("--water-screen-benchmark")) {
         const int index = app.arguments().indexOf("--water-screen-benchmark");
         const QString prefix = index + 1 < app.arguments().size() ? app.arguments().at(index + 1)

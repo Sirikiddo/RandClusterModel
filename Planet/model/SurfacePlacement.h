@@ -39,7 +39,7 @@ inline QVector3D computeSurfacePoint(const HexSphereSceneController& scene, cons
     }
     direction = direction.normalized();
 
-    // ========== ”¡–¿À» surfaceOffset ==========
+    // ========== –£–ë–†–ê–õ–ò surfaceOffset ==========
     const float surfaceHeight = 1.0f + cell.height * heightStep;
 
     return direction * surfaceHeight;

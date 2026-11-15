@@ -961,7 +961,7 @@ void HexSphereRenderer::renderContributorModel(const RenderContext& ctx) {
         windField_.gustStrength = 0.4f;
         windField_.gustSpeed = 1.8f;
         windField_.turbulence = 0.2f;
-        particleRenderer_->update(0.016f, windField_, contributorModelPosition_);
+        particleRenderer_->update(0.016f, windField_);
         particleRenderer_->render(ctx.mvp, ctx.camera.view, ctx.cameraPos);
     }
 }
@@ -1291,7 +1291,6 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
     windField_.gustSpeed = 1.1f;
     windField_.turbulence = 0.09f;
 
-    particleRenderer_->update(dt, windField_, QVector3D(0, 0, 0));
     particleRenderer_->setTime(treeParticleTime);
 
     const auto& placements = ctx.graph.scene.getTreePlacements();
@@ -1427,6 +1426,7 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
             const size_t idx = static_cast<size_t>(&info - infos.data());
             transform.rotate(
                 placements[idx].rotation * 180.0f / 3.14159265f, 0, 1, 0);
+            const QQuaternion motionRotation = QQuaternion::fromRotationMatrix(transform.normalMatrix());
             transform.scale(finalScale);
 
             const QVector3D foliageColor = variant.foliageColor;
@@ -1452,6 +1452,9 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
                 particle.size *= 3.0f * finalScale;
                 particle.velocity = QVector3D(0, 0, 0);
                 particle.windWeight = 0.6f;
+                particle.motionRestPosition = source.restPosition;
+                particle.motionRotation = motionRotation;
+                particle.motionScale = finalScale;
 
                 worldParticles.push_back(particle);
                 ++emittedForTree;
@@ -1467,6 +1470,7 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
         }
     }
 
+    particleRenderer_->update(dt, windField_);
     particleRenderer_->render(ctx.mvp, ctx.camera.view, ctx.cameraPos);
 
     // ===================================================================

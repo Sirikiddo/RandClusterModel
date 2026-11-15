@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "renderers/WaterRenderer.h"
+#include "renderers/PlanetSurfaceAtlasPass.h"
 #include "generation/MeshGenerators/WaterMeshGenerator.h"
 #include "ui/PlanetSettingsPanel.h"
 
@@ -73,6 +74,69 @@ struct Pixels {
     std::vector<unsigned char> color;
     std::vector<float> depth;
 };
+
+void testConnectedLakeAtlas(QOpenGLFunctions_3_3_Core& gl) {
+    const QByteArray probeVertex = R"(#version 330 core
+void main() {
+    const vec2 p[3] = vec2[3](vec2(-1,-1), vec2(3,-1), vec2(-1,3));
+    gl_Position = vec4(p[gl_VertexID], 0, 1);
+})";
+    const QByteArray probeFragment = R"(#version 330 core
+uniform samplerCube uShore;
+uniform vec3 uDirection;
+out vec4 color;
+void main() { color = vec4(texture(uShore, uDirection).r, 0, 0, 1); }
+)";
+    QOpenGLShaderProgram probe;
+    compile(probe, probeVertex, probeFragment);
+    for (auto geometry : {SphereGeometry::RecursiveCentroid, SphereGeometry::GlobalVoronoi}) {
+        HexSphereSceneController scene;
+        auto snapshot = scene.captureTerrainSnapshot();
+        snapshot.geometry = geometry;
+        snapshot.subdivisionLevel = 2;
+        snapshot.topology = buildHexSphereTopology(2, geometry);
+        snapshot.cells.assign(snapshot.topology->cellCount(), TerrainCellSnapshot{});
+        for (auto& cell : snapshot.cells) { cell.biome = Biome::Grass; cell.height = 0; }
+        const auto& first = snapshot.topology->cells[20];
+        const int neighbor = first.neighbors[0];
+        snapshot.cells[20].biome = snapshot.cells[neighbor].biome = Biome::Sea;
+        snapshot.cells[20].height = snapshot.cells[neighbor].height = -1;
+        scene.applyTerrainSnapshot(snapshot);
+        const auto a = scene.model().dualVerts()[first.poly[0]];
+        const auto b = scene.model().dualVerts()[first.poly[1]];
+        PlanetSurfaceAtlasPass atlas;
+        atlas.initialize(&gl);
+        atlas.updateMesh(scene.model());
+        atlas.renderIfDirty();
+        require(atlas.ready(), "Connected-lake surface atlas did not initialize");
+        GLuint vao = 0;
+        gl.glGenVertexArrays(1, &vao);
+        gl.glBindVertexArray(vao);
+        QOpenGLFramebufferObjectFormat probeFormat;
+        probeFormat.setInternalTextureFormat(GL_RGBA32F);
+        QOpenGLFramebufferObject probeTarget(QSize(1, 1), probeFormat);
+        require(probeTarget.bind(), "Cannot bind shoreline probe framebuffer");
+        gl.glViewport(0, 0, 1, 1);
+        gl.glDisable(GL_DEPTH_TEST); gl.glDisable(GL_CULL_FACE); gl.glDisable(GL_BLEND);
+        probe.bind();
+        probe.setUniformValue("uShore", 0);
+        gl.glActiveTexture(GL_TEXTURE0);
+        gl.glBindTexture(GL_TEXTURE_CUBE_MAP, atlas.shoreDistanceTexture());
+        const auto arcs = buildShoreArcs(scene.model());
+        for (float t : {0.25f, 0.5f, 0.75f}) {
+            const auto direction = (a*(1-t) + b*t).normalized();
+            probe.setUniformValue("uDirection", direction);
+            gl.glDrawArrays(GL_TRIANGLES, 0, 3);
+            float pixel[4]{};
+            gl.glReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, pixel);
+            const float exact = bruteForceNearestShoreDistance(direction, arcs) * scene.model().waterSurfaceRadius();
+            require(pixel[0] > 0.65f * exact, "GPU atlas painted a false shoreline between water cells");
+        }
+        probe.release();
+        gl.glDeleteVertexArrays(1, &vao);
+        atlas.release();
+    }
+}
 }
 
 bool runWaterScreenPassTests() {
@@ -116,6 +180,7 @@ bool runWaterScreenPassTests() {
         require(context.makeCurrent(&surface), "Cannot make OpenGL context current");
         QOpenGLFunctions_3_3_Core gl;
         require(gl.initializeOpenGLFunctions(), "OpenGL 3.3 unavailable");
+        testConnectedLakeAtlas(gl);
         qInfo() << "Water screen pass GPU:" << reinterpret_cast<const char*>(gl.glGetString(GL_RENDERER));
 
         const auto vertex = shaderSource(":/Planet/resources/water/water_shell.vert");

@@ -9,6 +9,7 @@
 
 #include "generation/TerrainGenerator.h"
 #include "generation/WaterWaveModel.h"
+#include "model/HexSphereModel.h"
 
 namespace {
 
@@ -334,9 +335,46 @@ void testSphericalAutocorrelation(const ResolvedWaterWaveSpec& spec) {
         "quasiperiodic spectrum did not halve the legacy six-mode correlation peak");
 }
 
+void testOceanScaleAcrossGrids() {
+    for (WaterPreset preset : {WaterPreset::Temperate, WaterPreset::Lagoon, WaterPreset::Storm}) {
+        const auto params = waterParamsForPreset(preset);
+        ResolvedWaterWaveSpec reference;
+        for (auto geometry : {SphereGeometry::RecursiveCentroid, SphereGeometry::GlobalVoronoi}) {
+            for (int level : {2, 5, 7}) {
+                HexSphereModel model(buildHexSphereTopology(level, geometry));
+                model.setHeightStep(0.02f);
+                for (auto& cell : model.cells()) { cell.biome = Biome::Sea; cell.height = -2; }
+                const auto requested = makeWaterWaveSpec(params, model);
+                const auto resolved = resolveWaterWaveSpec(requested, params, model);
+                if (level == 2 && geometry == SphereGeometry::RecursiveCentroid) reference = resolved;
+                require(std::abs(requested.requestedAmplitude - reference.requested.requestedAmplitude) < 1e-7f
+                    && std::abs(requested.requestedFrequency - reference.requested.requestedFrequency) < 1e-6f,
+                    "Ocean scale changed with terrain subdivision or geometry");
+                require(std::abs(resolved.effectiveGeometryAmplitude - reference.effectiveGeometryAmplitude) < 1e-7f
+                    && std::abs(resolved.effectiveGeometryFrequency - reference.effectiveGeometryFrequency) < 1e-6f,
+                    "Resolved ocean scale changed on equal-depth grids");
+                const auto l2Scale = deriveSphericalPrimaryWaveScale(params.shellWaveAmplitude,
+                    params.shellWaveFrequency, model.waterSurfaceRadius(), 162u);
+                require(std::abs(requested.primaryWaveHeight - l2Scale.fullHeight) < 1e-7f,
+                    "Ocean lost the original L2 height calibration");
+                require(depthCappedWaterAmplitude(resolved, model.waterSurfaceRadius(), 1.0f,
+                    model.waterSurfaceRadius()) == 0.0f, "Fixed ocean scale bypassed shallow-water cap");
+                require(depthCappedWaterAmplitude(resolved, model.waterSurfaceRadius() - 0.04f, 0.0f,
+                    model.waterSurfaceRadius()) == 0.0f, "Fixed ocean scale bypassed shore fade");
+                for (double time : {0.0, 12.0, 31.0}) {
+                    const auto direction = QVector3D(0.4f, 0.7f, -0.2f).normalized();
+                    require(std::abs(sampleWaterWaveField(resolved, direction, time)
+                        - sampleWaterWaveField(reference, direction, time)) < 1e-6f,
+                        "Ocean phase changed with terrain grid");
+                }
+            }
+        }
+    }
+}
 } // namespace
 
 void runWaterWaveModelUnitTests() {
+    testOceanScaleAcrossGrids();
     const WaterParams temperate = waterParamsForPreset(WaterPreset::Temperate);
     const WaterParams storm = waterParamsForPreset(WaterPreset::Storm);
     require(storm.glintIntensity > temperate.glintIntensity, "water presets do not change glint intensity");

@@ -373,6 +373,14 @@ void HexSphereWidget::setSubdivisionLevel(int L) {
     applyResponse(inputController_.setSubdivisionLevel(L));
 }
 
+void HexSphereWidget::setGeometryIndex(int index) {
+    applyResponse(inputController_.setGeometry(static_cast<SphereGeometry>(index)));
+}
+
+void HexSphereWidget::setMeshWriterIndex(int index) {
+    applyResponse(inputController_.setDirectMeshWrite(index == 1));
+}
+
 void HexSphereWidget::resetView() {
     applyResponse(inputController_.resetView());
 }

@@ -9,27 +9,27 @@
 #include "renderers/TerrainTessellator.h" 
 
 struct CulledMesh {
-    std::vector<float> pos;      // оригинальные позиции (не меняются)
-    std::vector<float> col;      // оригинальные цвета (не меняются)
-    std::vector<float> norm;     // оригинальные нормали (не меняются)
-    std::vector<uint32_t> idx;   // отфильтрованные индексы
-    std::vector<int> triOwner;   // отфильтрованные владельцы
+    std::vector<float> pos;      // РѕСЂРёРіРёРЅР°Р»СЊРЅС‹Рµ РїРѕР·РёС†РёРё (РЅРµ РјРµРЅСЏСЋС‚СЃСЏ)
+    std::vector<float> col;      // РѕСЂРёРіРёРЅР°Р»СЊРЅС‹Рµ С†РІРµС‚Р° (РЅРµ РјРµРЅСЏСЋС‚СЃСЏ)
+    std::vector<float> norm;     // РѕСЂРёРіРёРЅР°Р»СЊРЅС‹Рµ РЅРѕСЂРјР°Р»Рё (РЅРµ РјРµРЅСЏСЋС‚СЃСЏ)
+    std::vector<uint32_t> idx;   // РѕС‚С„РёР»СЊС‚СЂРѕРІР°РЅРЅС‹Рµ РёРЅРґРµРєСЃС‹
+    std::vector<int> triOwner;   // РѕС‚С„РёР»СЊС‚СЂРѕРІР°РЅРЅС‹Рµ РІР»Р°РґРµР»СЊС†С‹
 };
 
 class TerrainCulling {
 public:
-    // Загрузить полный меш и подготовить кэш центров треугольников
+    // Р—Р°РіСЂСѓР·РёС‚СЊ РїРѕР»РЅС‹Р№ РјРµС€ Рё РїРѕРґРіРѕС‚РѕРІРёС‚СЊ РєСЌС€ С†РµРЅС‚СЂРѕРІ С‚СЂРµСѓРіРѕР»СЊРЅРёРєРѕРІ
     void setFullMesh(const TerrainMesh& mesh);
 
-    // Получить меш с отсечением для данной позиции камеры
+    // РџРѕР»СѓС‡РёС‚СЊ РјРµС€ СЃ РѕС‚СЃРµС‡РµРЅРёРµРј РґР»СЏ РґР°РЅРЅРѕР№ РїРѕР·РёС†РёРё РєР°РјРµСЂС‹
     const TerrainMesh& getCulledMesh(const QVector3D& cameraPos,
         const QVector3D& planetCenter,
         float eps = 0.0f);
 
-    // Очистить кэш
+    // РћС‡РёСЃС‚РёС‚СЊ РєСЌС€
     void clearCache();
 
-    // Статистика
+    // РЎС‚Р°С‚РёСЃС‚РёРєР°
     size_t getVisibleTriangleCount() const { return visibleTriangles_; }
     size_t getTotalTriangleCount() const { return totalTriangles_; }
 
@@ -37,16 +37,16 @@ private:
     void buildTriangleCenters();
     void filterIndices(const QVector3D& cameraPos, const QVector3D& planetCenter, float eps);
 
-    TerrainMesh fullMesh_;              // Оригинальный меш
-    TerrainMesh culledMesh_;             // Меш с отфильтрованными индексами
+    TerrainMesh fullMesh_;              // РћСЂРёРіРёРЅР°Р»СЊРЅС‹Р№ РјРµС€
+    TerrainMesh culledMesh_;             // РњРµС€ СЃ РѕС‚С„РёР»СЊС‚СЂРѕРІР°РЅРЅС‹РјРё РёРЅРґРµРєСЃР°РјРё
 
-    std::vector<QVector3D> triangleCenters_; // Кэш центров треугольников
-    std::vector<int> triangleCellOwners_;     // Владельцы треугольников
+    std::vector<QVector3D> triangleCenters_; // РљСЌС€ С†РµРЅС‚СЂРѕРІ С‚СЂРµСѓРіРѕР»СЊРЅРёРєРѕРІ
+    std::vector<int> triangleCellOwners_;     // Р’Р»Р°РґРµР»СЊС†С‹ С‚СЂРµСѓРіРѕР»СЊРЅРёРєРѕРІ
 
     size_t totalTriangles_ = 0;
     size_t visibleTriangles_ = 0;
 
-    // Кэш для быстрого доступа к позициям вершин
+    // РљСЌС€ РґР»СЏ Р±С‹СЃС‚СЂРѕРіРѕ РґРѕСЃС‚СѓРїР° Рє РїРѕР·РёС†РёСЏРј РІРµСЂС€РёРЅ
     struct VertexRef {
         const std::vector<float>& pos;
         QVector3D operator()(uint32_t idx) const {

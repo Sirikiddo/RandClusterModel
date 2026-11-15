@@ -13,6 +13,8 @@ enum class WaterPreset : int;
 inline constexpr int kWaterWaveComponentCount = 12;
 inline constexpr int kWaterWaveBandCount = 3;
 inline constexpr int kWaterWaveDriverCount = 4;
+// Ocean parameters retain their L2 calibration when the terrain grid changes.
+inline constexpr std::size_t kWaterWaveReferenceCellCount = 162;
 inline constexpr float kWaterWaveMean = 0.4657596074f;
 inline constexpr float kWaterWaveBeta = 0.6184937133f;
 
@@ -118,6 +120,7 @@ struct WaterWaveSpec {
     float requestedAmplitude = 0.0f;
     float requestedFrequency = 0.0f;
     float relativeHeightPerArea = 0.0f;
+    // These two values refer to the fixed ocean reference cells, not terrain LOD.
     float primaryWavesPerCell = 0.0f;
     float averageCellArea = 0.0f;
     float primaryWaveArea = 0.0f;

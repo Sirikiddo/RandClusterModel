@@ -56,6 +56,7 @@ std::vector<ContributorParticle> generateParticleBlob(
         );
 
         p.restPosition = blob.center + localPos;
+        p.motionRestPosition = p.restPosition;
         p.position = p.restPosition;
         p.velocity = QVector3D(0, 0, 0);
 
@@ -104,6 +105,30 @@ std::vector<ContributorParticle> generateParticleBlob(
     }
 
     return particles;
+}
+
+void advanceContributorParticle(ContributorParticle& p,
+    const ContributorWindField& wind, float time, float deltaTime) {
+    deltaTime = std::clamp(deltaTime, 0.0f, 0.1f);
+    if (deltaTime == 0.0f) return;
+    const auto& local = p.motionRestPosition;
+    const float seed = p.phase + local.y() * 1.7f + local.x() * 2.3f + local.z() * 3.1f;
+    const float heightFactor = std::clamp(local.y() / 5.0f, 0.3f, 1.2f);
+    const float gust = std::sin(time * (wind.gustSpeed * 0.6f + seed * 0.3f) + seed)
+        * wind.gustStrength * 1.2f;
+    const float turbulenceX = std::sin(time * (2.3f + seed * 0.5f) + local.y() * 1.5f)
+        * wind.turbulence * 1.1f;
+    const float turbulenceZ = std::cos(time * (1.7f + seed * 0.7f) + local.x() * 1.2f)
+        * wind.turbulence * 1.1f;
+    QVector3D localForce = wind.direction * (wind.strength + gust) * heightFactor;
+    localForce += QVector3D(turbulenceX, 0.0f, turbulenceZ);
+    const QVector3D windForce = p.motionRotation.rotatedVector(localForce)
+        * (p.windWeight * p.motionScale);
+    const QVector3D acceleration = windForce + (p.restPosition - p.position) * 11.0f
+        - p.velocity * 4.5f;
+    p.velocity += acceleration * deltaTime;
+    p.position += p.velocity * deltaTime;
+    p.velocity *= std::pow(0.99f, deltaTime * 60.0f);
 }
 
 void debugPrintParticleCount(const std::vector<ContributorParticle>& particles) {

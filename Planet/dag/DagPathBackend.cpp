@@ -34,7 +34,8 @@ namespace {
     // ============================================================
 
     HexSphereModel buildModelFromSnapshot(const TerrainSnapshot& snapshot) {
-        if (!snapshot.topology || snapshot.topology->subdivisionLevel != snapshot.subdivisionLevel) {
+        if (!snapshot.topology || snapshot.topology->subdivisionLevel != snapshot.subdivisionLevel
+            || snapshot.topology->geometry != snapshot.geometry) {
             throw std::runtime_error("TerrainSnapshot is missing a matching immutable topology");
         }
         HexSphereModel model(snapshot.topology);
@@ -305,8 +306,13 @@ struct DagPathBackend::Impl {
     }
 
     void pushTerrainSnapshot(const TerrainSnapshot& snapshot) {
+        if (snapshot.topology && (snapshot.topology->geometry != snapshot.geometry
+            || snapshot.topology->subdivisionLevel != snapshot.subdivisionLevel
+            || snapshot.topology->cells.size() != snapshot.cells.size()))
+            throw std::invalid_argument("Path snapshot topology does not match its grid/state");
         const std::string token = payloads->terrain.intern(snapshot, sameTerrainSnapshot);
         if (token != payloads->activeTerrainToken) {
+            lastResult = {};
             payloads->activeTerrainToken = token;
             payloads->model.reset();
             payloads->state.reset();

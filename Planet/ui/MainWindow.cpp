@@ -13,10 +13,16 @@
 #include <QMenuBar>
 #include <QKeySequence>
 #include <QSpinBox>
+#include <QComboBox>
 #include <QStatusBar>
 #include <QToolBar>
 
 MainWindow::MainWindow(const AppViewConfig& viewConfig, QWidget* parent) : QMainWindow(parent) {
+#ifdef NDEBUG
+    setWindowTitle("Planet — Release");
+#else
+    setWindowTitle("Planet — Debug");
+#endif
     cameraController_ = std::make_unique<CameraController>();
     inputController_ = std::make_unique<InputController>(*cameraController_, viewConfig.sceneViewMode);
 
@@ -25,10 +31,25 @@ MainWindow::MainWindow(const AppViewConfig& viewConfig, QWidget* parent) : QMain
 
     auto* tb = addToolBar("Controls");
     levelSpin_ = new QSpinBox(tb);
+    levelSpin_->setObjectName("subdivisionLevel");
     levelSpin_->setRange(0, 7);
     levelSpin_->setValue(kDefaultTerrainSubdivisionLevel);
     tb->addWidget(new QLabel(" Subdivision L: "));
     tb->addWidget(levelSpin_);
+    auto* geometry = new QComboBox(tb);
+    geometry->setObjectName("sphereGeometry");
+    geometry->addItems({"Geometry: original", "Geometry: global Voronoi"});
+    geometry->setToolTip("Experimental comparison. Changing the grid regenerates terrain and reassigns objects by position.");
+    tb->addWidget(geometry);
+    auto* writer = new QComboBox(tb);
+    writer->setObjectName("terrainMeshWriter");
+    writer->addItems({"Buffers: original", "Buffers: direct write"});
+    writer->setToolTip("Choose how the same terrain mesh is written to CPU buffers.");
+    tb->addWidget(writer);
+    geometry->setEnabled(!viewConfig.isContributorMode());
+    writer->setEnabled(!viewConfig.isContributorMode());
+    connect(geometry, &QComboBox::currentIndexChanged, glw_, &HexSphereWidget::setGeometryIndex);
+    connect(writer, &QComboBox::currentIndexChanged, glw_, &HexSphereWidget::setMeshWriterIndex);
 
     auto* resetAct = tb->addAction("Reset View");
     auto* clearSelAct = tb->addAction("Clear Selection");

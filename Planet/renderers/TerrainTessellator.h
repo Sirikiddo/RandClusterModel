@@ -50,6 +50,7 @@ public:
     // Cells are independent for caps/blades/corners; only the cliff pass is
     // serial. Disable in tests to compare the serial reference output.
     bool parallel = true;
+    bool directWrite = false;
     const CoastalBandData* coastalBand = nullptr;
     const WaterParams* waterParams = nullptr;
 
@@ -143,6 +144,13 @@ public:
         const std::vector<Cell>* cells = nullptr;
         // Global vertex offset for workers writing into one final index space.
         std::uint32_t vertexBase = 0;
+        bool direct = false;
+        size_t triangleCursor = 0, triangleLimit = 0;
+        float *directPos = nullptr, *directCol = nullptr, *directNorm = nullptr, *directOre = nullptr;
+        uint32_t* directIdx = nullptr;
+        int* directOwner = nullptr;
+        TriangleSurfaceRole* directRole = nullptr;
+        void setDirectRange(size_t begin, size_t end);
 
         void triToward(
             QVector3D A,

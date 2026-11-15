@@ -1,4 +1,5 @@
 #include "controllers/InputController.h"
+#include "model/IcosahedralGrid.h"
 
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -684,6 +685,45 @@ InputController::Response InputController::setSubdivisionLevel(int L) {
     return response;
 }
 
+InputController::Response InputController::setGeometry(SphereGeometry geometry) {
+    Response response;
+    if (isContributorMode() || geometry == scene_.geometry()) return response;
+    if (!validSphereGeometry(static_cast<int>(geometry))) return response;
+    if (engine_) {
+        engine_->setGeometry(geometry);
+        const auto result = engine_->regenerateTerrain();
+        if (!result) { response.hudMessage = QString::fromStdString(result.message); return response; }
+    } else {
+        // The normal application uses the DAG branch above.
+        stageGeometry(geometry);
+        scene_.clearSelection();
+        scene_.rebuildTerrainFromInputs();
+        refreshAllEntitiesPosition();
+    }
+    refreshBuildPreview();
+    uploadBuffers();
+    clearPath(response);
+    response.hudMessage = geometry == SphereGeometry::GlobalVoronoi
+        ? "Global Voronoi grid; selection cleared" : "Original grid; selection cleared";
+    response.requestUpdate = true;
+    return response;
+}
+
+InputController::Response InputController::setDirectMeshWrite(bool enabled) {
+    Response response;
+    if (isContributorMode() || enabled == scene_.directMeshWrite()) return response;
+    scene_.setDirectMeshWrite(enabled);
+    scene_.rebuildTerrainPresentation();
+    uploadBuffers();
+    refreshRoadIfExists();
+    response.requestUpdate = true;
+    return response;
+}
+
+void InputController::stageGeometry(SphereGeometry geometry) {
+    scene_.stageGeometry(geometry);
+}
+
 
 
 
@@ -1029,6 +1069,27 @@ void InputController::projectTerrainSnapshot(const TerrainSnapshot& snapshot) {
     if (isContributorMode()) {
         return;
     }
+    const bool gridChanged = scene_.model().geometry() != snapshot.geometry
+        || scene_.model().subdivisions() != snapshot.subdivisionLevel;
+    if (gridChanged) {
+        // A numerically equal cell ID in another grid is not the same location.
+        ecs_.each<ecs::Transform>([&](const ecs::Entity& entity, const ecs::Transform&) {
+            if (auto* mutableEntity = ecs_.getEntity(entity.id)) mutableEntity->currentCell = -1;
+        });
+        ecs_.each<ecs::Animation>([](const ecs::Entity&, ecs::Animation& animation) {
+            animation.type = ecs::Animation::Type::None;
+            animation.duration = 0.0f;
+            animation.elapsed = 1.0f;
+            animation.startCell = animation.targetCell = -1;
+            animation.pathPoints.clear();
+            animation.pathCumulative.clear();
+            animation.pathTotalLength = 0.0f;
+            animation.onComplete = {};
+            animation.completedFired = true;
+        });
+        Response response;
+        clearPath(response);
+    }
     scene_.applyTerrainSnapshot(snapshot);
 
     // ===== ÐÐžÐ’ÐžÐ•: Ð¾Ð±Ð½Ð¾Ð²Ð»ÑÐµÐ¼ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¸ Ð²ÑÐµÑ… ÑÑƒÑ‰Ð½Ð¾ÑÑ‚ÐµÐ¹ =====
@@ -1090,6 +1151,11 @@ void InputController::updateBufferUsageStrategy(int subdivisionLevel) {
 std::optional<int> InputController::pickCellAt(int sx, int sy) const {
     const QVector3D ro = camera_.rayOrigin();
     const QVector3D rd = camera_.rayDirectionFromScreen(sx, sy, owner_->width(), owner_->height(), owner_->devicePixelRatioF());
+    if (scene_.geometry() == SphereGeometry::GlobalVoronoi) {
+        const IcosahedralGrid grid(1 << scene_.subdivisionLevel());
+        const auto address = grid.locateRay({ro.x(), ro.y(), ro.z()}, {rd.x(), rd.y(), rd.z()}, scene_.model().baseRadius());
+        return address ? std::optional<int>(static_cast<int>(grid.id(*address))) : std::nullopt;
+    }
     const auto& tris = scene_.model().pickTris();
     float bestT = std::numeric_limits<float>::infinity();
     int bestId = -1;

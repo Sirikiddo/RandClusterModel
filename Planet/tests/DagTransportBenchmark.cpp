@@ -19,6 +19,7 @@ public:
     void stageTerrainParams(const TerrainParams&) override {}
     void stageGeneratorByIndex(int) override {}
     void stageSubdivisionLevel(int) override {}
+    void stageGeometry(SphereGeometry geometry) override { snapshot.geometry = geometry; }
     void rebuildTerrainFromInputs() override {}
     TerrainSnapshot captureTerrainSnapshot() const override { return snapshot; }
     void projectTerrainSnapshot(const TerrainSnapshot& value) override { snapshot = value; }

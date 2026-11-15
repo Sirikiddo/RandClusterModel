@@ -237,10 +237,36 @@ TerrainMesh buildAtlasSourceMesh(const HexSphereModel& model) {
     const auto& cells = model.cells();
     const auto& dual = model.dualVerts();
 
+    // A sea/sea edge may have two shoreline endpoints (a narrow connection
+    // between lakes). Interpolating their zero distances erases waves across
+    // the whole connection. Sample its interior without refining every cell.
+    std::vector<std::uint8_t> shoreVertex(dual.size(), 0);
+    for (const Cell& cell : cells) {
+        if (cell.biome != Biome::Sea) continue;
+        for (size_t edge = 0; edge < std::min(cell.poly.size(), cell.neighbors.size()); ++edge) {
+            const int neighbor = cell.neighbors[edge];
+            if (neighbor < 0 || static_cast<size_t>(neighbor) >= cells.size()
+                || cells[neighbor].biome == Biome::Sea) continue;
+            for (int vertex : {cell.poly[edge], cell.poly[(edge + 1) % cell.poly.size()]})
+                if (vertex >= 0 && static_cast<size_t>(vertex) < dual.size()) shoreVertex[vertex] = 1;
+        }
+    }
+    const auto splitEdge = [&](const Cell& cell, size_t edge) {
+        if (cell.biome != Biome::Sea || edge >= cell.neighbors.size()) return false;
+        const int neighbor = cell.neighbors[edge];
+        const int a = cell.poly[edge], b = cell.poly[(edge + 1) % cell.poly.size()];
+        return neighbor >= 0 && static_cast<size_t>(neighbor) < cells.size()
+            && cells[neighbor].biome == Biome::Sea
+            && a >= 0 && b >= 0 && static_cast<size_t>(a) < dual.size() && static_cast<size_t>(b) < dual.size()
+            && shoreVertex[a] && shoreVertex[b];
+    };
+
     std::size_t triangleCount = 0;
     for (const Cell& cell : cells) {
         if (cell.poly.size() >= 3) {
             triangleCount += cell.poly.size();
+            for (size_t edge = 0; edge < cell.poly.size(); ++edge)
+                triangleCount += splitEdge(cell, edge) ? 1u : 0u;
         }
     }
     mesh.pos.reserve(triangleCount * 9u);
@@ -265,14 +291,21 @@ TerrainMesh buildAtlasSourceMesh(const HexSphereModel& model) {
             }
             const QVector3D pa = model.positionOnSurface(dual[static_cast<std::size_t>(a)], height);
             const QVector3D pb = model.positionOnSurface(dual[static_cast<std::size_t>(b)], height);
-            const std::uint32_t base = static_cast<std::uint32_t>(mesh.pos.size() / 3u);
-            mesh.pos.insert(mesh.pos.end(), {
-                center.x(), center.y(), center.z(),
-                pa.x(), pa.y(), pa.z(),
-                pb.x(), pb.y(), pb.z() });
-            mesh.idx.insert(mesh.idx.end(), { base, base + 1u, base + 2u });
-            mesh.triOwner.push_back(cell.id);
-            mesh.triSurfaceRole.push_back(TriangleSurfaceRole::Top);
+            const auto append = [&](const QVector3D& left, const QVector3D& right) {
+                const auto base = static_cast<std::uint32_t>(mesh.pos.size() / 3u);
+                mesh.pos.insert(mesh.pos.end(), {center.x(), center.y(), center.z(),
+                    left.x(), left.y(), left.z(), right.x(), right.y(), right.z()});
+                mesh.idx.insert(mesh.idx.end(), {base, base + 1u, base + 2u});
+                mesh.triOwner.push_back(cell.id);
+                mesh.triSurfaceRole.push_back(TriangleSurfaceRole::Top);
+            };
+            if (splitEdge(cell, static_cast<size_t>(i))) {
+                const auto midpoint = model.positionOnSurface(dual[a] + dual[b], height);
+                append(pa, midpoint);
+                append(midpoint, pb);
+            } else {
+                append(pa, pb);
+            }
         }
     }
     return mesh;

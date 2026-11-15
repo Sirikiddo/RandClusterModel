@@ -550,4 +550,22 @@
     <ClCompile Include="tests\SurfaceAtlasDistanceTests.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClInclude Include="tests\SurfaceAtlasDistanceTests.h"><Filter>Header Files</Filter></ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Documentation"><UniqueIdentifier>{BA4D2F16-8DA2-4B6B-BEDC-E1AC78F9D03E}</UniqueIdentifier></Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="model\IcosahedralGrid.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="tests\IcosahedralGridTests.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="tests\SubdivisionSwitchBenchmark.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="tests\GeometryComparisonTests.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="tests\ParticleMotionTests.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClInclude Include="model\IcosahedralGrid.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="tests\IcosahedralGridTests.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="tests\SubdivisionSwitchBenchmark.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="tests\GeometryComparisonTests.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="tests\ParticleMotionTests.h"><Filter>Header Files</Filter></ClInclude>
+    <None Include="docs\geometry_comparison_task.txt" />
+    <None Include=".editorconfig" />
+    <None Include="docs\icosahedral_grid.md"><Filter>Documentation</Filter></None>
+  </ItemGroup>
 </Project>

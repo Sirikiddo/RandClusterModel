@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QVector3D>
+#include <QQuaternion>
 #include <vector>
 #include <random>
 
@@ -15,6 +16,11 @@ struct ContributorParticle {
     float windWeight = 1.0f;
     float phase = 0.0f;
     float rotation = 0.0f;
+    // Wind is evaluated in the source tree's units, then transformed exactly
+    // like its trunk. These values survive conversion to world-space positions.
+    QVector3D motionRestPosition{ 0, 0, 0 };
+    QQuaternion motionRotation;
+    float motionScale = 1.0f;
 };
 
 // Набор частиц для одного "облака" листвы
@@ -33,6 +39,9 @@ struct ContributorWindField {
     float gustSpeed = 1.5f;
     float turbulence = 0.15f;
 };
+
+void advanceContributorParticle(ContributorParticle& particle,
+    const ContributorWindField& wind, float time, float deltaTime);
 
 std::vector<ContributorParticle> generateParticleBlob(
     const ContributorParticleBlob& blob,

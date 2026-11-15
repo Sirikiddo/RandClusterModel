@@ -36,15 +36,22 @@
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt_defaults.props')">
     <Import Project="$(QtMsBuild)\qt_defaults.props" />
   </ImportGroup>
+  <PropertyGroup Label="QtInstallationSelection">
+    <!-- Qt VS Tools installation names are local to each developer's machine. -->
+    <PlanetQtPreferredDir>$([MSBuild]::GetRegistryValue('$(QtVersionsRegistryPath)\6.8.0_msvc2022_64', 'InstallDir', ''))</PlanetQtPreferredDir>
+    <PlanetQtAlternativeDir>$([MSBuild]::GetRegistryValue('$(QtVersionsRegistryPath)\QT_msvc2022_64', 'InstallDir', ''))</PlanetQtAlternativeDir>
+    <PlanetQtInstallation>6.8.0_msvc2022_64</PlanetQtInstallation>
+    <PlanetQtInstallation Condition="!Exists('$(PlanetQtPreferredDir)\bin\qmake.exe') AND Exists('$(PlanetQtAlternativeDir)\bin\qmake.exe')">QT_msvc2022_64</PlanetQtInstallation>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
-    <QtInstall>QT_msvc2022_64</QtInstall>
+    <QtInstall>$(PlanetQtInstallation)</QtInstall>
     <QtModules>core;gui;widgets;opengl;openglwidgets;concurrent</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
     <QtHeaderSearchPath>include</QtHeaderSearchPath>
     <QtLibrarySearchPath>lib</QtLibrarySearchPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
-    <QtInstall>QT_msvc2022_64</QtInstall>
+    <QtInstall>$(PlanetQtInstallation)</QtInstall>
     <QtModules>core;gui;widgets;opengl;openglwidgets;concurrent</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
     <QtHeaderSearchPath>include</QtHeaderSearchPath>
@@ -66,6 +73,11 @@
     <Import Project="third_party\ProcessDAG\ProcessDag.Embedded.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <!-- Keep IDE and command-line builds in the same project-local directories. -->
+    <OutDir>$(MSBuildProjectDirectory)\x64\$(Configuration)\</OutDir>
+    <IntDir>$(MSBuildProjectDirectory)\build\obj\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
@@ -74,10 +86,10 @@
     <ClCompile>
       <AdditionalIncludeDirectories>$(ProjectDir)glm;$(ProjectDir)include;$(ProjectDir)third_party\ProcessDAG\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalModuleDependencies>$(ProjectDir)third_party\ProcessDAG\proc\Proc.ixx;$(ProjectDir)third_party\ProcessDAG\proc\Proc.Core.ixx;$(ProjectDir)third_party\ProcessDAG\proc\Proc.Schema.ixx;%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
+      <AdditionalOptions>/utf-8 /Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <BuildStlModules>false</BuildStlModules>
       <EnableModules>false</EnableModules>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <Link>
       <AdditionalDependencies>glew32.lib;glfw3dll.lib;opengl32.lib;freetype.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -88,10 +100,10 @@
     <ClCompile>
       <AdditionalIncludeDirectories>$(ProjectDir)glm;$(ProjectDir)include;$(ProjectDir)third_party\ProcessDAG\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalModuleDependencies>$(ProjectDir)third_party\ProcessDAG\proc\Proc.ixx;$(ProjectDir)third_party\ProcessDAG\proc\Proc.Core.ixx;$(ProjectDir)third_party\ProcessDAG\proc\Proc.Schema.ixx;%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
+      <AdditionalOptions>/utf-8 /Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <BuildStlModules>false</BuildStlModules>
       <EnableModules>false</EnableModules>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <Link>
       <AdditionalDependencies>glew32.lib;glfw3dll.lib;opengl32.lib;freetype.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -117,6 +129,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <FunctionLevelLinking>true</FunctionLevelLinking>
+      <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
     </ClCompile>
     <Link>
@@ -165,6 +178,7 @@
     <ClCompile Include="model\FactoryModelHandler.cpp" />
     <ClCompile Include="model\HexSphereModel.cpp" />
     <ClCompile Include="model\HexSphereTopology.cpp" />
+    <ClCompile Include="model\IcosahedralGrid.cpp" />
     <ClCompile Include="model\MineModelHandler.cpp" />
     <ClCompile Include="model\ModelHandler.cpp" />
     <ClCompile Include="model\OreSystem.cpp" />
@@ -195,6 +209,10 @@
     <ClCompile Include="tests\ClimateBiomeGeneratorTests.cpp" />
     <ClCompile Include="tests\DagTransportBenchmark.cpp" />
     <ClCompile Include="tests\TopologyTests.cpp" />
+    <ClCompile Include="tests\IcosahedralGridTests.cpp" />
+    <ClCompile Include="tests\SubdivisionSwitchBenchmark.cpp" />
+    <ClCompile Include="tests\GeometryComparisonTests.cpp" />
+    <ClCompile Include="tests\ParticleMotionTests.cpp" />
     <ClCompile Include="tests\SurfaceAtlasDistanceTests.cpp" />
     <ClCompile Include="tests\WaterScreenPassTests.cpp" />
     <ClCompile Include="tests\WaterWaveModelTests.cpp" />
@@ -246,6 +264,7 @@
     <ClInclude Include="model\FactoryModelHandler.h" />
     <ClInclude Include="model\HexSphereModel.h" />
     <ClInclude Include="model\HexSphereTopology.h" />
+    <ClInclude Include="model\IcosahedralGrid.h" />
     <ClInclude Include="model\MineModelHandler.h" />
     <ClInclude Include="model\ModelHandler.h" />
     <ClInclude Include="model\OreSystem.h" />
@@ -264,6 +283,12 @@
     <ClInclude Include="tests\ClimateBiomeGeneratorTests.h" />
     <ClInclude Include="tests\DagTransportBenchmark.h" />
     <ClInclude Include="tests\TopologyTests.h" />
+    <ClInclude Include="tests\IcosahedralGridTests.h" />
+    <ClInclude Include="tests\SubdivisionSwitchBenchmark.h" />
+    <ClInclude Include="tests\GeometryComparisonTests.h" />
+    <ClInclude Include="tests\ParticleMotionTests.h" />
+    <None Include="docs\geometry_comparison_task.txt" />
+    <None Include=".editorconfig" />
     <ClInclude Include="tests\SurfaceAtlasDistanceTests.h" />
     <ClInclude Include="tests\WaterScreenPassTests.h" />
     <ClInclude Include="tests\WaterWaveModelTests.h" />
@@ -336,4 +361,7 @@
   </ImportGroup>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <ItemGroup>
+    <None Include="docs\icosahedral_grid.md" />
+  </ItemGroup>
 </Project>

@@ -14,7 +14,7 @@ public:
     ~ParticleRenderer();
 
     void initialize();
-    void update(float deltaTime, const ContributorWindField& wind, const QVector3D& treeCenter);
+    void update(float deltaTime, const ContributorWindField& wind);
     void updateParticles(const std::vector<ContributorParticle>& particles);
     void render(const QMatrix4x4& mvp, const QMatrix4x4& view, const QVector3D& cameraPos);
     void setTime(float time) { time_ = time; }

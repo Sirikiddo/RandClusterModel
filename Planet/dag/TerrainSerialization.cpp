@@ -6,7 +6,7 @@
 #include <QJsonParseError>
 
 namespace {
-constexpr int kCurrentTerrainSnapshotVersion = 3;
+constexpr int kCurrentTerrainSnapshotVersion = 4;
 
 bool isSupportedOreType(int value) {
     return value >= static_cast<int>(OreType::None)
@@ -36,6 +36,7 @@ bool hasNumericCellFields(const QJsonObject& entry) {
 QString serializeTerrainSnapshot(const TerrainSnapshot& snapshot) {
     QJsonObject root;
     root["version"] = kCurrentTerrainSnapshotVersion;
+    root["geometry"] = static_cast<int>(snapshot.geometry);
     root["subdivisionLevel"] = snapshot.subdivisionLevel;
     root["generatorIndex"] = snapshot.generatorIndex;
     root["seed"] = static_cast<qint64>(snapshot.params.seed);
@@ -88,7 +89,7 @@ std::optional<TerrainSnapshot> deserializeTerrainSnapshot(const QString& encoded
         return std::nullopt;
     }
     const int version = root["version"].toInt();
-    if (version != 1 && version != 2 && version != kCurrentTerrainSnapshotVersion) {
+    if (version < 1 || version > kCurrentTerrainSnapshotVersion) {
         return std::nullopt;
     }
     if (!root["subdivisionLevel"].isDouble()
@@ -101,6 +102,10 @@ std::optional<TerrainSnapshot> deserializeTerrainSnapshot(const QString& encoded
     }
 
     TerrainSnapshot snapshot;
+    if (version >= 4) {
+        if (!isIntegralNumber(root["geometry"]) || !validSphereGeometry(root["geometry"].toInt(-1))) return std::nullopt;
+        snapshot.geometry = static_cast<SphereGeometry>(root["geometry"].toInt());
+    }
     snapshot.subdivisionLevel = root["subdivisionLevel"].toInt();
     snapshot.generatorIndex = root["generatorIndex"].toInt();
     snapshot.params.seed = static_cast<uint32_t>(root["seed"].toInteger());
@@ -159,7 +164,7 @@ std::optional<TerrainSnapshot> deserializeTerrainSnapshot(const QString& encoded
             snapshot.treeCells.push_back(cellId);
         }
     }
-    else if (version >= kCurrentTerrainSnapshotVersion) {
+    else if (version >= 3) {
         return std::nullopt;
     }
 

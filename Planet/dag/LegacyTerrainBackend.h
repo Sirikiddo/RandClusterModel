@@ -14,6 +14,7 @@ public:
     void setTerrainParams(const TerrainParams& params);
     void setGeneratorByIndex(int idx);
     void setSubdivisionLevel(int level);
+    void setGeometry(SphereGeometry geometry);
     TerrainRegenerationResult regenerateTerrain();
 
     const TerrainSnapshot* currentTerrainSnapshot() const;

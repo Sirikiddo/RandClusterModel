@@ -10,6 +10,11 @@
 
 struct IcoMesh;
 
+// Values identify the construction AND its address convention. Do not reuse a
+// value for a different grid: snapshots and caches persist this identity.
+enum class SphereGeometry : int { RecursiveCentroid = 0, GlobalVoronoi = 1 };
+inline bool validSphereGeometry(int value) { return value == 0 || value == 1; }
+
 // A vector-shaped immutable payload. Copies share the backing allocation;
 // mutation detaches first so topology construction remains local and safe.
 template<class T>
@@ -60,6 +65,7 @@ struct PickTri { // geometry for ray picking
 // Immutable geometry and adjacency for one active subdivision.
 class HexSphereTopology {
 public:
+    SphereGeometry geometry = SphereGeometry::RecursiveCentroid;
     int subdivisionLevel = 0;
     int pentagonCount = 0;
     std::vector<QVector3D> dualVerts;
@@ -74,4 +80,5 @@ public:
 
 using HexSphereTopologyPtr = std::shared_ptr<const HexSphereTopology>;
 
-HexSphereTopologyPtr buildHexSphereTopology(int subdivisionLevel);
+HexSphereTopologyPtr buildHexSphereTopology(int subdivisionLevel,
+    SphereGeometry geometry = SphereGeometry::RecursiveCentroid);

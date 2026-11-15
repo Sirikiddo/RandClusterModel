@@ -31,6 +31,7 @@ struct WaterParams {
     bool wavesEnabled = true;
     float waveStrength = 0.85f;
     int beachWidth = 1;
+    // Wave height/density use a fixed L2 ocean reference, independent of terrain LOD.
     float shellWaveAmplitude = 0.84f;
     float shellWaveFrequency = 21.0f;
     float shellWaveSpeed = 0.50f;

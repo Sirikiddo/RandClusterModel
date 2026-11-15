@@ -48,6 +48,10 @@ TerrainRegenerationResult LegacyTerrainBackend::regenerateTerrain() {
     return TerrainRegenerationResult::success();
 }
 
+void LegacyTerrainBackend::setGeometry(SphereGeometry geometry) {
+    if (bridge_) bridge_->stageGeometry(geometry);
+}
+
 const TerrainSnapshot* LegacyTerrainBackend::currentTerrainSnapshot() const {
     if (!currentSnapshot_) {
         return nullptr;

@@ -25,6 +25,7 @@ namespace {
 
 class BenchmarkTerrainBridge final : public ITerrainSceneBridge {
 public:
+    void stageGeometry(SphereGeometry geometry) override { scene_.stageGeometry(geometry); }
     void stageTerrainParams(const TerrainParams& params) override {
         scene_.setGenParams(params);
     }
@@ -188,11 +189,12 @@ bool runOrePipelineChecks(QString* failure) {
     const QString encodedCurrent = serializeTerrainSnapshot(snapshot);
     const QJsonDocument currentDocument = QJsonDocument::fromJson(encodedCurrent.toUtf8());
     if (!currentDocument.isObject()
-        || currentDocument.object()["version"].toInt() != 3
+        || currentDocument.object()["version"].toInt() != 4
+        || currentDocument.object()["geometry"].toInt(-1) != 0
         || currentDocument.object()["cells"].toArray().at(0).toObject().contains("oreVisualDensity")
         || currentDocument.object()["treeCells"].toArray().size() != 1
         || currentDocument.object()["riverCells"].toArray().size() != 1) {
-        return fail("snapshot v3 shape");
+        return fail("snapshot v4 shape");
     }
     const auto roundTrip = deserializeTerrainSnapshot(encodedCurrent);
     if (!roundTrip
@@ -246,7 +248,7 @@ bool runOrePipelineChecks(QString* failure) {
     }
 
     QJsonObject invalidVersion = currentDocument.object();
-    invalidVersion["version"] = 4;
+    invalidVersion["version"] = 5;
     if (deserializeTerrainSnapshot(
             QString::fromUtf8(QJsonDocument(invalidVersion).toJson(QJsonDocument::Compact)))) {
         return fail("unknown snapshot version accepted");

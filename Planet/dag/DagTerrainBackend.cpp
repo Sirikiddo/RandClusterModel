@@ -25,12 +25,16 @@ namespace {
 // structure through shared_ptr. This side channel is not a general transport
 // contract: replace it with typed DAG payloads before supporting other processes
 // or independent consumers. Never encode a raw pointer in the token.
-// A fresh handoff belongs to each DAG run, so failures and retries cannot expose
-// a previous run's snapshot, and no unbounded payload cache is retained.
+// The persistent engine retains the latest topology. Snapshot slots are cleared
+// before each regeneration; revision tokens prevent stale outputs from matching.
 struct TerrainSnapshotHandoff {
     using Snapshot = std::shared_ptr<const TerrainSnapshot>;
-    static constexpr std::string_view baseToken = "terrain:base";
-    static constexpr std::string_view finalToken = "terrain:final";
+    std::string topologyToken;
+    std::string baseToken;
+    std::string finalToken;
+    std::uint64_t revision = 0;
+    HexSphereTopologyPtr topology;
+    TerrainBuildStats stats;
 
     Snapshot base;
     Snapshot final;
@@ -42,18 +46,18 @@ struct TerrainSnapshotHandoff {
     }
 };
 
-TerrainSnapshot buildBaseTerrainSnapshot(int generatorIndex, int subdivisionLevel, const TerrainParams& params, HexSphereModel& model) {
+TerrainSnapshot buildBaseTerrainSnapshot(int generatorIndex, HexSphereTopologyPtr topology, const TerrainParams& params, HexSphereModel& model) {
     QElapsedTimer timer;
     timer.start();
-    // The same model instance survives seed changes, so only a level switch
-    // materializes new cells; otherwise just clear the previous seed's state.
-    if (!model.topology() || model.subdivisions() != subdivisionLevel) {
-        model.setTopology(buildHexSphereTopology(subdivisionLevel));
+    // Mutable generator scratch space is private to this node. Its immutable
+    // topology is supplied by GeometryBuild, never built as a side effect here.
+    if (model.topology() != topology) {
+        model.setTopology(topology);
     }
     else {
         model.resetCellStates();
     }
-    const double topologyMs = timer.nsecsElapsed() / 1000000.0;
+    const double stateSetupMs = timer.nsecsElapsed() / 1000000.0;
 
     timer.restart();
     auto generator = createTerrainGeneratorByIndex(generatorIndex);
@@ -62,8 +66,9 @@ TerrainSnapshot buildBaseTerrainSnapshot(int generatorIndex, int subdivisionLeve
 
     timer.restart();
     TerrainSnapshot snapshot;
+    snapshot.geometry = topology->geometry;
     snapshot.generatorIndex = normalizeTerrainGeneratorIndex(generatorIndex);
-    snapshot.subdivisionLevel = subdivisionLevel;
+    snapshot.subdivisionLevel = topology->subdivisionLevel;
     snapshot.params = params;
     snapshot.topology = model.topology();
     snapshot.cells.reserve(model.cells().size());
@@ -80,26 +85,31 @@ TerrainSnapshot buildBaseTerrainSnapshot(int generatorIndex, int subdivisionLeve
         snapshot.cells.push_back(cellSnapshot);
     }
     qInfo().nospace() << "[Perf][Generation] stage=dag_terrain_build"
-        << " level=" << subdivisionLevel
+        << " level=" << snapshot.subdivisionLevel
         << " cells=" << model.cellCount()
-        << " topology_ms=" << topologyMs
+        << " state_setup_ms=" << stateSetupMs
         << " terrain_ms=" << terrainMs
         << " snapshot_ms=" << timer.nsecsElapsed() / 1000000.0;
     return snapshot;
 }
 
-TerrainSnapshot generateOreField(TerrainSnapshot snapshot, HexSphereModel& model) {
+TerrainSnapshot generateOreField(TerrainSnapshot snapshot) {
+    if (!snapshot.topology || snapshot.cells.size() != snapshot.topology->cells.size())
+        throw std::invalid_argument("OreBuild requires matching topology and cell state");
+    // OreBuild consumes only its declared snapshot, not TerrainBuild's mutable
+    // model. The topology overload avoids copying adjacency into another model.
+    std::vector<TerrainCellState> state(snapshot.cells.size());
+    for (size_t i = 0; i < state.size(); ++i) state[i].biome = snapshot.cells[i].biome;
     if (normalizeTerrainGeneratorIndex(snapshot.generatorIndex) == 0) {
-        OreGenerator::clear(model);
+        OreGenerator::clear(state);
     } else {
-        OreGenerator::generate(model, snapshot.params.seed);
+        OreGenerator::generate(*snapshot.topology, state, snapshot.params.seed);
     }
 
-    const auto& cells = model.cells();
-    const size_t count = std::min(snapshot.cells.size(), cells.size());
+    const size_t count = state.size();
     for (size_t i = 0; i < count; ++i) {
-        snapshot.cells[i].oreDensity = cells[i].oreDensity;
-        snapshot.cells[i].oreType = cells[i].oreType;
+        snapshot.cells[i].oreDensity = state[i].oreDensity;
+        snapshot.cells[i].oreType = state[i].oreType;
     }
     return snapshot;
 }
@@ -117,6 +127,7 @@ struct DagTerrainBackend::Impl {
     TerrainParams params = defaultTerrainParams();
     int generatorIndex = kDefaultTerrainGeneratorIndex;
     int subdivisionLevel = kDefaultTerrainSubdivisionLevel;
+    SphereGeometry geometry = SphereGeometry::RecursiveCentroid;
     TerrainSnapshotHandoff::Snapshot currentSnapshot;
     // Reused across DAG runs so a seed change does not copy the whole topology.
     std::shared_ptr<HexSphereModel> model = std::make_shared<HexSphereModel>();
@@ -124,6 +135,8 @@ struct DagTerrainBackend::Impl {
     std::unique_ptr<proc::GraphSchema> schema;
     std::unique_ptr<proc::GuardRegistry> guardRegistry;
     std::unique_ptr<std::vector<proc::Field>> outputs;
+    std::shared_ptr<TerrainSnapshotHandoff> handoff = std::make_shared<TerrainSnapshotHandoff>();
+    std::unique_ptr<proc::DefaultDagEngine> engine;
 
     static proc::GraphSchema buildSchema() {
         proc::GraphSchema::StorageLayout roles;
@@ -132,6 +145,9 @@ struct DagTerrainBackend::Impl {
         roles.inputs.insert("seaLevel");
         roles.inputs.insert("scale");
         roles.inputs.insert("subdivisionLevel");
+        roles.inputs.insert("geometry");
+        roles.inputs.insert("geometryDirty");
+        roles.inputs.insert("regeneration");
         roles.outputs.insert("terrainSnapshot");
 
         return proc::GraphSchemaBuilder::compile(
@@ -142,14 +158,24 @@ struct DagTerrainBackend::Impl {
                 {"seaLevel", "int"},
                 {"scale", "scalar"},
                 {"subdivisionLevel", "int"},
+                {"geometry", "int"},
+                {"geometryDirty", "int"},
+                {"regeneration", "str"},
+                {"topology", "str"},
                 {"baseTerrainSnapshot", "str"},
                 {"terrainSnapshot", "str"},
             },
             {
                 proc::GraphSchemaBuilder::NodeDef{
+                    "GeometryBuild", "buildGeometry",
+                    {"subdivisionLevel", "geometry", "geometryDirty"},
+                    {"topology"},
+                    proc::GraphSchemaBuilder::GuardDef{ "geometryDirty", "1" },
+                },
+                proc::GraphSchemaBuilder::NodeDef{
                     "TerrainBuild",
                     "buildTerrain",
-                    {"generatorIndex", "seed", "seaLevel", "scale", "subdivisionLevel"},
+                    {"topology", "generatorIndex", "seed", "seaLevel", "scale", "regeneration"},
                     {"baseTerrainSnapshot"},
                     std::nullopt,
                 },
@@ -168,6 +194,7 @@ struct DagTerrainBackend::Impl {
     static proc::OperationRegistry makeOperationRegistry() {
         proc::OperationRegistry registry = proc::make_builtin_operation_registry();
         registry.register_op("generateOre", proc::v2::OpId{ 300 });
+        registry.register_op("buildGeometry", proc::v2::OpId{ 301 });
         return registry;
     }
 
@@ -219,16 +246,38 @@ struct DagTerrainBackend::Impl {
         const auto seaLevelSlot = schema.find_field("seaLevel");
         const auto scaleSlot = schema.find_field("scale");
         const auto subdivisionSlot = schema.find_field("subdivisionLevel");
+        const auto geometrySlot = schema.find_field("geometry");
+        const auto geometryNodeSlot = schema.find_node("GeometryBuild");
+        const auto topologySlot = schema.find_field("topology");
 
-        if (!nodeSlot || !baseOutputSlot || !oreNodeSlot || !outputSlot || !generatorSlot || !seedSlot || !seaLevelSlot || !scaleSlot || !subdivisionSlot) {
+        if (!nodeSlot || !baseOutputSlot || !oreNodeSlot || !outputSlot || !generatorSlot || !seedSlot || !seaLevelSlot || !scaleSlot || !subdivisionSlot || !geometrySlot || !geometryNodeSlot || !topologySlot) {
             throw std::runtime_error("DagTerrainBackend failed to bind terrain DAG schema slots");
         }
 
+        registry.bind_executor(schema.op_of(*geometryNodeSlot), *geometryNodeSlot,
+            [schema, handoff, outputSlot = *topologySlot, subdivisionSlot = *subdivisionSlot, geometrySlot = *geometrySlot](
+                const proc::RuntimeOperationRegistry::ReadHandleFn& readHandle,
+                const proc::RuntimeOperationRegistry::FieldNameFn& fieldName,
+                const proc::RuntimeOperationRegistry::DebugStringFn&) -> proc::Commit {
+                QElapsedTimer timer;
+                timer.start();
+                const int level = readIntField(readHandle, fieldName, subdivisionSlot, kDefaultTerrainSubdivisionLevel);
+                const auto geometry = static_cast<SphereGeometry>(readIntField(readHandle, fieldName, geometrySlot, 0));
+                handoff->topology = buildHexSphereTopology(level, geometry);
+                handoff->topologyToken = "topology:" + std::to_string(handoff->revision);
+                ++handoff->stats.geometryExecutions;
+                qInfo().nospace() << "[Perf][Generation] stage=dag_geometry_build level=" << level
+                    << " geometry=" << static_cast<int>(geometry) << " ms=" << timer.nsecsElapsed() / 1000000.0;
+                proc::Commit commit;
+                commit.set(outputSlot, handoff->topologyToken, proc::v2::WriteLifetime::Persistent,
+                    std::string(schema.field_name(outputSlot)));
+                return commit;
+            });
         registry.bind_executor(
             schema.op_of(*nodeSlot),
             *nodeSlot,
             [schema, handoff, model, outputSlot = *baseOutputSlot, generatorSlot = *generatorSlot, seedSlot = *seedSlot,
-             seaLevelSlot = *seaLevelSlot, scaleSlot = *scaleSlot, subdivisionSlot = *subdivisionSlot](
+             seaLevelSlot = *seaLevelSlot, scaleSlot = *scaleSlot, topologySlot = *topologySlot](
                 const proc::RuntimeOperationRegistry::ReadHandleFn& readHandle,
                 const proc::RuntimeOperationRegistry::FieldNameFn& fieldName,
                 const proc::RuntimeOperationRegistry::DebugStringFn&) -> proc::Commit {
@@ -241,16 +290,18 @@ struct DagTerrainBackend::Impl {
 
                 const int generatorIndex = Impl::readIntField(
                     readHandle, fieldName, generatorSlot, kDefaultTerrainGeneratorIndex);
-                const int subdivisionLevel = Impl::readIntField(
-                    readHandle, fieldName, subdivisionSlot, kDefaultTerrainSubdivisionLevel);
+                if (!handoff->topology || proc::Commit::debug_view(readHandle(topologySlot)) != handoff->topologyToken)
+                    throw std::runtime_error("TerrainBuild requires GeometryBuild output");
 
                 handoff->base = std::make_shared<const TerrainSnapshot>(
-                    buildBaseTerrainSnapshot(generatorIndex, subdivisionLevel, params, *model));
+                    buildBaseTerrainSnapshot(generatorIndex, handoff->topology, params, *model));
+                handoff->baseToken = "terrain:base:" + std::to_string(handoff->revision);
+                ++handoff->stats.terrainExecutions;
 
                 proc::Commit commit;
                 commit.set(
                     outputSlot,
-                    std::string(TerrainSnapshotHandoff::baseToken),
+                    handoff->baseToken,
                     proc::v2::WriteLifetime::Persistent,
                     std::string(schema.field_name(outputSlot)));
                 return commit;
@@ -258,7 +309,7 @@ struct DagTerrainBackend::Impl {
         registry.bind_executor(
             schema.op_of(*oreNodeSlot),
             *oreNodeSlot,
-            [schema, handoff, model, baseSlot = *baseOutputSlot, outputSlot = *outputSlot](
+            [schema, handoff, baseSlot = *baseOutputSlot, outputSlot = *outputSlot](
                 const proc::RuntimeOperationRegistry::ReadHandleFn& readHandle,
                 const proc::RuntimeOperationRegistry::FieldNameFn&,
                 const proc::RuntimeOperationRegistry::DebugStringFn&) -> proc::Commit {
@@ -274,12 +325,14 @@ struct DagTerrainBackend::Impl {
                 QElapsedTimer oreTimer;
                 oreTimer.start();
                 handoff->final = std::make_shared<const TerrainSnapshot>(
-                    generateOreField(*snapshot, *model));
+                    generateOreField(*snapshot));
+                handoff->finalToken = "terrain:final:" + std::to_string(handoff->revision);
+                ++handoff->stats.oreExecutions;
                 qInfo().nospace() << "[Perf][Generation] stage=dag_ore_generate"
                     << " ms=" << oreTimer.nsecsElapsed() / 1000000.0;
                 commit.set(
                     outputSlot,
-                    std::string(TerrainSnapshotHandoff::finalToken),
+                    handoff->finalToken,
                     proc::v2::WriteLifetime::Persistent,
                     std::string(schema.field_name(outputSlot)));
                 return commit;
@@ -294,6 +347,11 @@ struct DagTerrainBackend::Impl {
         init["seaLevel"] = proc::make_value(std::to_string(params.seaLevel));
         init["scale"] = proc::make_value(QString::number(params.scale, 'g', 9).toStdString());
         init["subdivisionLevel"] = proc::make_value(std::to_string(subdivisionLevel));
+        init["geometry"] = proc::make_value(std::to_string(static_cast<int>(geometry)));
+        const bool geometryDirty = !handoff->topology || handoff->topology->geometry != geometry
+            || handoff->topology->subdivisionLevel != subdivisionLevel;
+        init["geometryDirty"] = proc::make_value(geometryDirty ? std::string("1") : std::string("0"));
+        init["regeneration"] = proc::make_value(std::to_string(handoff->revision));
         return init;
     }
 
@@ -303,15 +361,29 @@ struct DagTerrainBackend::Impl {
             return {};
         }
 
-        auto handoff = std::make_shared<TerrainSnapshotHandoff>();
-        proc::DefaultDagEngine dag(*schema, buildRuntimeRegistry(*schema, handoff, model), *guardRegistry);
-        dag.init(makeInputStore());
-        if (!dag.flush_prepare(*outputs)) {
+        ++handoff->revision;
+        handoff->base.reset();
+        handoff->final.reset();
+        handoff->stats = {};
+        const auto inputs = makeInputStore();
+        if (!engine) {
+            engine = std::make_unique<proc::DefaultDagEngine>(*schema, buildRuntimeRegistry(*schema, handoff, model), *guardRegistry);
+            engine->init(inputs);
+        } else {
+            proc::Commit commit;
+            for (const auto& [name, value] : inputs) {
+                const auto slot = schema->find_field(name);
+                commit.set(*slot, std::string(proc::Commit::debug_view(value)),
+                    proc::v2::WriteLifetime::Persistent, name);
+            }
+            engine->push_input(commit);
+        }
+        if (!engine->flush_prepare(*outputs)) {
             qWarning() << "DagTerrainBackend flush_prepare failed";
             return {};
         }
 
-        const auto token = proc::get_value_view(dag.prepared_output_store(), "terrainSnapshot");
+        const auto token = proc::get_value_view(engine->prepared_output_store(), "terrainSnapshot");
         if (!token) {
             qWarning() << "DagTerrainBackend produced no terrainSnapshot";
             return {};
@@ -323,7 +395,7 @@ struct DagTerrainBackend::Impl {
             return {};
         }
 
-        if (!dag.ack_outputs()) {
+        if (!engine->ack_outputs()) {
             qWarning() << "DagTerrainBackend ack_outputs failed";
             return {};
         }
@@ -334,6 +406,7 @@ struct DagTerrainBackend::Impl {
         params = snapshot->params;
         generatorIndex = normalizeTerrainGeneratorIndex(snapshot->generatorIndex);
         subdivisionLevel = snapshot->subdivisionLevel;
+        geometry = snapshot->geometry;
         currentSnapshot = std::move(snapshot);
     }
 
@@ -373,13 +446,21 @@ void DagTerrainBackend::setSubdivisionLevel(int level) {
     impl_->subdivisionLevel = level;
 }
 
+void DagTerrainBackend::setGeometry(SphereGeometry geometry) {
+    impl_->geometry = geometry;
+}
+
 TerrainRegenerationResult DagTerrainBackend::regenerateTerrain() {
     if (!impl_->bridge) {
         return TerrainRegenerationResult::failure("Terrain bridge is not attached");
     }
 
-    auto snapshot = impl_->regenerateViaDag();
+    TerrainSnapshotHandoff::Snapshot snapshot;
+    try { snapshot = impl_->regenerateViaDag(); }
+    catch (const std::exception& e) { qWarning() << "Terrain DAG failed:" << e.what(); }
     if (!snapshot) {
+        impl_->engine.reset();
+        impl_->handoff = std::make_shared<TerrainSnapshotHandoff>();
         qWarning() << "DagTerrainBackend terrain regeneration failed";
         return TerrainRegenerationResult::failure("DAG terrain regeneration failed");
     }
@@ -394,5 +475,9 @@ const TerrainSnapshot* DagTerrainBackend::currentTerrainSnapshot() const {
         return nullptr;
     }
     return &*impl_->currentSnapshot;
+}
+
+TerrainBuildStats DagTerrainBackend::lastBuildStats() const {
+    return impl_->handoff->stats;
 }
 

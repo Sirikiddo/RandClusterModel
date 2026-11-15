@@ -8,7 +8,7 @@
 
 namespace {
 
-    // ===================== ÂÑÏÎÌÎÃÀÒÅËÜÍÀß ÌÀÒÅÌÀÒÈÊÀ =====================
+    // ===================== Ğ’Ğ¡ĞŸĞĞœĞĞ“ĞĞ¢Ğ•Ğ›Ğ¬ĞĞĞ¯ ĞœĞĞ¢Ğ•ĞœĞĞ¢Ğ˜ĞšĞ =====================
 
     struct Vec2 { float x = 0.0f; float y = 0.0f; };
 
@@ -78,7 +78,7 @@ namespace {
 
     QVector3D toQ(const Vec3& v) { return QVector3D(v.x, v.y, v.z); }
 
-    // ===================== ÃÅÍÅĞÀÖÈß ÏĞÈÌÈÒÈÂÎÂ =====================
+    // ===================== Ğ“Ğ•ĞĞ•Ğ ĞĞ¦Ğ˜Ğ¯ ĞŸĞ Ğ˜ĞœĞ˜Ğ¢Ğ˜Ğ’ĞĞ’ =====================
 
     void appendTube(Mesh& mesh,
         const std::vector<Vec3>& points,
@@ -126,7 +126,7 @@ namespace {
         }
     }
 
-    // ===================== ÃÅÍÅĞÀÖÈß ÊĞÈÂÛÕ =====================
+    // ===================== Ğ“Ğ•ĞĞ•Ğ ĞĞ¦Ğ˜Ğ¯ ĞšĞ Ğ˜Ğ’Ğ«Ğ¥ =====================
 
     std::vector<Vec3> makeTrunkCurve(const TreeBuilder::TreeParams& p, RNG& rng) {
         std::vector<Vec3> curve;
@@ -201,7 +201,7 @@ namespace {
         return radii;
     }
 
-    // ===================== ÊÎÍÂÅĞÒÀÖÈß Mesh -> simple3d::Mesh =====================
+    // ===================== ĞšĞĞĞ’Ğ•Ğ Ğ¢ĞĞ¦Ğ˜Ğ¯ Mesh -> simple3d::Mesh =====================
 
     simple3d::Mesh toSimple3d(const Mesh& src) {
         simple3d::Mesh dst;
@@ -223,19 +223,19 @@ namespace {
         return dst;
     }
 
-    // ===================== ÎÑÍÎÂÍÀß ÃÅÍÅĞÀÖÈß =====================
+    // ===================== ĞĞ¡ĞĞĞ’ĞĞĞ¯ Ğ“Ğ•ĞĞ•Ğ ĞĞ¦Ğ˜Ğ¯ =====================
 
     TreeBuilder::TreeMeshData generateStylizedTree(const TreeBuilder::TreeParams& p) {
         RNG rng(p.seed);
         TreeBuilder::TreeMeshData out;
         Mesh woodMesh;
 
-        // Ñòâîë
+        // Ğ¡Ñ‚Ğ²Ğ¾Ğ»
         const std::vector<Vec3> trunk = makeTrunkCurve(p, rng);
         const std::vector<float> trunkRadii = makeTrunkRadii(p);
         appendTube(woodMesh, trunk, trunkRadii, p.radialSegments);
 
-        // Âåòêè
+        // Ğ’ĞµÑ‚ĞºĞ¸
         out.branchTips.reserve(p.branchCount);
         for (int i = 0; i < p.branchCount; ++i) {
             const float t = rng.uniform(0.28f, 0.88f);
@@ -266,7 +266,7 @@ namespace {
 
 } // anonymous namespace
 
-// ===================== ÏÓÁËÈ×ÍÎÅ API =====================
+// ===================== ĞŸĞ£Ğ‘Ğ›Ğ˜Ğ§ĞĞĞ• API =====================
 
 TreeBuilder::TreeSpecies TreeBuilder::selectSpecies(Biome biome, uint32_t seed) {
     std::mt19937 rng(seed);
@@ -297,31 +297,31 @@ TreeBuilder::TreeParams TreeBuilder::baseParamsForSpecies(TreeSpecies species) {
     TreeParams p;
     switch (species) {
     case TreeSpecies::Oak:
-        // áûëî: { 14, 10, 5.0f, 0.40f, 0.12f, 8, 5, 1.2f, 2.5f, 0.42f, 0.50f, 0.5f, 0.20f, 6, 8, 0.50f, 0.95f, 6, 42u }
+        // Ğ±Ñ‹Ğ»Ğ¾: { 14, 10, 5.0f, 0.40f, 0.12f, 8, 5, 1.2f, 2.5f, 0.42f, 0.50f, 0.5f, 0.20f, 6, 8, 0.50f, 0.95f, 6, 42u }
         p = { 10, 10, 2.0f, 0.15f, 0.05f, 10, 4, 0.6f, 1.2f, 0.25f, 0.60f, 0.3f, 0.10f, 6, 8, 0.50f, 0.95f, 6, 42u };
         break;
     case TreeSpecies::Apple:
-        // áûëî: { 14, 10, 3.5f, 0.35f, 0.12f, 7, 6, 1.0f, 1.8f, 0.40f, 0.55f, 0.3f, 0.12f, 6, 8, 0.55f, 0.85f, 5, 201u }
+        // Ğ±Ñ‹Ğ»Ğ¾: { 14, 10, 3.5f, 0.35f, 0.12f, 7, 6, 1.0f, 1.8f, 0.40f, 0.55f, 0.3f, 0.12f, 6, 8, 0.55f, 0.85f, 5, 201u }
         p = { 10, 10, 1.4f, 0.12f, 0.04f, 10, 4, 0.5f, 1.0f, 0.25f, 0.55f, 0.2f, 0.08f, 6, 8, 0.55f, 0.85f, 5, 201u };
         break;
     case TreeSpecies::Birch:
-        // áûëî: { 14, 10, 6.5f, 0.25f, 0.06f, 10, 6, 1.0f, 1.8f, 0.28f, 0.70f, 0.15f, 0.08f, 6, 8, 0.40f, 0.70f, 5, 301u }
+        // Ğ±Ñ‹Ğ»Ğ¾: { 14, 10, 6.5f, 0.25f, 0.06f, 10, 6, 1.0f, 1.8f, 0.28f, 0.70f, 0.15f, 0.08f, 6, 8, 0.40f, 0.70f, 5, 301u }
         p = { 12, 10, 2.6f, 0.10f, 0.03f, 12, 5, 0.6f, 1.2f, 0.20f, 0.70f, 0.15f, 0.06f, 6, 8, 0.40f, 0.70f, 5, 301u };
         break;
     case TreeSpecies::Acacia:
-        // áûëî: { 14, 10, 7.0f, 0.25f, 0.15f, 5, 5, 2.0f, 3.5f, 0.28f, 0.85f, 0.2f, 0.10f, 6, 8, 0.40f, 0.75f, 5, 300u }
+        // Ğ±Ñ‹Ğ»Ğ¾: { 14, 10, 7.0f, 0.25f, 0.15f, 5, 5, 2.0f, 3.5f, 0.28f, 0.85f, 0.2f, 0.10f, 6, 8, 0.40f, 0.75f, 5, 300u }
         p = { 12, 10, 2.4f, 0.12f, 0.05f, 8, 4, 0.8f, 1.4f, 0.20f, 0.85f, 0.2f, 0.08f, 6, 8, 0.40f, 0.75f, 5, 300u };
         break;
     case TreeSpecies::Kigelia:
-        // áûëî: { 12, 10, 4.5f, 0.30f, 0.10f, 9, 5, 1.0f, 2.0f, 0.35f, 0.60f, 0.4f, 0.18f, 6, 8, 0.45f, 0.80f, 5, 401u }
+        // Ğ±Ñ‹Ğ»Ğ¾: { 12, 10, 4.5f, 0.30f, 0.10f, 9, 5, 1.0f, 2.0f, 0.35f, 0.60f, 0.4f, 0.18f, 6, 8, 0.45f, 0.80f, 5, 401u }
         p = { 10, 10, 1.8f, 0.12f, 0.04f, 10, 4, 0.5f, 1.0f, 0.22f, 0.60f, 0.3f, 0.12f, 6, 8, 0.45f, 0.80f, 5, 401u };
         break;
     case TreeSpecies::Ceiba:
-        // áûëî: { 16, 12, 9.0f, 0.55f, 0.15f, 10, 6, 1.8f, 3.5f, 0.40f, 0.65f, 0.6f, 0.25f, 6, 8, 0.55f, 1.00f, 6, 501u }
+        // Ğ±Ñ‹Ğ»Ğ¾: { 16, 12, 9.0f, 0.55f, 0.15f, 10, 6, 1.8f, 3.5f, 0.40f, 0.65f, 0.6f, 0.25f, 6, 8, 0.55f, 1.00f, 6, 501u }
         p = { 14, 12, 3.6f, 0.18f, 0.06f, 12, 5, 0.8f, 1.6f, 0.25f, 0.65f, 0.4f, 0.15f, 6, 8, 0.55f, 1.00f, 6, 501u };
         break;
     case TreeSpecies::Tualang:
-        // áûëî: { 18, 12, 11.0f, 0.60f, 0.18f, 12, 6, 2.0f, 4.0f, 0.42f, 0.60f, 0.7f, 0.28f, 6, 8, 0.60f, 1.10f, 6, 601u }
+        // Ğ±Ñ‹Ğ»Ğ¾: { 18, 12, 11.0f, 0.60f, 0.18f, 12, 6, 2.0f, 4.0f, 0.42f, 0.60f, 0.7f, 0.28f, 6, 8, 0.60f, 1.10f, 6, 601u }
         p = { 16, 12, 4.4f, 0.20f, 0.07f, 14, 5, 0.9f, 1.8f, 0.28f, 0.60f, 0.5f, 0.18f, 6, 8, 0.60f, 1.10f, 6, 601u };
         break;
     }
@@ -389,21 +389,21 @@ TreeBuilder::TreeVariant TreeBuilder::generateVariant(TreeSpecies species, uint3
         return base * d(rng);
         };
 
-    // ±20% âûñîòà
+    // Â±20% Ğ²Ñ‹ÑĞ¾Ñ‚Ğ°
     variant.params.trunkHeight = vary(variant.params.trunkHeight, 0.20f);
-    // ±2 âåòêè
+    // Â±2 Ğ²ĞµÑ‚ĞºĞ¸
     std::uniform_int_distribution<int> branchJitter(-2, 2);
     variant.params.branchCount = std::max(2, variant.params.branchCount + branchJitter(rng));
-    // ±15% äëèíà âåòîê
+    // Â±15% Ğ´Ğ»Ğ¸Ğ½Ğ° Ğ²ĞµÑ‚Ğ¾Ğº
     variant.params.branchLengthMin = vary(variant.params.branchLengthMin, 0.15f);
     variant.params.branchLengthMax = vary(variant.params.branchLengthMax, 0.15f);
-    // ±40% èçãèá
+    // Â±40% Ğ¸Ğ·Ğ³Ğ¸Ğ±
     variant.params.trunkBend = vary(variant.params.trunkBend, 0.40f);
-    // ±20% ğàäèóñ
+    // Â±20% Ñ€Ğ°Ğ´Ğ¸ÑƒÑ
     variant.params.trunkRadiusBase = vary(variant.params.trunkRadiusBase, 0.20f);
     variant.params.trunkRadiusTop = vary(variant.params.trunkRadiusTop, 0.20f);
 
-    // ±5% öâåòà
+    // Â±5% Ñ†Ğ²ĞµÑ‚Ğ°
     QVector3D baseFoliage, baseTrunk;
     colorsForSpecies(species, baseFoliage, baseTrunk);
     auto varyColor = [&rng](const QVector3D& c, float percent) {
@@ -444,7 +444,7 @@ std::vector<ContributorParticle> TreeBuilder::generateParticles(
 
     for (const auto& tip : mesh.branchTips) {
         ContributorParticleBlob blob;
-        // Êîíöû âåòîê óæå â ëîêàëüíûõ êîîğäèíàòàõ äåğåâà.
+        // ĞšĞ¾Ğ½Ñ†Ñ‹ Ğ²ĞµÑ‚Ğ¾Ğº ÑƒĞ¶Ğµ Ğ² Ğ»Ğ¾ĞºĞ°Ğ»ÑŒĞ½Ñ‹Ñ… ĞºĞ¾Ğ¾Ñ€Ğ´Ğ¸Ğ½Ğ°Ñ‚Ğ°Ñ… Ğ´ĞµÑ€ĞµĞ²Ğ°.
         blob.center = tip;
 
         const float typeRand = distType(rng);
@@ -461,7 +461,7 @@ std::vector<ContributorParticle> TreeBuilder::generateParticles(
             blob.particleCount = static_cast<int>(distCountLarge(rng));
         }
 
-        // Öâåò âàğèàíòà — óíèêàëüíûé äëÿ êàæäîãî âàğèàíòà
+        // Ğ¦Ğ²ĞµÑ‚ Ğ²Ğ°Ñ€Ğ¸Ğ°Ğ½Ñ‚Ğ° â€” ÑƒĞ½Ğ¸ĞºĞ°Ğ»ÑŒĞ½Ñ‹Ğ¹ Ğ´Ğ»Ñ ĞºĞ°Ğ¶Ğ´Ğ¾Ğ³Ğ¾ Ğ²Ğ°Ñ€Ğ¸Ğ°Ğ½Ñ‚Ğ°
         blob.color = variant.foliageColor;
 
         auto blobParticles = generateParticleBlob(blob, rng);
@@ -488,7 +488,7 @@ std::vector<std::vector<TreeBuilder::TreeVariant>> TreeBuilder::generateCache(in
             variants.push_back(generateVariant(species, seed));
         }
 
-        // ? ÄÎÁÀÂËÅÍÎ: ëîã ïàğàìåòğîâ êàæäîãî âàğèàíòà
+        // ? Ğ”ĞĞ‘ĞĞ’Ğ›Ğ•ĞĞ: Ğ»Ğ¾Ğ³ Ğ¿Ğ°Ñ€Ğ°Ğ¼ĞµÑ‚Ñ€Ğ¾Ğ² ĞºĞ°Ğ¶Ğ´Ğ¾Ğ³Ğ¾ Ğ²Ğ°Ñ€Ğ¸Ğ°Ğ½Ñ‚Ğ°
         for (int v = 0; v < variantsPerSpecies; ++v) {
             const auto& var = variants[v];
             qDebug() << "Species" << s

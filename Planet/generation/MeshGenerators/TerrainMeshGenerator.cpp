@@ -3,6 +3,7 @@
 
 TerrainMesh TerrainMeshGenerator::buildTerrainMesh(const HexSphereModel& model, const TerrainMeshOptions& options) {
     TerrainTessellator tt;
+    tt.directWrite = options.directWrite;
     tt.inset = options.inset;
     tt.smoothMaxDelta = options.smoothOneStep ? 1 : 0;
     tt.outerTrim = options.outerTrim;

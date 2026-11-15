@@ -4,6 +4,7 @@
 #include "model/HexSphereModel.h"
 
 struct TerrainMeshOptions {
+    bool directWrite = false;
     float heightStep = 0.05f;
     float inset = 0.25f;
     bool smoothOneStep = true;

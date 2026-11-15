@@ -5,8 +5,8 @@
 #include <random>
 #include <vector>
 
-#include "model/HexSphereModel.h"           // для Biome
-#include "model/simple3d_parser.hpp"        // для simple3d::Mesh
+#include "model/HexSphereModel.h"           // РґР»СЏ Biome
+#include "model/simple3d_parser.hpp"        // РґР»СЏ simple3d::Mesh
 #include "contributor/ContributorParticles.h"
 
 class TreeBuilder {
@@ -46,8 +46,8 @@ public:
     };
 
     struct TreeMeshData {
-        simple3d::Mesh wood;                  // ствол + ветки (positions/normals/texcoords/indices)
-        std::vector<QVector3D> branchTips;    // концы веток (локальные координаты дерева)
+        simple3d::Mesh wood;                  // СЃС‚РІРѕР» + РІРµС‚РєРё (positions/normals/texcoords/indices)
+        std::vector<QVector3D> branchTips;    // РєРѕРЅС†С‹ РІРµС‚РѕРє (Р»РѕРєР°Р»СЊРЅС‹Рµ РєРѕРѕСЂРґРёРЅР°С‚С‹ РґРµСЂРµРІР°)
     };
 
     struct TreeVariant {
@@ -55,37 +55,37 @@ public:
         TreeParams params;
         QVector3D foliageColor{ 0.20f, 0.60f, 0.20f };
         QVector3D trunkColor{ 0.40f, 0.25f, 0.15f };
-        float realisticScale = 1.0f;          // коэффициент (Oak=1.0, Apple=0.3, Tualang=1.6)
+        float realisticScale = 1.0f;          // РєРѕСЌС„С„РёС†РёРµРЅС‚ (Oak=1.0, Apple=0.3, Tualang=1.6)
         uint32_t seed = 0;
     };
 
-    // Выбор вида по биому и seed
+    // Р’С‹Р±РѕСЂ РІРёРґР° РїРѕ Р±РёРѕРјСѓ Рё seed
     static TreeSpecies selectSpecies(Biome biome, uint32_t seed);
 
-    // Базовые параметры для вида
+    // Р‘Р°Р·РѕРІС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ РґР»СЏ РІРёРґР°
     static TreeParams baseParamsForSpecies(TreeSpecies species);
 
-    // Базовые цвета для вида
+    // Р‘Р°Р·РѕРІС‹Рµ С†РІРµС‚Р° РґР»СЏ РІРёРґР°
     static void colorsForSpecies(TreeSpecies species,
         QVector3D& foliageOut,
         QVector3D& trunkOut);
 
-    // Реалистичный размер (коэффициент)
+    // Р РµР°Р»РёСЃС‚РёС‡РЅС‹Р№ СЂР°Р·РјРµСЂ (РєРѕСЌС„С„РёС†РёРµРЅС‚)
     static float realisticScaleForSpecies(TreeSpecies species);
 
-    // Сгенерировать вариант с вариативностью (±%)
+    // РЎРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РІР°СЂРёР°РЅС‚ СЃ РІР°СЂРёР°С‚РёРІРЅРѕСЃС‚СЊСЋ (В±%)
     static TreeVariant generateVariant(TreeSpecies species, uint32_t seed);
 
-    // Сгенерировать меш дерева по параметрам
+    // РЎРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РјРµС€ РґРµСЂРµРІР° РїРѕ РїР°СЂР°РјРµС‚СЂР°Рј
     static TreeMeshData generateMesh(const TreeParams& params);
 
-    // Сгенерировать частицы кроны.
-    // branchTips уже должны быть в локальном масштабе дерева (умножены на globalScale).
+    // РЎРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ С‡Р°СЃС‚РёС†С‹ РєСЂРѕРЅС‹.
+    // branchTips СѓР¶Рµ РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ РІ Р»РѕРєР°Р»СЊРЅРѕРј РјР°СЃС€С‚Р°Р±Рµ РґРµСЂРµРІР° (СѓРјРЅРѕР¶РµРЅС‹ РЅР° globalScale).
     static std::vector<ContributorParticle> generateParticles(
         const TreeMeshData& mesh,
         const TreeVariant& variant,
         float globalScale);
 
-    // Сгенерировать кэш: N вариантов для каждого вида (7 ? N)
+    // РЎРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РєСЌС€: N РІР°СЂРёР°РЅС‚РѕРІ РґР»СЏ РєР°Р¶РґРѕРіРѕ РІРёРґР° (7 ? N)
     static std::vector<std::vector<TreeVariant>> generateCache(int variantsPerSpecies);
 };

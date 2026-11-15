@@ -11,6 +11,7 @@ public:
     virtual void stageTerrainParams(const TerrainParams& params) = 0;
     virtual void stageGeneratorByIndex(int idx) = 0;
     virtual void stageSubdivisionLevel(int level) = 0;
+    virtual void stageGeometry(SphereGeometry geometry) = 0;
     virtual void rebuildTerrainFromInputs() = 0;
     virtual TerrainSnapshot captureTerrainSnapshot() const = 0;
     virtual void projectTerrainSnapshot(const TerrainSnapshot& snapshot) = 0;
@@ -24,6 +25,7 @@ concept TerrainBackend = requires(T& backend, ITerrainSceneBridge* bridge, const
     { backend.setTerrainParams(params) } -> std::same_as<void>;
     { backend.setGeneratorByIndex(idx) } -> std::same_as<void>;
     { backend.setSubdivisionLevel(level) } -> std::same_as<void>;
+    { backend.setGeometry(SphereGeometry::RecursiveCentroid) } -> std::same_as<void>;
     { backend.regenerateTerrain() } -> std::same_as<TerrainRegenerationResult>;
     { backend.currentTerrainSnapshot() } -> std::same_as<const TerrainSnapshot*>;
 };

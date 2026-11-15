@@ -11,10 +11,10 @@ enum class ResourceType : uint8_t {
 };
 
 struct PlayerResources {
-    // Количество каждого типа руды
+    // РљРѕР»РёС‡РµСЃС‚РІРѕ РєР°Р¶РґРѕРіРѕ С‚РёРїР° СЂСѓРґС‹
     std::unordered_map<ResourceType, int> resources;
 
-    // Конструктор с начальными значениями
+    // РљРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ СЃ РЅР°С‡Р°Р»СЊРЅС‹РјРё Р·РЅР°С‡РµРЅРёСЏРјРё
     PlayerResources() {
         resources[ResourceType::Iron] = 0;
         resources[ResourceType::Copper] = 0;
@@ -22,30 +22,30 @@ struct PlayerResources {
         resources[ResourceType::Diamond] = 0;
     }
 
-    // Добавить ресурс
+    // Р”РѕР±Р°РІРёС‚СЊ СЂРµСЃСѓСЂСЃ
     void addResource(ResourceType type, int amount) {
         resources[type] += amount;
     }
 
-    // Получить количество ресурса
+    // РџРѕР»СѓС‡РёС‚СЊ РєРѕР»РёС‡РµСЃС‚РІРѕ СЂРµСЃСѓСЂСЃР°
     int getResource(ResourceType type) const {
         auto it = resources.find(type);
         return it != resources.end() ? it->second : 0;
     }
 
-    // Проверить, есть ли ресурс в нужном количестве
+    // РџСЂРѕРІРµСЂРёС‚СЊ, РµСЃС‚СЊ Р»Рё СЂРµСЃСѓСЂСЃ РІ РЅСѓР¶РЅРѕРј РєРѕР»РёС‡РµСЃС‚РІРµ
     bool hasResource(ResourceType type, int amount) const {
         return getResource(type) >= amount;
     }
 
-    // Потратить ресурс
+    // РџРѕС‚СЂР°С‚РёС‚СЊ СЂРµСЃСѓСЂСЃ
     bool spendResource(ResourceType type, int amount) {
         if (!hasResource(type, amount)) return false;
         resources[type] -= amount;
         return true;
     }
 
-    // Получить строковое представление
+    // РџРѕР»СѓС‡РёС‚СЊ СЃС‚СЂРѕРєРѕРІРѕРµ РїСЂРµРґСЃС‚Р°РІР»РµРЅРёРµ
     QString toString() const {
         return QString("Iron: %1, Copper: %2, Gold: %3, Diamond: %4")
             .arg(getResource(ResourceType::Iron))
@@ -55,7 +55,7 @@ struct PlayerResources {
     }
 };
 
-// Вспомогательная функция для конвертации OreType в ResourceType
+// Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅР°СЏ С„СѓРЅРєС†РёСЏ РґР»СЏ РєРѕРЅРІРµСЂС‚Р°С†РёРё OreType РІ ResourceType
 inline ResourceType oreTypeToResourceType(OreType oreType) {
     switch (oreType) {
     case OreType::Iron: return ResourceType::Iron;
@@ -66,7 +66,7 @@ inline ResourceType oreTypeToResourceType(OreType oreType) {
     }
 }
 
-// Вспомогательная функция для получения названия ресурса
+// Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅР°СЏ С„СѓРЅРєС†РёСЏ РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ РЅР°Р·РІР°РЅРёСЏ СЂРµСЃСѓСЂСЃР°
 inline QString resourceTypeName(ResourceType type) {
     switch (type) {
     case ResourceType::Iron: return "Iron";

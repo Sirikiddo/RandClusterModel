@@ -80,9 +80,10 @@ private:
 };
 
 inline bool sameTerrainSnapshot(const TerrainSnapshot& a, const TerrainSnapshot& b) {
-    if (a.subdivisionLevel != b.subdivisionLevel || a.generatorIndex != b.generatorIndex
+    if (a.geometry != b.geometry || a.subdivisionLevel != b.subdivisionLevel || a.generatorIndex != b.generatorIndex
         || a.params.seed != b.params.seed || a.params.scale != b.params.scale
-        || a.params.seaLevel != b.params.seaLevel || a.cells.size() != b.cells.size()) return false;
+        || a.params.seaLevel != b.params.seaLevel || a.cells.size() != b.cells.size()
+        || a.treeCells != b.treeCells || a.riverCells != b.riverCells) return false;
     for (size_t i = 0; i < a.cells.size(); ++i) {
         const auto& x = a.cells[i]; const auto& y = b.cells[i];
         if (x.height != y.height || x.biome != y.biome || x.temperature != y.temperature

@@ -1,4 +1,5 @@
 #include "controllers/HexSphereSceneController.h"
+#include "model/IcosahedralGrid.h"
 
 #include <QtGlobal>
 #include <algorithm>
@@ -122,6 +123,12 @@ void HexSphereSceneController::rebuildTerrainFromInputs() {
     regenerateTerrain();
 }
 
+void HexSphereSceneController::stageGeometry(SphereGeometry geometry) {
+    if (geometry_ == geometry) return;
+    geometry_ = geometry;
+    topologyDirty_ = true;
+}
+
 void HexSphereSceneController::setSmoothOneStep(bool on) {
     smoothOneStep_ = on;
     selectionOutlineDirty_ = true;
@@ -137,7 +144,7 @@ void HexSphereSceneController::setOutlineBias(float value) {
 }
 
 void HexSphereSceneController::rebuildTopology() {
-    model_.setTopology(buildHexSphereTopology(L_));
+    model_.setTopology(buildHexSphereTopology(L_, geometry_));
     model_.setBaseRadius(HexSphereModel::kDefaultBaseRadius);
     model_.setHeightStep(autoHeightStep());
     model_.setWaterSurfaceLevel(HexSphereModel::kDefaultWaterSurfaceLevel);
@@ -287,6 +294,7 @@ std::vector<float> HexSphereSceneController::buildOutlineVerticesForCells(const 
 
 TerrainSnapshot HexSphereSceneController::captureTerrainSnapshot() const {
     TerrainSnapshot snapshot;
+    snapshot.geometry = geometry_;
     snapshot.subdivisionLevel = L_;
     snapshot.generatorIndex = generatorIndex_;
     snapshot.params = genParams_;
@@ -336,12 +344,13 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
     QElapsedTimer timer;
     timer.start();
     const bool topologyChanged =
-        L_ != snapshot.subdivisionLevel || model_.cells().empty();
+        L_ != snapshot.subdivisionLevel || model_.geometry() != snapshot.geometry || model_.cells().empty();
 
     generatorIndex_ = normalizeTerrainGeneratorIndex(snapshot.generatorIndex);
     generator_ = createTerrainGeneratorByIndex(generatorIndex_);
     genParams_ = snapshot.params;
     L_ = snapshot.subdivisionLevel;
+    geometry_ = snapshot.geometry;
     topologyDirty_ = false;
 
     // Terrain snapshots produced for a new seed keep the same subdivision.
@@ -349,7 +358,8 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
     // When the snapshot carries its own immutable topology, adopt it instead of
     // rebuilding the same level a second time.
     if (topologyChanged) {
-        if (snapshot.topology && snapshot.topology->subdivisionLevel == snapshot.subdivisionLevel) {
+        if (snapshot.topology && snapshot.topology->subdivisionLevel == snapshot.subdivisionLevel
+            && snapshot.topology->geometry == snapshot.geometry) {
             if (model_.topology() != snapshot.topology || model_.cells().empty()) {
                 model_.setTopology(snapshot.topology);
             }
@@ -440,6 +450,7 @@ void HexSphereSceneController::updateTerrainMesh() {
 
 void HexSphereSceneController::buildTerrainMeshFromCurrentCoast() {
     TerrainMeshOptions options;
+    options.directWrite = directMeshWrite_;
     options.heightStep = heightStep_;
     options.inset = stripInset_;
     options.smoothOneStep = smoothOneStep_;
@@ -1496,6 +1507,10 @@ void HexSphereSceneController::rebuildPickTris() {
 }
 
 int HexSphereSceneController::findCellByPosition(const QVector3D& position) const {
+    if (geometry_ == SphereGeometry::GlobalVoronoi && !position.isNull()) {
+        const IcosahedralGrid grid(1 << L_);
+        return static_cast<int>(grid.id(grid.locate({position.x(), position.y(), position.z()})));
+    }
     const auto& cells = model_.cells();
     const auto& dual = model_.dualVerts();
 

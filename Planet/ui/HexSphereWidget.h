@@ -35,6 +35,8 @@ public:
 
 public slots:
     void setSubdivisionLevel(int L);
+    void setGeometryIndex(int index);
+    void setMeshWriterIndex(int index);
     void resetView();
     void clearSelection();
     void setTerrainParams(const TerrainParams& p);

@@ -17,6 +17,7 @@ struct TerrainCellSnapshot {
 };
 
 struct TerrainSnapshot {
+    SphereGeometry geometry = SphereGeometry::RecursiveCentroid;
     int subdivisionLevel = kDefaultTerrainSubdivisionLevel;
     int generatorIndex = kDefaultTerrainGeneratorIndex;
     TerrainParams params = defaultTerrainParams();

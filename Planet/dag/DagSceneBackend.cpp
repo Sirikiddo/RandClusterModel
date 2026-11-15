@@ -50,7 +50,8 @@ namespace {
     };
 
     HexSphereModel buildModelFromSnapshot(const TerrainSnapshot& snapshot) {
-        if (!snapshot.topology || snapshot.topology->subdivisionLevel != snapshot.subdivisionLevel) {
+        if (!snapshot.topology || snapshot.topology->subdivisionLevel != snapshot.subdivisionLevel
+            || snapshot.topology->geometry != snapshot.geometry) {
             throw std::runtime_error("TerrainSnapshot is missing a matching immutable topology");
         }
         HexSphereModel model(snapshot.topology);
@@ -662,6 +663,10 @@ struct DagSceneBackend::Impl {
     }
 
     SceneDagResult rebuild(const SceneDagRequest& request) {
+        if (request.terrain.topology && (request.terrain.topology->geometry != request.terrain.geometry
+            || request.terrain.topology->subdivisionLevel != request.terrain.subdivisionLevel
+            || request.terrain.topology->cells.size() != request.terrain.cells.size()))
+            throw std::invalid_argument("Scene snapshot topology does not match its grid/state");
         const std::size_t planCacheHitsBefore = engine.plan_cache_hits();
         const std::size_t planCacheMissesBefore = engine.plan_cache_misses();
         const std::string terrainToken = terrainPayloads.intern(request.terrain, sameTerrainSnapshot);

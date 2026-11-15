@@ -79,6 +79,8 @@ public:
     Response executeCommand(SceneCommand command);
 
     Response setSubdivisionLevel(int L);
+    Response setGeometry(SphereGeometry geometry);
+    Response setDirectMeshWrite(bool enabled);
     Response resetView();
     Response clearSelection();
     Response setTerrainParams(const TerrainParams& p);
@@ -109,6 +111,7 @@ public:
     void stageTerrainParams(const TerrainParams& params) override;
     void stageGeneratorByIndex(int idx) override;
     void stageSubdivisionLevel(int level) override;
+    void stageGeometry(SphereGeometry geometry) override;
     void rebuildTerrainFromInputs() override;
     TerrainSnapshot captureTerrainSnapshot() const override;
     void projectTerrainSnapshot(const TerrainSnapshot& snapshot) override;

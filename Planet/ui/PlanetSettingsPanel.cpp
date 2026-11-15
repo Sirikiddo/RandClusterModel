@@ -132,12 +132,14 @@ PlanetSettingsPanel::PlanetSettingsPanel(QWidget* parent)
     relativeHeightBox_->setSingleStep(0.05);
     relativeHeightBox_->setDecimals(2);
     relativeHeightBox_->setValue(defaultWaterParams.shellWaveAmplitude);
+    relativeHeightBox_->setToolTip("Ocean wave height keeps the L2 reference scale when terrain subdivision changes. Shallow water still limits wave height.");
 
     primaryWaveDensityBox_ = new QDoubleSpinBox(this);
     primaryWaveDensityBox_->setRange(1.0, 36.0);
     primaryWaveDensityBox_->setSingleStep(1.0);
     primaryWaveDensityBox_->setDecimals(1);
     primaryWaveDensityBox_->setValue(defaultWaterParams.shellWaveFrequency);
+    primaryWaveDensityBox_->setToolTip("Wave density per fixed L2 reference cell, independent of the current terrain subdivision.");
 
     waveSpeedBox_ = new QDoubleSpinBox(this);
     waveSpeedBox_->setRange(0.0, 1000.0);
@@ -165,7 +167,7 @@ PlanetSettingsPanel::PlanetSettingsPanel(QWidget* parent)
     depthForm->addRow("Depth optical", depthOpticalDensityBox_);
     depthForm->addRow("Depth alpha", depthAlphaDensityBox_);
     depthForm->addRow("Relative height/area", relativeHeightBox_);
-    depthForm->addRow("Primary waves/hex", primaryWaveDensityBox_);
+    depthForm->addRow("Waves/reference hex", primaryWaveDensityBox_);
     depthForm->addRow("Octave detail", octaveDetailBox_);
     depthForm->addRow("Wave speed", waveSpeedBox_);
     waveGeometryGroup_ = new QGroupBox("Wave geometry");

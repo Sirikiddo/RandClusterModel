@@ -31,12 +31,12 @@ void main() {
     
     float dist = length(uViewPos - aPos);
     float pointSize = aSize * (300.0 / dist);
-    gl_PointSize = clamp(pointSize, 8.0, 45.0);
+    gl_PointSize = clamp(pointSize, 1.0, 45.0);
     
     gl_Position = uMVP * vec4(aPos, 1.0);
     
     float distFactor = clamp(1.0 - dist * 0.3, 0.4, 0.9);
-    vAlpha = distFactor;
+    vAlpha = distFactor * smoothstep(0.0, 1.0, pointSize);
 }
 )";
 
@@ -224,7 +224,7 @@ void ParticleRenderer::render(const QMatrix4x4& mvp, const QMatrix4x4& view, con
     glDisable(GL_BLEND);
 }
 
-void ParticleRenderer::update(float deltaTime, const ContributorWindField& wind, const QVector3D& treeCenter) {
+void ParticleRenderer::update(float deltaTime, const ContributorWindField& wind) {
     if (!initialized_ || particleCount_ == 0) return;
 
     deltaTime = std::min(deltaTime, 0.1f);
@@ -238,38 +238,8 @@ void ParticleRenderer::update(float deltaTime, const ContributorWindField& wind,
         return;
     }
 
-    // ========== СРЕДНЯЯ ЖИВОСТЬ ==========
-    const float stiffness = 11.0f;   // было 15.0 — чуть мягче
-    const float damping = 4.5f;      // было 6.0 — чуть меньше затухания
-    // ======================================
-
     for (int i = 0; i < particleCount_; ++i) {
-        ContributorParticle& p = particles[i];
-
-        float seed = p.phase + p.restPosition.y() * 1.7f + p.restPosition.x() * 2.3f + p.restPosition.z() * 3.1f;
-
-        float heightFactor = (p.restPosition.y() - treeCenter.y()) / 5.0f;
-        heightFactor = std::clamp(heightFactor, 0.3f, 1.2f);
-
-        // ========== СРЕДНИЕ МНОЖИТЕЛИ ==========
-        float gust = std::sin(time_ * (wind.gustSpeed * 0.6f + seed * 0.3f) + seed) * wind.gustStrength * 1.2f;
-        float turbulenceX = std::sin(time_ * (2.3f + seed * 0.5f) + p.restPosition.y() * 1.5f) * wind.turbulence * 1.1f;
-        float turbulenceZ = std::cos(time_ * (1.7f + seed * 0.7f) + p.restPosition.x() * 1.2f) * wind.turbulence * 1.1f;
-        // ======================================
-
-        QVector3D windForce = wind.direction * (wind.strength + gust) * heightFactor;
-        windForce.setX(windForce.x() + turbulenceX);
-        windForce.setZ(windForce.z() + turbulenceZ);
-        windForce *= p.windWeight;
-
-        QVector3D springForce = (p.restPosition - p.position) * stiffness;
-        QVector3D dampingForce = -p.velocity * damping;
-
-        QVector3D acceleration = windForce + springForce + dampingForce;
-
-        p.velocity += acceleration * deltaTime;
-        p.position += p.velocity * deltaTime;
-        p.velocity *= 0.99f;
+        advanceContributorParticle(particles[i], wind, time_, deltaTime);
     }
 
     vbo_.unmap();
