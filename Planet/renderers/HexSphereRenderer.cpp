@@ -9,12 +9,15 @@
 #include <QSet>
 #include <QTextStream>
 
-#include <QOpenGLVertexArrayObject> 
+#include <QOpenGLVertexArrayObject>
+#include <QtConcurrentRun>
+#include <QThreadPool>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <future>
 #include <utility>
+#include <vector>
 
 #include "contributor/ContributorAsset.h"
 #include "core/AppViewConfig.h"
@@ -621,10 +624,17 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
     // ===================================================================
     // ================ ЗАГРУЗКА КЭША ПРОЦЕДУРНЫХ ДЕРЕВЬЕВ ================
     // ===================================================================
+    qint64 treeParseMs = 0;
+    size_t treeModelCount = 0;
     {
         ContributorAsset treeAsset = buildContributorAsset();
 
-        auto loadMeshAsModel = [](const simple3d::Mesh& sourceMesh,
+        // Разбор меша в ModelHandler — чистый CPU: копирование вершин/индексов
+        // и аллокации без OpenGL. Все варианты видов независимы и пишут каждый
+        // в свой слот, поэтому выполняем их параллельно через общий пул Qt
+        // (тот же приём, что в TerrainTessellator), сохраняя порядок по
+        // (species, variant). Загрузка на GPU вынесена ниже, на GL-поток.
+        auto buildTreeModel = [](const simple3d::Mesh& sourceMesh,
             const QString& debugName) -> std::shared_ptr<ModelHandler> {
                 if (sourceMesh.positions.empty() || sourceMesh.indices.empty()) {
                     return nullptr;
@@ -639,26 +649,35 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
 
         proceduralTreeModelsBySpecies.clear();
         proceduralTreeModelsBySpecies.resize(treeAsset.speciesMeshes.size());
-
+        std::vector<QFuture<void>> parseFutures;
         for (size_t s = 0; s < treeAsset.speciesMeshes.size(); ++s) {
-            proceduralTreeModelsBySpecies[s].resize(treeAsset.speciesMeshes[s].size());
+            auto& speciesSlot = proceduralTreeModelsBySpecies[s];
+            speciesSlot.assign(treeAsset.speciesMeshes[s].size(), nullptr);
             for (size_t v = 0; v < treeAsset.speciesMeshes[s].size(); ++v) {
                 const QString name = QString("tree_s%1_v%2").arg(s).arg(v);
-                auto model = loadMeshAsModel(treeAsset.speciesMeshes[s][v], name);
-                if (model) {
-                    model->uploadToGPU();
-                }
-                proceduralTreeModelsBySpecies[s][v] = model;
+                const simple3d::Mesh& source = treeAsset.speciesMeshes[s][v];
+                parseFutures.push_back(QtConcurrent::run(
+                    QThreadPool::globalInstance(),
+                    [&buildTreeModel, &source, name, &speciesSlot, v]() {
+                        speciesSlot[v] = buildTreeModel(source, name);
+                    }));
             }
-            qDebug() << "Loaded species" << s
-                << "variants:" << treeAsset.speciesMeshes[s].size();
+        }
+
+        QElapsedTimer parseTimer;
+        parseTimer.start();
+        for (QFuture<void>& future : parseFutures) {
+            future.waitForFinished();
+        }
+        treeParseMs = parseTimer.elapsed();
+        for (const auto& species : proceduralTreeModelsBySpecies) {
+            treeModelCount += static_cast<size_t>(std::count_if(
+                species.begin(), species.end(),
+                [](const std::shared_ptr<ModelHandler>& model) { return model != nullptr; }));
         }
 
         treeParticlesBySpecies = std::move(treeAsset.speciesParticles);
         speciesVariants = std::move(treeAsset.speciesVariants);
-
-        qDebug() << "Loaded tree particle templates:"
-            << treeParticlesBySpecies.size() << "species";
     }
     // ===================================================================
 
@@ -667,6 +686,23 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
     }
 
     owner_->makeCurrent();
+
+    // Деревья разобраны параллельно (CPU) выше; их загрузка на GPU обязана
+    // идти строго на GL-потоке и последовательно, поэтому выполнена здесь,
+    // после makeCurrent(), а не внутри цикла разбора.
+    QElapsedTimer treeUploadTimer;
+    treeUploadTimer.start();
+    for (auto& species : proceduralTreeModelsBySpecies) {
+        for (auto& model : species) {
+            if (model) {
+                model->uploadToGPU();
+            }
+        }
+    }
+    const qint64 treeUploadMs = treeUploadTimer.elapsed();
+    qDebug().nospace() << "Procedural tree models ready: " << treeModelCount
+        << " meshes, parse " << treeParseMs << " ms (parallel), upload "
+        << treeUploadMs << " ms";
 
     auto finishModelUpload = [](const char* label, auto& model, auto& parseFuture) {
         const auto [ok, parseMs] = parseFuture.get();
