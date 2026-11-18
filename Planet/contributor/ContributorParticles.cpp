@@ -122,8 +122,9 @@ void advanceContributorParticle(ContributorParticle& p,
         * wind.turbulence * 1.1f;
     QVector3D localForce = wind.direction * (wind.strength + gust) * heightFactor;
     localForce += QVector3D(turbulenceX, 0.0f, turbulenceZ);
+    constexpr float windGain = 3.5f;
     const QVector3D windForce = p.motionRotation.rotatedVector(localForce)
-        * (p.windWeight * p.motionScale);
+        * (p.windWeight * p.motionScale * windGain);
     const QVector3D acceleration = windForce + (p.restPosition - p.position) * 11.0f
         - p.velocity * 4.5f;
     p.velocity += acceleration * deltaTime;

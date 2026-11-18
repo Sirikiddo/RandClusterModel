@@ -19,6 +19,7 @@
 #include "contributor/ContributorAsset.h"
 #include "core/AppViewConfig.h"
 #include "resources/HexSphereWidget_shaders.h"
+#include "textures/ProceduralTexture.h"
 #include "model/SurfacePlacement.h"
 #include "renderers/EntityRenderer.h"
 #include "renderers/PlanetSurfaceAtlasPass.h"
@@ -139,6 +140,35 @@ namespace {
     // Формат вершины реки совпадает с атрибутами террейна:
     // позиция (3) + берег/глубина (3) + нормаль (3) + руда (2).
     constexpr size_t kRiverFloatsPerVertex = 11u;
+    constexpr float kRockLightOrbitSpeed = 0.45f;
+
+    constexpr float kRockAlbedoR = 0.46f;   // базовый цвет камня
+    constexpr float kRockAlbedoG = 0.45f;
+    constexpr float kRockAlbedoB = 0.43f;
+
+    constexpr float kRockUVTiling = 1.0f;        // 1.0 — текстура на плитку целиком
+    constexpr float kRockNoiseScale = 6.0f;      // без изменений
+    constexpr float kRockNormalStrength = 0.10f; // было 0.16 — сила рельефа в кадре
+    constexpr float kRockParallax = 0.0f;
+    constexpr float kRockRoughness = 0.88f;      // было 0.85 — чуть матовее, меньше блика
+    constexpr int   kRockTextureSize = 512;
+    constexpr float kRockBakeNormalStrength = 0.10f; // было 0.16 — печём нормали мягче
+
+    // -------- Маска второго материала (мох) --------
+    constexpr float kMossRoughness = 0.95f;   // мох матовый, блика почти нет
+    constexpr float kMaskScale = 4.0f;        // частота пятен маски
+    constexpr float kMaskAmount = 0.0f;       // 0 — маски нет, чистый камень
+    constexpr float kMaskSlope = 0.80f;       // порог "смотрит наружу" (0.7 — больше мха, 0.9 — меньше)
+
+    constexpr float kRockTerrainStrength = 0.65f;       // насколько камень заменяет клетку (1 — полностью)
+    constexpr float kRockTerrainNormalStrength = 1.0f;  // множитель к УЖЕ запечённой силе (1 = как запечено)
+    constexpr float kRockTerrainUVScale = 4.0f;         // тайлов на единицу мира (радиус планеты = 1)
+
+    float envFloat(const char* name, float fallback) {
+        bool ok = false;
+        const double value = qEnvironmentVariable(name).toDouble(&ok);
+        return ok ? static_cast<float>(value) : fallback;
+    }
 }
 
 HexSphereRenderer::HexSphereRenderer(QOpenGLWidget* owner)
@@ -194,6 +224,15 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (progFactory_) gl_->glDeleteProgram(progFactory_);
     if (progSteam_)   gl_->glDeleteProgram(progSteam_);
     if (progRiverLine_) gl_->glDeleteProgram(progRiverLine_);
+    if (progRock_)    gl_->glDeleteProgram(progRock_);
+    if (rockAlbedoTex_)  gl_->glDeleteTextures(1, &rockAlbedoTex_);
+    if (rockNormalTex_)  gl_->glDeleteTextures(1, &rockNormalTex_);
+    if (rockRoughTex_)   gl_->glDeleteTextures(1, &rockRoughTex_);
+    if (rockHeightTex_)  gl_->glDeleteTextures(1, &rockHeightTex_);
+    if (rockAlbedoArrayTex_) gl_->glDeleteTextures(1, &rockAlbedoArrayTex_);
+    if (rockNormalArrayTex_) gl_->glDeleteTextures(1, &rockNormalArrayTex_);
+    if (mossAlbedoTex_)  gl_->glDeleteTextures(1, &mossAlbedoTex_);
+    if (mossNormalTex_)  gl_->glDeleteTextures(1, &mossNormalTex_);
 
     if (vaoSel_ != 0)      gl_->glDeleteVertexArrays(1, &vaoSel_);
     if (vaoWater_ != 0)    gl_->glDeleteVertexArrays(1, &vaoWater_);
@@ -208,6 +247,7 @@ HexSphereRenderer::~HexSphereRenderer() {
     if (vboTerrainCol_)  gl_->glDeleteBuffers(1, &vboTerrainCol_);
     if (vboTerrainNorm_) gl_->glDeleteBuffers(1, &vboTerrainNorm_);
     if (vboTerrainOre_)  gl_->glDeleteBuffers(1, &vboTerrainOre_);
+    if (vboTerrainSurface_) gl_->glDeleteBuffers(1, &vboTerrainSurface_);
     if (iboTerrain_)     gl_->glDeleteBuffers(1, &iboTerrain_);
     if (vboSel_)         gl_->glDeleteBuffers(1, &vboSel_);
     if (vboPath_)        gl_->glDeleteBuffers(1, &vboPath_);
@@ -317,6 +357,48 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
     progSteam_ = makeProgram(VS_STEAM, FS_STEAM);
     progRiverLine_ = makeProgram(VS_RIVER_CORE, FS_RIVER_CORE, GS_RIVER_CORE);
 
+    if (defaultAppViewConfig().isContributorMode()) {
+        progRock_ = makeProgram(VS_ROCK, FS_ROCK);
+        if (progRock_ == 0) {
+            qWarning() << "Rock sandbox shader failed to build; falling back to the model shader";
+        }
+        else {
+            gl_->glUseProgram(progRock_);
+            uMVP_Rock_ = gl_->glGetUniformLocation(progRock_, "uMVP");
+            uModel_Rock_ = gl_->glGetUniformLocation(progRock_, "uModel");
+            uLightDir_Rock_ = gl_->glGetUniformLocation(progRock_, "uLightDir");
+            uViewPos_Rock_ = gl_->glGetUniformLocation(progRock_, "uViewPos");
+            uAlbedo_Rock_ = gl_->glGetUniformLocation(progRock_, "uAlbedo");
+            uUVTiling_Rock_ = gl_->glGetUniformLocation(progRock_, "uUVTiling");
+            uNoiseScale_Rock_ = gl_->glGetUniformLocation(progRock_, "uNoiseScale");
+            uNormalStrength_Rock_ = gl_->glGetUniformLocation(progRock_, "uNormalStrength");
+            uParallaxScale_Rock_ = gl_->glGetUniformLocation(progRock_, "uParallaxScale");
+            uRoughness_Rock_ = gl_->glGetUniformLocation(progRock_, "uRoughness");
+            uNormalFlipY_Rock_ = gl_->glGetUniformLocation(progRock_, "uNormalFlipY");
+            uDebugMode_Rock_ = gl_->glGetUniformLocation(progRock_, "uDebugMode");
+            uUseBaked_Rock_ = gl_->glGetUniformLocation(progRock_, "uUseBaked");
+            uAlbedoMap_Rock_ = gl_->glGetUniformLocation(progRock_, "uAlbedoMap");
+            uNormalMap_Rock_ = gl_->glGetUniformLocation(progRock_, "uNormalMap");
+            uRoughMap_Rock_ = gl_->glGetUniformLocation(progRock_, "uRoughMap");
+            uHeightMap_Rock_ = gl_->glGetUniformLocation(progRock_, "uHeightMap");
+            uBakeNormalStrength_Rock_ = gl_->glGetUniformLocation(progRock_, "uBakeNormalStrength");
+            uMossAlbedoMap_Rock_ = gl_->glGetUniformLocation(progRock_, "uMossAlbedoMap");
+            uMossNormalMap_Rock_ = gl_->glGetUniformLocation(progRock_, "uMossNormalMap");
+            uMossRoughness_Rock_ = gl_->glGetUniformLocation(progRock_, "uMossRoughness");
+            uMaskScale_Rock_ = gl_->glGetUniformLocation(progRock_, "uMaskScale");
+            uMaskAmount_Rock_ = gl_->glGetUniformLocation(progRock_, "uMaskAmount");
+            uMaskSlope_Rock_ = gl_->glGetUniformLocation(progRock_, "uMaskSlope");
+
+            gl_->glUniform1i(uAlbedoMap_Rock_, 0);
+            gl_->glUniform1i(uNormalMap_Rock_, 1);
+            gl_->glUniform1i(uRoughMap_Rock_, 2);
+            gl_->glUniform1i(uHeightMap_Rock_, 3);
+            gl_->glUniform1i(uMossAlbedoMap_Rock_, 4);
+            gl_->glUniform1i(uMossNormalMap_Rock_, 5);
+        }
+    }
+    ensureRockTextures();
+
     if (progWire_ == 0 || progTerrain_ == 0 || progSel_ == 0 || progWater_ == 0
         || progModel_ == 0 || progFactory_ == 0 || progSteam_ == 0
         || progRiverLine_ == 0) {
@@ -349,12 +431,57 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
     uRiverDepthTolerance_ = gl_->glGetUniformLocation(progTerrain_, "uRiverDepthTolerance");
     uSceneDepthTex_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uSceneDepthTex");
     waterLocationsTerrain_.cache(gl_, progTerrain_);
+    // Assign distinct sampler units before the first terrain draw, even without rivers.
+    gl_->glUniform1i(uSceneDepthTex_Terrain_, 1);
+    gl_->glUniform1i(waterLocationsTerrain_.envMap, 5);
 
     gl_->glUseProgram(progRiverLine_);
     uMVP_RiverLine_ = gl_->glGetUniformLocation(progRiverLine_, "uMVP");
     uViewPos_RiverLine_ = gl_->glGetUniformLocation(progRiverLine_, "uViewPos");
     uViewportSize_RiverLine_ = gl_->glGetUniformLocation(progRiverLine_, "uViewportSize");
     uWidthPx_RiverLine_ = gl_->glGetUniformLocation(progRiverLine_, "uWidthPx");
+
+    gl_->glUseProgram(progTerrain_);
+    uRockAlbedo_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uRockAlbedoMap");
+    uRockNormal_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uRockNormalMap");
+    uRockUVScale_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uRockUVScale");
+    uRockNormalStrength_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uRockNormalStrength");
+    uRockStrength_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uRockStrength");
+    uRockAppearanceSeed_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uRockAppearanceSeed");
+
+    gl_->glUniform1i(uRockAlbedo_Terrain_, 6);
+    gl_->glUniform1i(uRockNormal_Terrain_, 7);
+    gl_->glUniform1f(uRockUVScale_Terrain_, kRockTerrainUVScale);
+    gl_->glUniform1f(uRockNormalStrength_Terrain_, kRockTerrainNormalStrength);
+    gl_->glUniform1f(uRockStrength_Terrain_, kRockTerrainStrength);
+
+    // -------- Мох на планете --------
+    uMossAlbedo_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uMossAlbedoMap");
+    uMossNormal_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uMossNormalMap");
+    uMossAmount_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uMossAmount");
+    uMossScale_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uMossScale");
+    uMossPatchScale_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uMossPatchScale");
+    uMossCoverage_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uMossCoverage");
+    uMossSlope_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uMossSlope");
+    uMossNormalStrength_Terrain_ = gl_->glGetUniformLocation(progTerrain_, "uMossNormalStrength");
+
+    gl_->glUniform1i(uMossAlbedo_Terrain_, 8);
+    gl_->glUniform1i(uMossNormal_Terrain_, 9);
+
+    const float kMossAmount = envFloat("MOSS_AMOUNT", 0.85f);
+    const float kMossScale = envFloat("MOSS_SCALE", 6.0f);
+    const float kMossPatchScale = envFloat("MOSS_PATCH_SCALE", 9.0f);
+    const float kMossCoverage = envFloat("MOSS_COVERAGE", 0.30f);
+    const float kMossSlope = envFloat("MOSS_SLOPE", 0.75f);
+    const float kMossNormalStrength = envFloat("MOSS_NORMAL", 0.6f);
+
+    gl_->glUniform1f(uMossAmount_Terrain_, kMossAmount);
+    gl_->glUniform1f(uMossScale_Terrain_, kMossScale);
+    gl_->glUniform1f(uMossPatchScale_Terrain_, kMossPatchScale);
+    gl_->glUniform1f(uMossCoverage_Terrain_, kMossCoverage);
+    gl_->glUniform1f(uMossSlope_Terrain_, kMossSlope);
+    gl_->glUniform1f(uMossNormalStrength_Terrain_, kMossNormalStrength);
+    // --------------------------------
 
     gl_->glUseProgram(progSel_);
     uMVP_Sel_ = gl_->glGetUniformLocation(progSel_, "uMVP");
@@ -405,6 +532,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
 
     gl_->glUseProgram(0);
 
+    gl_->glGenBuffers(1, &vboTerrainSurface_);
     gl_->glGenBuffers(1, &vboTerrainPos_);
     gl_->glGenBuffers(1, &vboTerrainCol_);
     gl_->glGenBuffers(1, &vboTerrainNorm_);
@@ -496,7 +624,6 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
     {
         ContributorAsset treeAsset = buildContributorAsset();
 
-        // ---- 1. Модели стволов: 7 видов × N вариантов ----
         auto loadMeshAsModel = [](const simple3d::Mesh& sourceMesh,
             const QString& debugName) -> std::shared_ptr<ModelHandler> {
                 if (sourceMesh.positions.empty() || sourceMesh.indices.empty()) {
@@ -527,10 +654,7 @@ void HexSphereRenderer::initialize(QOpenGLWidget* owner,
                 << "variants:" << treeAsset.speciesMeshes[s].size();
         }
 
-        // ---- 2. Шаблоны частиц: 7 видов × N вариантов ----
         treeParticlesBySpecies = std::move(treeAsset.speciesParticles);
-
-        // ---- 3. Метаданные вариантов (цвета/масштаб/параметры) ----
         speciesVariants = std::move(treeAsset.speciesVariants);
 
         qDebug() << "Loaded tree particle templates:"
@@ -665,6 +789,8 @@ void HexSphereRenderer::uploadTerrainInternal(const TerrainMesh& mesh, GLenum us
     gl_->glBufferData(GL_ARRAY_BUFFER, mesh.norm.size() * sizeof(float), mesh.norm.data(), usage);
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainOre_);
     gl_->glBufferData(GL_ARRAY_BUFFER, mesh.ore.size() * sizeof(float), mesh.ore.data(), usage);
+    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainSurface_);
+    gl_->glBufferData(GL_ARRAY_BUFFER, mesh.surface.size() * sizeof(float), mesh.surface.data(), usage);
 
     // Р СњР вЂў Р В¤Р ВР вЂєР В¬Р СћР В Р Р€Р вЂўР Сљ Р В·Р Т‘Р ВµРЎРѓРЎРЉ - РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎРЏР ВµР С Р Р†РЎРѓР Вµ Р С‘Р Р…Р Т‘Р ВµР С”РЎРѓРЎвЂ№
     gl_->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, iboTerrain_);
@@ -811,6 +937,10 @@ void HexSphereRenderer::recreateTerrainVAO() {
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainPos_);
     gl_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     gl_->glEnableVertexAttribArray(0);
+
+    gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainSurface_);
+    gl_->glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 0, nullptr);
+    gl_->glEnableVertexAttribArray(4);
 
     gl_->glBindBuffer(GL_ARRAY_BUFFER, vboTerrainCol_);
     gl_->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
@@ -966,6 +1096,218 @@ void HexSphereRenderer::renderContributorModel(const RenderContext& ctx) {
     }
 }
 
+GLuint HexSphereRenderer::createTexture2DFromImage(const QImage& image, const char* debugName) {
+    if (image.isNull() || image.width() <= 0 || image.height() <= 0) {
+        qWarning() << "Cannot upload empty texture:" << debugName;
+        return 0;
+    }
+
+    const QImage source = image.convertToFormat(QImage::Format_RGB888);
+    if (source.isNull()) {
+        qWarning() << "Cannot convert texture to RGB888:" << debugName;
+        return 0;
+    }
+
+    const size_t rowBytes = size_t(source.width()) * 3;
+    std::vector<uchar> pixels(rowBytes * size_t(source.height()));
+    for (int y = 0; y < source.height(); ++y) {
+        std::memcpy(pixels.data() + size_t(y) * rowBytes, source.constScanLine(y), rowBytes);
+    }
+
+    GLuint texture = 0;
+    gl_->glGenTextures(1, &texture);
+    gl_->glBindTexture(GL_TEXTURE_2D, texture);
+
+    gl_->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    gl_->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8,
+        source.width(), source.height(), 0,
+        GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    gl_->glGenerateMipmap(GL_TEXTURE_2D);
+
+    gl_->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    gl_->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl_->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    gl_->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    gl_->glBindTexture(GL_TEXTURE_2D, 0);
+
+    qDebug() << "Texture uploaded:" << debugName
+        << source.width() << "x" << source.height() << "id" << texture;
+    return texture;
+}
+
+// ============================================================================
+// Запекание текстур камня. Нужно и песочнице, и планете, поэтому вызывается
+// из initialize() всегда, независимо от режима.
+// ============================================================================
+GLuint HexSphereRenderer::createTextureArray(const std::vector<QImage>& images, const char* debugName) {
+    if (images.empty() || images.front().isNull()) return 0;
+    const QSize size = images.front().size();
+    for (const auto& image : images) {
+        if (image.isNull() || image.size() != size) return 0;
+    }
+    GLuint texture = 0;
+    gl_->glGenTextures(1, &texture);
+    gl_->glBindTexture(GL_TEXTURE_2D_ARRAY, texture);
+    gl_->glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, size.width(), size.height(),
+        static_cast<GLsizei>(images.size()), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    for (size_t layer = 0; layer < images.size(); ++layer) {
+        const QImage source = images[layer].convertToFormat(QImage::Format_RGBA8888);
+        gl_->glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, static_cast<GLint>(layer),
+            size.width(), size.height(), 1, GL_RGBA, GL_UNSIGNED_BYTE, source.constBits());
+    }
+    gl_->glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+    gl_->glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    gl_->glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl_->glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    gl_->glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    gl_->glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    qDebug() << "Texture array uploaded:" << debugName << "layers" << images.size();
+    return texture;
+}
+
+void HexSphereRenderer::ensureRockTextures() {
+    if (rockAlbedoTex_ != 0 && rockNormalTex_ != 0) {
+        return;
+    }
+
+    RockTextureParams texParams;
+    texParams.size = kRockTextureSize;
+    texParams.noiseScale = kRockNoiseScale;
+    texParams.normalStrength = kRockBakeNormalStrength;
+    texParams.albedoR = kRockAlbedoR;
+    texParams.albedoG = kRockAlbedoG;
+    texParams.albedoB = kRockAlbedoB;
+    texParams.roughnessBase = kRockRoughness;
+
+    const auto variants = generateRockTextureVariants(texParams);
+    const RockTextureSet& rockTextures = variants.front();
+    rockAlbedoTex_ = createTexture2DFromImage(rockTextures.albedo, "rock_albedo");
+    rockNormalTex_ = createTexture2DFromImage(rockTextures.normal, "rock_normal");
+    rockRoughTex_ = createTexture2DFromImage(rockTextures.roughness, "rock_roughness");
+    rockHeightTex_ = createTexture2DFromImage(rockTextures.height, "rock_height");
+
+    std::vector<QImage> albedoLayers, normalLayers;
+    for (const auto& variant : variants) {
+        albedoLayers.push_back(variant.albedo);
+        normalLayers.push_back(variant.normal);
+    }
+    rockAlbedoArrayTex_ = createTextureArray(albedoLayers, "rock_albedo_variants");
+    rockNormalArrayTex_ = createTextureArray(normalLayers, "rock_normal_variants");
+
+    // Второй материал — тот же генератор, но с другими параметрами.
+    // Насыщенный зелёный + сильные нормали, иначе мох выглядит как бледное пятно.
+    RockTextureParams mossParams = texParams;
+    mossParams.noiseScale = 5.5f;         // было 12.0 — крупнее, читаемая структура
+    mossParams.albedoR = 0.08f;           // тёмный (тень в углублениях текстуры)
+    mossParams.albedoG = 0.46f;           // насыщенный зелёный
+    mossParams.albedoB = 0.06f;
+    mossParams.roughnessBase = kMossRoughness;
+    mossParams.normalStrength = 0.45f;    // было 0.10 — теперь нормали реально рельефят
+    mossParams.seed = 777u;
+
+    const RockTextureSet mossTextures = generateRockTextures(mossParams);
+    mossAlbedoTex_ = createTexture2DFromImage(mossTextures.albedo, "moss_albedo");
+    mossNormalTex_ = createTexture2DFromImage(mossTextures.normal, "moss_normal");
+    if (mossAlbedoTex_ == 0 || mossNormalTex_ == 0) {
+        qWarning() << "Moss textures failed to upload; mask will be disabled";
+    }
+
+    rockBakedReady_ = rockAlbedoTex_ != 0 && rockNormalTex_ != 0
+        && rockRoughTex_ != 0 && rockHeightTex_ != 0;
+    if (!rockBakedReady_) {
+        qWarning() << "Rock textures failed to upload; procedural rock stays active";
+    }
+}
+
+void HexSphereRenderer::renderRockSandbox(const RenderContext& ctx) {
+    if (progRock_ == 0
+        || !contributorWoodModel_
+        || !contributorWoodModel_->isInitialized()
+        || contributorWoodModel_->indexCount() == 0) {
+        // Шейдер камня или меш недоступны — рисуем как раньше.
+        renderContributorModel(ctx);
+        return;
+    }
+
+    const float noiseScale = envFloat("ROCK_NOISE", kRockNoiseScale);
+    const float normalStrength = envFloat("ROCK_NORMAL", kRockNormalStrength);
+    const float roughness = envFloat("ROCK_ROUGH", kRockRoughness);
+    const float parallax = envFloat("ROCK_PARALLAX", kRockParallax);
+    const float uvTiling = envFloat("ROCK_TILING", kRockUVTiling);
+    const float normalFlipY = envFloat("ROCK_FLIPY", 1.0f);
+    const float orbitSpeed = envFloat("ROCK_ORBIT", kRockLightOrbitSpeed);
+    const float debugOverride = envFloat("ROCK_DEBUG", -1.0f);
+    const int debugMode = (debugOverride >= 0.0f) ? int(debugOverride + 0.5f) : rockDebugMode_;
+
+    const bool useBaked = rockBakedReady_ && (envFloat("ROCK_BAKED", 1.0f) > 0.5f);
+
+    // Маска второго материала: те же ручки через переменные окружения.
+    const bool mossReady = (mossAlbedoTex_ != 0 && mossNormalTex_ != 0);
+    const float mossRoughness = envFloat("MOSS_ROUGH", kMossRoughness);
+    const float maskScale = envFloat("MASK_SCALE", kMaskScale);
+    const float maskSlope = envFloat("MASK_SLOPE", kMaskSlope);
+    const float maskAmount = mossReady ? envFloat("MASK_AMOUNT", kMaskAmount) : 0.0f;
+
+    static QElapsedTimer rockTimer;
+    if (!rockTimer.isValid()) {
+        rockTimer.start();
+    }
+    const float dt = std::min(static_cast<float>(rockTimer.restart()) / 1000.0f, 0.1f);
+    rockLightPhase_ += dt * orbitSpeed;
+
+    const float phaseSin = std::sin(rockLightPhase_);
+    const float phaseCos = std::cos(rockLightPhase_);
+    const QVector3D lightDir = QVector3D(phaseSin * 0.72f, phaseCos * 0.72f, 0.52f).normalized();
+
+    QMatrix4x4 model;
+    model.translate(contributorModelPosition_);
+    model.rotate(contributorModelRotationDegrees_.x(), 1.0f, 0.0f, 0.0f);
+    model.rotate(contributorModelRotationDegrees_.y(), 0.0f, 1.0f, 0.0f);
+    model.rotate(contributorModelRotationDegrees_.z(), 0.0f, 0.0f, 1.0f);
+    model.scale(contributorModelScale_);
+
+    const QMatrix4x4 mvp = ctx.camera.projection * ctx.camera.view * model;
+
+    gl_->glUseProgram(progRock_);
+    gl_->glUniformMatrix4fv(uMVP_Rock_, 1, GL_FALSE, mvp.constData());
+    gl_->glUniformMatrix4fv(uModel_Rock_, 1, GL_FALSE, model.constData());
+    gl_->glUniform3f(uViewPos_Rock_, ctx.cameraPos.x(), ctx.cameraPos.y(), ctx.cameraPos.z());
+    gl_->glUniform3f(uLightDir_Rock_, lightDir.x(), lightDir.y(), lightDir.z());
+    gl_->glUniform3f(uAlbedo_Rock_, kRockAlbedoR, kRockAlbedoG, kRockAlbedoB);
+    gl_->glUniform1f(uUVTiling_Rock_, uvTiling);
+    gl_->glUniform1f(uNoiseScale_Rock_, noiseScale);
+    gl_->glUniform1f(uNormalStrength_Rock_, normalStrength);
+    gl_->glUniform1f(uParallaxScale_Rock_, parallax);
+    gl_->glUniform1f(uRoughness_Rock_, roughness);
+    gl_->glUniform1f(uNormalFlipY_Rock_, normalFlipY);
+    gl_->glUniform1i(uDebugMode_Rock_, debugMode);
+    gl_->glUniform1i(uUseBaked_Rock_, useBaked ? 1 : 0);
+    gl_->glUniform1f(uBakeNormalStrength_Rock_, kRockBakeNormalStrength);
+    gl_->glUniform1f(uMossRoughness_Rock_, mossRoughness);
+    gl_->glUniform1f(uMaskScale_Rock_, maskScale);
+    gl_->glUniform1f(uMaskAmount_Rock_, maskAmount);
+    gl_->glUniform1f(uMaskSlope_Rock_, maskSlope);
+    // Текстуры камня: 0 albedo, 1 normal, 2 roughness, 3 height.
+    gl_->glActiveTexture(GL_TEXTURE0);
+    gl_->glBindTexture(GL_TEXTURE_2D, rockAlbedoTex_);
+    gl_->glActiveTexture(GL_TEXTURE1);
+    gl_->glBindTexture(GL_TEXTURE_2D, rockNormalTex_);
+    gl_->glActiveTexture(GL_TEXTURE2);
+    gl_->glBindTexture(GL_TEXTURE_2D, rockRoughTex_);
+    gl_->glActiveTexture(GL_TEXTURE3);
+    gl_->glBindTexture(GL_TEXTURE_2D, rockHeightTex_);
+    gl_->glActiveTexture(GL_TEXTURE0);
+    gl_->glActiveTexture(GL_TEXTURE4);
+    gl_->glBindTexture(GL_TEXTURE_2D, mossAlbedoTex_);
+    gl_->glActiveTexture(GL_TEXTURE5);
+    gl_->glBindTexture(GL_TEXTURE_2D, mossNormalTex_);
+
+    gl_->glBindVertexArray(contributorWoodModel_->vao());
+    gl_->glDrawElements(GL_TRIANGLES, contributorWoodModel_->indexCount(), GL_UNSIGNED_INT, nullptr);
+    gl_->glBindVertexArray(0);
+    gl_->glUseProgram(0);
+}
+
 void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const UploadOptions& options) {
     qDebug() << "uploadScene called, setting lastScene_";
     lastScene_ = const_cast<HexSphereSceneController*>(&scene);
@@ -1068,13 +1410,29 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
 
     if (surfaceAtlasPass_) surfaceAtlasPass_->renderIfDirty();
     gl_->glViewport(0, 0, viewportWidth, viewportHeight);
+
+    // Текстуры камня — юниты 6 и 7
+    gl_->glUseProgram(progTerrain_);
+    gl_->glUniform1ui(uRockAppearanceSeed_Terrain_, graph.scene.rockAppearanceSeed());
+    gl_->glUniform1f(uRockUVScale_Terrain_, std::ldexp(kRockTerrainUVScale, graph.scene.subdivisionLevel() - 2));
+    gl_->glActiveTexture(GL_TEXTURE6);
+    gl_->glBindTexture(GL_TEXTURE_2D_ARRAY, rockAlbedoArrayTex_);
+    gl_->glActiveTexture(GL_TEXTURE7);
+    gl_->glBindTexture(GL_TEXTURE_2D_ARRAY, rockNormalArrayTex_);
+    // Мох — юниты 8 и 9 (если готовы, иначе биндим 0 — uMossAmount уже выставлен в 0)
+    gl_->glActiveTexture(GL_TEXTURE8);
+    gl_->glBindTexture(GL_TEXTURE_2D, mossAlbedoTex_);
+    gl_->glActiveTexture(GL_TEXTURE9);
+    gl_->glBindTexture(GL_TEXTURE_2D, mossNormalTex_);
+    gl_->glActiveTexture(GL_TEXTURE0);
+
     terrainRenderer_->render(ctx, terrainIndexCount_);
     copySceneDepthToTexture(viewportWidth, viewportHeight);
     const WaterRenderer::Resources waterResources{
         envCubemap_, sceneDepthTexture_, planetRadiusAtlas_,
         planetSurfaceKindAtlas_, planetShoreDistanceAtlas_,
         vaoWater_ };
-    waterRenderer_->render(ctx, waterResources);
+    //waterRenderer_->render(ctx, waterResources);
     entityRenderer_->renderEntities(ctx);
     overlayRenderer_->render(ctx);
 
@@ -1251,7 +1609,7 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
     }
 
     if (graph.scene.isContributorMode()) {
-        renderContributorModel(ctx);
+        renderRockSandbox(ctx);
     }
     else {
         renderProceduralTreeParticles(ctx);
@@ -1270,7 +1628,6 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
         totalTime = 0;
     }
 }
-
 void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) {
     if (!particleRenderer_ || !particleRenderer_->isInitialized()) return;
     if (treeParticlesBySpecies.empty()) return;
@@ -1339,13 +1696,16 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
     const auto& model = ctx.graph.scene.model();
     const auto& cells = model.cells();
 
-    // Считаем индекс вида и варианта для каждого placement
+    hashCombine(quantizedHashFloat(treeSceneScale));
+
+    // ========== ИСПРАВЛЕНО: sourceIndex ==========
     struct PlacementInfo {
         TreeBuilder::TreeSpecies species;
         int speciesIdx;
         int variantIdx;
         QVector3D treePos;
         QVector3D up;
+        size_t sourceIndex = 0;
     };
     std::vector<PlacementInfo> infos;
     infos.reserve(treeCount);
@@ -1359,20 +1719,17 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
             ctx.graph.scene, placement, ctx.graph.heightStep);
         const QVector3D up = treePos.normalized();
 
-        // Биом клетки
         Biome biome = Biome::Grass;
         if (placement.cellId >= 0 &&
             placement.cellId < static_cast<int>(cells.size())) {
             biome = cells[static_cast<size_t>(placement.cellId)].biome;
         }
 
-        // Вид по биому + seed
         const uint32_t speciesSeed =
             static_cast<uint32_t>(placement.cellId) * 2654435761u;
         const auto species = TreeBuilder::selectSpecies(biome, speciesSeed);
         const int speciesIdx = static_cast<int>(species);
 
-        // Вариант
         const size_t variantsForSpecies =
             speciesVariants[speciesIdx].size();
         if (variantsForSpecies == 0) {
@@ -1385,9 +1742,8 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
             static_cast<uint32_t>(i) * 3266489917u;
         const int variantIdx = static_cast<int>(variantSeed % variantsForSpecies);
 
-        infos.push_back({ species, speciesIdx, variantIdx, treePos, up });
+        infos.push_back({ species, speciesIdx, variantIdx, treePos, up, i });
 
-        // Хэш
         hashCombine(static_cast<uint64_t>(placement.cellId + 10007));
         hashCombine(static_cast<uint64_t>(speciesIdx));
         hashCombine(static_cast<uint64_t>(variantIdx));
@@ -1414,18 +1770,15 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
                 treeParticlesBySpecies[info.speciesIdx][info.variantIdx];
             if (particleTemplate.empty()) continue;
 
+            const auto& placement = placements[info.sourceIndex];
             const float baseScale = variant.realisticScale * treeSceneScale;
-            const float finalScale = baseScale * placementJitter(
-                placements[&info - infos.data()].scale);
+            const float finalScale = baseScale * placementJitter(placement.scale);
 
             QMatrix4x4 transform;
             transform.translate(info.treePos);
             orientTreeToSurface(transform, info.up);
-
-            // rotation из placement — но нужно найти соответствующий
-            const size_t idx = static_cast<size_t>(&info - infos.data());
             transform.rotate(
-                placements[idx].rotation * 180.0f / 3.14159265f, 0, 1, 0);
+                placement.rotation * 180.0f / 3.14159265f, 0, 1, 0);
             const QQuaternion motionRotation = QQuaternion::fromRotationMatrix(transform.normalMatrix());
             transform.scale(finalScale);
 
@@ -1496,9 +1849,8 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
         globalLightDir.x(), globalLightDir.y(), globalLightDir.z());
     gl_->glUniform3f(uViewPos_Model_, eye.x(), eye.y(), eye.z());
 
-    for (size_t i = 0; i < infos.size(); ++i) {
-        const auto& info = infos[i];
-        const auto& placement = placements[i];
+    for (const auto& info : infos) {
+        const auto& placement = placements[info.sourceIndex];
         const auto& variant = speciesVariants[info.speciesIdx][info.variantIdx];
 
         const auto& model3d =
@@ -1530,7 +1882,6 @@ void HexSphereRenderer::renderProceduralTreeParticles(const RenderContext& ctx) 
             variant.trunkColor, /*forceTextureOff=*/true);
     }
 
-    // Возвращаем состояние
     if (uUseFoliageColor >= 0) gl_->glUniform1i(uUseFoliageColor, 0);
     gl_->glUseProgram(0);
 }

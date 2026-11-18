@@ -31,6 +31,10 @@ void main() {
     
     float dist = length(uViewPos - aPos);
     float pointSize = aSize * (300.0 / dist);
+    // ===== ДИАГНОСТИКА: частицы с rotation < 0.1 — красные =====
+    vColor = aColor;
+    // ==========================================================
+
     gl_PointSize = clamp(pointSize, 1.0, 45.0);
     
     gl_Position = uMVP * vec4(aPos, 1.0);

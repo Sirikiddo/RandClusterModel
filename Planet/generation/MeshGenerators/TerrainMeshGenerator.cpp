@@ -13,6 +13,7 @@ TerrainMesh TerrainMeshGenerator::buildTerrainMesh(const HexSphereModel& model, 
     tt.doEdgeCliffs = options.doEdgeCliffs;
     tt.coastalBand = options.coastalBand;
     tt.waterParams = options.waterParams;
+    tt.rockSeed = options.rockSeed;
 
     return tt.build(model);
 }

@@ -345,3 +345,242 @@ void main() {
     FragColor = vec4(0.02, 0.07, 0.12, 1.0);
 }
 )GLSL";
+
+// Rock sandbox shader
+static const char* VS_ROCK = R"GLSL(
+#version 330 core
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNormal;
+layout(location=2) in vec2 aUV;
+
+uniform mat4 uMVP;
+uniform mat4 uModel;
+
+out vec3 vWorldPos;
+out vec3 vNormal;
+out vec2 vUV;
+
+void main() {
+    vec4 worldPos = uModel * vec4(aPos, 1.0);
+    vWorldPos = worldPos.xyz;
+    vNormal = mat3(transpose(inverse(uModel))) * aNormal;
+    vUV = aUV;
+    gl_Position = uMVP * vec4(aPos, 1.0);
+}
+)GLSL";
+
+static const char* FS_ROCK = R"GLSL(
+#version 330 core
+in vec3 vWorldPos;
+in vec3 vNormal;
+in vec2 vUV;
+
+out vec4 FragColor;
+
+uniform vec3  uLightDir;        // ОТ поверхности К свету (нормированный)
+uniform vec3  uViewPos;
+uniform vec3  uAlbedo;          // базовый цвет камня
+uniform float uUVTiling;        // сколько раз размножить UV (тайлинг)
+uniform float uNoiseScale;      // частота шума: меньше = крупнее камень
+uniform float uNormalStrength;  // сила рельефа (0 = плоско)
+uniform float uParallaxScale;   // 0 = без параллакса, 0.02..0.05 = лёгкое выдавливание
+uniform float uRoughness;       // 0..1: 0 гладкий камень, 1 матовый грубый
+uniform float uNormalFlipY;     // 1 или -1: переворот зелёного канала (для зеркальных UV)
+uniform int   uDebugMode;       // 0 финал, 1 нормаль, 2 N.L, 3 UV, 4 оси TBN, 5 высота, 6 альбедо
+uniform int       uUseBaked;
+uniform sampler2D uAlbedoMap;
+uniform sampler2D uNormalMap;
+uniform sampler2D uRoughMap;
+uniform sampler2D uHeightMap;
+uniform float     uBakeNormalStrength;  // сила, с которой пекалась карта нормалей:
+                                        // uNormalStrength работает как множитель к ней
+
+// ---- маска второго материала (мох) ----
+uniform sampler2D uMossAlbedoMap;
+uniform sampler2D uMossNormalMap;
+uniform float uMossRoughness;   // шероховатость второго материала
+uniform float uMaskScale;       // частота пятен маски
+uniform float uMaskAmount;      // 0 = маски нет, 1 = полная сила
+uniform float uMaskSlope;       // порог "смотрит наружу": ближе к 1 — зарастают только ровные бугры
+
+// ---------------------------------------------------------------- шум
+float hash21(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float valueNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+// Грубый камень: обычный fbm (общая форма) + "хребты" 1-|2n-1| (грани, сколы, трещины).
+float rockHeight(vec2 uv) {
+    float sum = 0.0;
+    float ridge = 0.0;
+    float amp = 0.5;
+    vec2 p = uv;
+
+    for (int i = 0; i < 5; ++i) {
+        float n = valueNoise(p);
+        sum += amp * n;
+        ridge += amp * (1.0 - abs(n * 2.0 - 1.0));
+        p = p * 2.03 + vec2(17.1, 9.2);
+        amp *= 0.5;
+    }
+
+    return sum * 0.65 + ridge * 0.35;
+}
+
+void main() {
+    // ---------------------------------------------------- TBN из производных
+    vec2 uv0 = vUV * uUVTiling;
+
+    vec3 N = normalize(vNormal);
+    vec3 dp1 = dFdx(vWorldPos);
+    vec3 dp2 = dFdy(vWorldPos);
+    vec2 duv1 = dFdx(uv0);
+    vec2 duv2 = dFdy(uv0);
+
+    float det = duv1.x * duv2.y - duv2.x * duv1.y;
+    vec3 T;
+    vec3 B;
+
+    if (abs(det) < 1e-8) {
+        // UV вырождены — берём любую ортонормальную пару к нормали.
+        T = normalize(abs(N.z) < 0.99 ? cross(vec3(0.0, 0.0, 1.0), N) : vec3(1.0, 0.0, 0.0));
+        B = normalize(cross(N, T));
+    }
+    else {
+        float r = 1.0 / det;
+        T = normalize((dp1 * duv2.y - dp2 * duv1.y) * r);
+        B = normalize((dp2 * duv1.x - dp1 * duv2.x) * r);
+    }
+
+        // ------------------------------------------- одношаговый параллакс (опция)
+    // Работает одинаково в обоих режимах: высота берётся из карты или из шума.
+    vec3 Vw = normalize(uViewPos - vWorldPos);
+    vec2 uv = uv0;
+
+    if (uParallaxScale > 0.0) {
+        vec3 Vt = vec3(dot(Vw, T), dot(Vw, B), dot(Vw, N));
+        float h0 = (uUseBaked == 1)
+            ? texture(uHeightMap, uv0).r
+            : rockHeight(uv0 * uNoiseScale);
+        uv = uv0 - (Vt.xy / max(Vt.z, 0.35)) * (h0 * uParallaxScale);
+    }
+
+    // ------------- рельеф, альбедо и шероховатость: шум или текстуры -------------
+    float hC;
+    vec3 albedo;
+    vec3 nTangent;
+    float rough;
+
+    if (uUseBaked == 1) {
+        hC = texture(uHeightMap, uv).r;
+        albedo = texture(uAlbedoMap, uv).rgb;
+        rough = clamp(texture(uRoughMap, uv).r * (uRoughness / 0.85), 0.0, 1.0);
+
+        vec3 nTex = texture(uNormalMap, uv).rgb * 2.0 - 1.0;
+        nTex.y *= uNormalFlipY;
+        nTex.xy *= (uNormalStrength / max(uBakeNormalStrength, 1e-4));
+        nTangent = normalize(nTex);
+    }
+    else {
+        const float eps = 1.0 / 256.0;
+        hC = rockHeight(uv * uNoiseScale);
+        float hX = rockHeight((uv + vec2(eps, 0.0)) * uNoiseScale);
+        float hY = rockHeight((uv + vec2(0.0, eps)) * uNoiseScale);
+
+        // Наклон поверхности из карты высот -> нормаль в касательном пространстве.
+        vec2 slope = vec2(hX - hC, hY - hC) * (uNormalStrength / eps);
+        nTangent = normalize(vec3(-slope.x, -slope.y * uNormalFlipY, 1.0));
+
+        // Трещины темнее: высота подмешивается в альбедо.
+        albedo = uAlbedo * mix(0.55, 1.15, hC);
+        rough = uRoughness;
+    }
+
+    vec3 Nw = normalize(mat3(T, B, N) * nTangent);
+
+    // ================= МАСКА ВТОРОГО МАТЕРИАЛА (мох) =================
+    float upFacing = smoothstep(uMaskSlope - 0.06, uMaskSlope + 0.06, dot(Nw, N));
+    float patchNoise = valueNoise(uv * uMaskScale) * 0.65
+                     + valueNoise(uv * uMaskScale * 2.7) * 0.35;
+    float spots = smoothstep(0.42, 0.68, patchNoise);
+    float mossMask = upFacing * spots * clamp(uMaskAmount, 0.0, 1.0);
+
+    vec3 mossAlbedo = texture(uMossAlbedoMap, uv).rgb;
+    vec3 mossTexel = texture(uMossNormalMap, uv).rgb * 2.0 - 1.0;
+    mossTexel.y *= uNormalFlipY;
+    mossTexel.xy *= (uNormalStrength / max(uBakeNormalStrength, 1e-4));
+    vec3 mossTangent = normalize(mossTexel);
+
+    albedo = mix(albedo, mossAlbedo, mossMask);
+    nTangent = normalize(mix(nTangent, mossTangent, mossMask));
+    rough = mix(rough, uMossRoughness, mossMask);
+
+    Nw = normalize(mat3(T, B, N) * nTangent);
+
+    // ------------------------------------------------------------- свет
+    vec3 L = normalize(uLightDir);
+    vec3 H = normalize(L + Vw);
+
+    float ndl = max(dot(Nw, L), 0.0);
+
+    float roughClamped = clamp(rough, 0.0, 1.0);
+    float specPower = mix(96.0, 6.0, roughClamped);
+    float specStrength = mix(0.35, 0.02, roughClamped) * (1.0 - roughClamped * 0.5);
+    float spec = pow(max(dot(Nw, H), 0.0), specPower) * specStrength;
+
+    // Небо как дешёвый ambient: сверху светлее, снизу темнее.
+    float sky = Nw.y * 0.5 + 0.5;
+    vec3 ambient = albedo * mix(0.10, 0.22, sky);
+    vec3 diffuse = albedo * ndl;
+
+    vec3 color = ambient + diffuse + vec3(spec);
+
+    // -------------------------------------------------------- отладка
+    if (uDebugMode == 1) { FragColor = vec4(Nw * 0.5 + 0.5, 1.0); return; }
+    if (uDebugMode == 2) { FragColor = vec4(vec3(ndl), 1.0); return; }
+    if (uDebugMode == 3) {
+        vec2 g = floor(vUV * 8.0);
+        float cell = mod(g.x + g.y, 2.0);
+        FragColor = vec4(vec3(cell), 1.0);
+        return;
+    }
+    if (uDebugMode == 4) {
+        // Для плоской плитки, смотрящей в +Z, должно быть белым (1,1,1):
+        // T вдоль +X, B вдоль +Y, N вдоль +Z. Голубой = T и B поменялись местами,
+        // жёлтый/пурпурный = перевёрнута одна из осей, чёрный = TBN вырожден.
+        FragColor = vec4(clamp(vec3(dot(T, vec3(1.0, 0.0, 0.0)),
+                                    dot(B, vec3(0.0, 1.0, 0.0)),
+                                    dot(N, vec3(0.0, 0.0, 1.0))), 0.0, 1.0), 1.0);
+        return;
+    }
+    if (uDebugMode == 5) { FragColor = vec4(vec3(hC), 1.0); return; }
+    if (uDebugMode == 6) { FragColor = vec4(albedo, 1.0); return; }
+
+    // 7..10 — посмотреть на сами запёкшиеся карты
+    if (uDebugMode == 7) { FragColor = vec4(texture(uAlbedoMap, uv).rgb, 1.0); return; }
+    if (uDebugMode == 8) { FragColor = vec4(texture(uNormalMap, uv).rgb, 1.0); return; }
+    if (uDebugMode == 9) { FragColor = vec4(vec3(texture(uRoughMap, uv).r), 1.0); return; }
+    if (uDebugMode == 10) { FragColor = vec4(vec3(texture(uHeightMap, uv).r), 1.0); return; }
+
+// 11..13 — разбор маски по частям
+    if (uDebugMode == 11) { FragColor = vec4(vec3(mossMask), 1.0); return; }
+    if (uDebugMode == 12) { FragColor = vec4(vec3(upFacing), 1.0); return; }
+    if (uDebugMode == 13) { FragColor = vec4(vec3(spots), 1.0); return; }
+
+    FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+}
+)GLSL";

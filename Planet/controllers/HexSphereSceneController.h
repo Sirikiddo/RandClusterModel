@@ -98,6 +98,7 @@ public:
     int subdivisionLevel() const { return L_; }
     int generatorIndex() const { return generatorIndex_; }
     float heightStep() const { return heightStep_; }
+    const TerrainParams& generatorParams() const { return genParams_; }
     float outlineBias() const { return outlineBias_; }
     float stripInset() const { return stripInset_; }
     bool smoothOneStep() const { return smoothOneStep_; }
@@ -132,6 +133,7 @@ public:
     const QSet<int>& riverCells() const { return riverOccupiedCells_; }
     uint64_t riverRevision() const { return riverRevision_; }
     uint64_t terrainRevision() const { return terrainRevision_; }
+    uint32_t rockAppearanceSeed() const { return rockAppearanceSeed_; }
     void generateRivers();
     // Лента воды вдоль русел: 11 float на вершину (позиция, берег/глубина, нормаль, руда).
     // centerlineOut (если задан) получает пары точек GL_LINES по осевой русла:
@@ -272,6 +274,7 @@ private:
     QSet<int> riverOccupiedCells_;
     uint64_t riverRevision_ = 0;
     uint64_t terrainRevision_ = 0;
+    uint32_t rockAppearanceSeed_ = 0;
 
     QVector3D cameraPos_{ 0, 0, 5 };      // Ð¢ÐµÐºÑƒÑ‰Ð°Ñ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ñ ÐºÐ°Ð¼ÐµÑ€Ñ‹ (Ð½Ð°Ñ‡Ð°Ð»ÑŒÐ½Ð¾Ðµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ)
     QVector3D lastCameraPos_{ 0, 0, 5 };  // ÐŸÐ¾Ð·Ð¸Ñ†Ð¸Ñ Ð½Ð° Ð¿Ñ€Ð¾ÑˆÐ»Ð¾Ð¼ ÐºÐ°Ð´Ñ€Ðµ Ð´Ð»Ñ Ð´ÐµÑ‚ÐµÐºÑ‚Ð° Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ

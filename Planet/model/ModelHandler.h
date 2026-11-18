@@ -75,6 +75,8 @@ public:
     bool isInitialized() const { return glInitialized_; }
     bool isEmpty() const { return mesh_.positions.empty(); }
     QString loadedPath() const { return path_; }
+    GLuint vao() const { return vao_; }
+    GLsizei indexCount() const { return indexCount_; }
 
 private:
     static QString canonicalPath(const QString& path);

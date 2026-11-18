@@ -5,6 +5,7 @@
 #include <QOpenGLVertexArrayObject>
 #include <QVector3D>
 #include <QSize>
+#include <QImage>
 #include <QOpenGLWidget>
 #include <QtOpenGL>
 #include <GL/gl.h>
@@ -39,6 +40,7 @@ class HexSphereRenderer {
 public:
 
     void setOreVisualizationEnabled(bool enabled);
+    void setRockDebugMode(int mode) { rockDebugMode_ = mode; }
 
     void updateVisibility(const QVector3D& cameraPos);
 
@@ -126,6 +128,10 @@ private:
     void uploadRiverLineInternal(const std::vector<float>& vertices);
     void loadContributorModel();
     void renderContributorModel(const RenderContext& ctx);
+    void renderRockSandbox(const RenderContext& ctx);              // Песочница камня (шаг 2)
+    GLuint createTexture2DFromImage(const QImage& image, const char* debugName);
+    GLuint createTextureArray(const std::vector<QImage>& images, const char* debugName);
+    void ensureRockTextures();
     void renderProceduralTreeParticles(const RenderContext& ctx);  // Твой метод
 
     void recreateTerrainVAO();
@@ -147,15 +153,44 @@ private:
     QSize sceneDepthTextureSize_;
     GLuint progWire_ = 0, progTerrain_ = 0, progSel_ = 0;
     GLuint progWater_ = 0, progModel_ = 0, progFactory_ = 0, progSteam_ = 0;
+    GLuint progRock_ = 0;   // Песочница камня (нормал-маппинг + свой свет)
     GLint uMVP_Wire_ = -1, uMVP_Terrain_ = -1, uMVP_Sel_ = -1;
     GLint uModel_ = -1, uLightDir_ = -1;
     GLint uNormalMatrix_ = -1, uOreEnabled_ = -1;
+    GLint uRockAlbedo_Terrain_ = -1, uRockNormal_Terrain_ = -1;
+    GLint uRockUVScale_Terrain_ = -1, uRockNormalStrength_Terrain_ = -1, uRockStrength_Terrain_ = -1;
+    GLint uRockAppearanceSeed_Terrain_ = -1;
     GLint uMVP_Model_ = -1, uModel_Model_ = -1, uLightDir_Model_ = -1, uViewPos_Model_ = -1, uColor_Model_ = -1, uUseTexture_ = -1;
     GLint uMVP_Factory_ = -1, uModel_Factory_ = -1, uLightDir_Factory_ = -1, uViewPos_Factory_ = -1, uColor_Factory_ = -1, uUseTexture_Factory_ = -1;
     GLint uMVP_Steam_ = -1, uModel_Steam_ = -1, uTime_Steam_ = -1, uViewPos_Steam_ = -1;
 
+    // -------- Униформы каменного шейдера (песочница) --------
+    GLint uMVP_Rock_ = -1, uModel_Rock_ = -1, uLightDir_Rock_ = -1, uViewPos_Rock_ = -1;
+    GLint uAlbedo_Rock_ = -1, uUVTiling_Rock_ = -1, uNoiseScale_Rock_ = -1;
+    GLint uNormalStrength_Rock_ = -1, uParallaxScale_Rock_ = -1, uRoughness_Rock_ = -1;
+    GLint uNormalFlipY_Rock_ = -1, uDebugMode_Rock_ = -1;
+    GLuint rockAlbedoTex_ = 0, rockNormalTex_ = 0, rockRoughTex_ = 0, rockHeightTex_ = 0;
+    GLuint rockAlbedoArrayTex_ = 0, rockNormalArrayTex_ = 0;
+    bool rockBakedReady_ = false;
+    GLint uUseBaked_Rock_ = -1, uAlbedoMap_Rock_ = -1, uNormalMap_Rock_ = -1;
+    GLint uRoughMap_Rock_ = -1, uHeightMap_Rock_ = -1, uBakeNormalStrength_Rock_ = -1;
+    GLuint mossAlbedoTex_ = 0, mossNormalTex_ = 0;
+    GLint uMossAlbedoMap_Rock_ = -1, uMossNormalMap_Rock_ = -1, uMossRoughness_Rock_ = -1;
+    GLint uMaskScale_Rock_ = -1, uMaskAmount_Rock_ = -1, uMaskSlope_Rock_ = -1;
+
+    // -------- Униформы мха на планете ----------
+    GLint uMossAlbedo_Terrain_ = -1, uMossNormal_Terrain_ = -1;
+    GLint uMossAmount_Terrain_ = -1, uMossScale_Terrain_ = -1;
+    GLint uMossPatchScale_Terrain_ = -1, uMossCoverage_Terrain_ = -1;
+    GLint uMossSlope_Terrain_ = -1, uMossNormalStrength_Terrain_ = -1;
+
+
+    float rockLightPhase_ = 0.0f;   // фаза облёта источника света вокруг плитки
+    int rockDebugMode_ = 0;         // 0 — финал, см. setRockDebugMode()
+
     QOpenGLVertexArrayObject vaoTerrain_;
     GLuint vboTerrainPos_ = 0, vboTerrainCol_ = 0, vboTerrainNorm_ = 0, vboTerrainOre_ = 0, iboTerrain_ = 0;
+    GLuint vboTerrainSurface_ = 0;
     GLuint vaoSel_ = 0, vboSel_ = 0;
     GLuint vaoPath_ = 0, vboPath_ = 0;
     GLuint vaoPyramid_ = 0, vboPyramid_ = 0;
@@ -215,11 +250,6 @@ private:
     std::unique_ptr<EntityRenderer> entityRenderer_;
     std::unique_ptr<OverlayRenderer> overlayRenderer_;
     std::unique_ptr<PlanetSurfaceAtlasPass> surfaceAtlasPass_;
-
-    GLuint treeColorTexture_ = 0;
-    GLint uTreeTexture_ = -1;
-
-    GLuint createTreeColorTexture();
 
     bool oreVisualizationEnabled_ = true;
     bool firstRenderDone_ = false;

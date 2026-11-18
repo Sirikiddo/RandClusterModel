@@ -567,5 +567,8 @@
     <None Include="docs\geometry_comparison_task.txt" />
     <None Include=".editorconfig" />
     <None Include="docs\icosahedral_grid.md"><Filter>Documentation</Filter></None>
+    <ClCompile Include="textures\ProceduralTexture.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClInclude Include="textures\ProceduralTexture.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="generation\RockAppearance.h"><Filter>Header Files</Filter></ClInclude>
   </ItemGroup>
 </Project>

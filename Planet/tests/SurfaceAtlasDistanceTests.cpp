@@ -12,6 +12,9 @@
 #include "generation/MeshGenerators/TerrainMeshGenerator.h"
 #include "model/HexSphereModel.h"
 #include "renderers/SurfaceAtlasMeshBuilder.h"
+#include "generation/RockAppearance.h"
+#include "controllers/HexSphereSceneController.h"
+#include "textures/ProceduralTexture.h"
 
 namespace {
 
@@ -350,6 +353,7 @@ void testTerrainTessellationSerialMatchesParallel() {
         const TerrainMesh actual = concurrent.build(model);
         require(expected.pos == actual.pos && expected.col == actual.col
                 && expected.norm == actual.norm && expected.ore == actual.ore
+                && expected.surface == actual.surface
                 && expected.idx == actual.idx && expected.triOwner == actual.triOwner
                 && expected.triSurfaceRole == actual.triSurfaceRole
                 && expected.cellTriStart == actual.cellTriStart
@@ -357,6 +361,22 @@ void testTerrainTessellationSerialMatchesParallel() {
                 && expected.beachTriCount == actual.beachTriCount,
             "parallel tessellation changed deterministic mesh output");
         require(!expected.idx.empty(), "tessellation produced an empty mesh");
+        require(actual.surface.size() == actual.pos.size() / 3u * 4u,
+            "terrain rock attributes do not cover every vertex");
+        for (std::size_t tri = 0; tri < actual.triOwner.size(); ++tri) {
+            const int owner = actual.triOwner[tri];
+            const auto biome = model.cells()[static_cast<std::size_t>(owner)].biome;
+            const float weight = (biome == Biome::Rock || biome == Biome::Tundra) ? 1.0f : 0.0f;
+            for (std::size_t corner = 0; corner < 3u; ++corner) {
+                const std::size_t offset = static_cast<std::size_t>(actual.idx[tri * 3u + corner]) * 4u;
+                require(std::isfinite(actual.surface[offset]) && std::isfinite(actual.surface[offset + 1u]),
+                    "terrain rock UV is not finite");
+                require(actual.surface[offset + 2u] == weight,
+                    "terrain rock weight does not match its biome");
+                require(actual.surface[offset + 3u] == static_cast<float>(owner),
+                    "terrain rock material points to a different cell");
+            }
+        }
         require(expected.cellTriStart.size() == model.cells().size() + 1u,
             "cell triangle CSR has a wrong size");
         require(expected.triByCell.size() == expected.triOwner.size(),
@@ -369,6 +389,88 @@ void testTerrainTessellationSerialMatchesParallel() {
             }
         }
     }
+}
+
+void testRockVariationKeepsBoundariesAndOtherBiomes() {
+    HexSphereModel model = buildModel(2);
+    for (auto& cell : model.cells()) {
+        cell.biome = cell.id % 3 == 0 ? Biome::Rock : (cell.id % 3 == 1 ? Biome::Tundra : Biome::Grass);
+        cell.height = 0;
+    }
+    TerrainTessellator flat;
+    flat.rockShapeAmount = 0.0f;
+    TerrainTessellator varied;
+    varied.rockSeed = 17u;
+    const auto reference = flat.build(model);
+    const auto first = varied.build(model);
+    require(first.pos == varied.build(model).pos, "rock forms change without a new generation seed");
+    varied.rockSeed = 19u;
+    require(first.pos != varied.build(model).pos, "new generation did not change rock forms");
+    require(first.idx == reference.idx, "rock forms changed terrain connectivity");
+    std::size_t moved = 0;
+    for (std::size_t tri = 0; tri < first.triOwner.size(); ++tri) {
+        const auto& cell = model.cells()[static_cast<std::size_t>(first.triOwner[tri])];
+        for (std::size_t corner = 0; corner < 3; ++corner) {
+            const std::size_t offset = static_cast<std::size_t>(first.idx[tri * 3 + corner]) * 3;
+            const QVector3D base(reference.pos[offset], reference.pos[offset + 1], reference.pos[offset + 2]);
+            const QVector3D shaped(first.pos[offset], first.pos[offset + 1], first.pos[offset + 2]);
+            bool insetVertex = (base - model.cellSurfacePosition(cell.id)).lengthSquared() < 1e-12f;
+            for (int dualId : cell.poly) {
+                const auto direction = TerrainTessellator::slerpish(model.dualVerts()[dualId], cell.centroid, flat.inset);
+                const auto inner = model.positionOnSurface(direction, static_cast<float>(cell.height));
+                insetVertex = insetVertex || (base - inner).lengthSquared() < 1e-12f;
+            }
+            if (!insetVertex || cell.biome == Biome::Grass) {
+                require(base == shaped, "rock variation moved a boundary or a non-rock biome");
+            }
+            require((base - shaped).length() <= model.heightStep() * 0.20f + 1e-6f,
+                "rock relief exceeded the conservative height limit");
+            require(QVector3D::crossProduct(base, shaped).length() < 1e-6f,
+                "rock relief moved a vertex sideways");
+            moved += base != shaped;
+        }
+    }
+    require(moved > 0, "rock variation did not alter the rendered geometry");
+    TerrainMesh tiny;
+    TerrainTessellator::MeshBuilder builder{tiny.pos, tiny.col, tiny.norm, tiny.ore, tiny.surface, tiny.idx};
+    for (float direction : { -1.0f, 1.0f }) {
+        builder.triToward(QVector3D(0, 0, 1), QVector3D(direction * 0.0001f, 0, 1),
+            QVector3D(0, 0.0001f, 1), QVector3D(1, 1, 1), QVector3D(0, 0, 1), 0);
+    }
+    for (std::size_t offset = 0; offset < tiny.norm.size(); offset += 3) {
+        require(tiny.norm[offset + 2] > 0.99f,
+            "tiny rock faces lost their outward lighting normal at high subdivision");
+    }
+    std::size_t moss = 0;
+    for (uint32_t cell = 0; cell < 1024u; ++cell) {
+        moss += RockAppearance::random(cell, 17u, 5u) < 0.32f;
+    }
+    require(moss > 200u && moss < 430u, "moss selection should cover only a minority of rocks");
+
+    RockTextureParams params;
+    params.size = 32;
+    const auto textures = generateRockTextureVariants(params);
+    require(textures[0].heightField != textures[1].heightField
+            && textures[1].heightField != textures[2].heightField,
+        "rock variants reused the same surface pattern");
+    require(textures[0].albedo != textures[1].albedo && textures[1].albedo != textures[2].albedo,
+        "rock variants reused the same albedo");
+
+    HexSphereSceneController scene;
+    const uint32_t before = scene.rockAppearanceSeed();
+    const auto terrain = scene.captureTerrainSnapshot();
+    scene.regenerateTerrain();
+    require(scene.rockAppearanceSeed() != before, "Regenerate did not refresh rock appearance");
+    for (size_t cell = 0; cell < terrain.cells.size(); ++cell) {
+        require(terrain.cells[cell].biome == scene.model().cells()[cell].biome
+                && terrain.cells[cell].height == scene.model().cells()[cell].height,
+            "rock randomization changed the generated planet geography");
+    }
+    const uint32_t regenerated = scene.rockAppearanceSeed();
+    scene.rebuildTerrainPresentation();
+    require(scene.rockAppearanceSeed() == regenerated, "presentation rebuild reshuffled the rocks");
+    scene.applyTerrainSnapshot(terrain);
+    require(scene.rockAppearanceSeed() != regenerated, "DAG terrain projection did not refresh rock appearance");
 }
 
 void testCellCapStructuralReduction() {
@@ -439,5 +541,6 @@ void runSurfaceAtlasDistanceUnitTests() {
     testEmptyMeshAndNoShoreline();
     testAtlasSourceIsCellCaps();
     testTerrainTessellationSerialMatchesParallel();
+    testRockVariationKeepsBoundariesAndOtherBiomes();
     testCellCapStructuralReduction();
 }

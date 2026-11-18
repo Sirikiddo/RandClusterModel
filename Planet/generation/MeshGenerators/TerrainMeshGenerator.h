@@ -15,6 +15,7 @@ struct TerrainMeshOptions {
     bool doEdgeCliffs = true;
     const CoastalBandData* coastalBand = nullptr;
     const WaterParams* waterParams = nullptr;
+    uint32_t rockSeed = 0;
 };
 
 class TerrainMeshGenerator {

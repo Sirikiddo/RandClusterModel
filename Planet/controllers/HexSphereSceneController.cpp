@@ -2,6 +2,7 @@
 #include "model/IcosahedralGrid.h"
 
 #include <QtGlobal>
+#include <QRandomGenerator>
 #include <algorithm>
 #include <random>
 #include <cmath>
@@ -67,6 +68,7 @@ namespace {
 HexSphereSceneController::HexSphereSceneController(SceneViewMode viewMode)
     : viewMode_(viewMode)
     , generator_(createTerrainGeneratorByIndex(kDefaultTerrainGeneratorIndex)) {
+    rockAppearanceSeed_ = QRandomGenerator::global()->generate();
     rebuildModel();
 }
 
@@ -170,6 +172,7 @@ void HexSphereSceneController::regenerateTerrain() {
 
     QElapsedTimer timer;
     timer.start();
+    rockAppearanceSeed_ += 0x9e3779b9u;
     double terrainMs = 0.0;
     double oreMs = 0.0;
     if (generator_) {
@@ -343,6 +346,7 @@ void HexSphereSceneController::applyTerrainSnapshot(const TerrainSnapshot& snaps
 
     QElapsedTimer timer;
     timer.start();
+    rockAppearanceSeed_ += 0x9e3779b9u;
     const bool topologyChanged =
         L_ != snapshot.subdivisionLevel || model_.geometry() != snapshot.geometry || model_.cells().empty();
 
@@ -461,6 +465,7 @@ void HexSphereSceneController::buildTerrainMeshFromCurrentCoast() {
     options.doEdgeCliffs = true;
     options.coastalBand = &coastalBand_;
     options.waterParams = &waterParams_;
+    options.rockSeed = rockAppearanceSeed_;
 
     QElapsedTimer timer;
     timer.start();
@@ -549,7 +554,6 @@ void HexSphereSceneController::generateTreePlacements() {
     if (isContributorMode()) {
         TreePlacement placement;
         placement.cellId = 0;
-        // treeType убран — вид теперь определяется в рендерере через TreeBuilder
         placement.placementMode = TreePlacement::PlacementMode::World;
         placement.worldPosition = QVector3D(0.0f, 1.0f, 0.0f);
         placement.worldUp = QVector3D(0.0f, 1.0f, 0.0f);
@@ -564,6 +568,8 @@ void HexSphereSceneController::generateTreePlacements() {
     // ========== PLANET MODE ==========
     const auto& cells = model_.cells();
 
+    // ВАЖНО: seed НЕ зависит от genParams_.scale.
+    // Движение слайдера Scale меняет высоты, но не вид/позицию/размер деревьев.
     const uint32_t deterministicSeed =
         genParams_.seed ^
         (static_cast<uint32_t>(generatorIndex_ + 1) * 0x9e3779b9u) ^
@@ -571,20 +577,15 @@ void HexSphereSceneController::generateTreePlacements() {
     std::mt19937 gen(deterministicSeed);
 
     std::uniform_real_distribution<float> distBary(0.1f, 0.8f);
-    // Разброс сугубо декоративный: мировой размер дерева задаётся топологией
-    // (treeGlobalScale), а не случайным коэффициентом, иначе при смене
-    // SubdivisionLevel дерево могло бы вырасти в разы.
-    std::uniform_real_distribution<float> distScale(0.9f, 1.1f);
     std::uniform_real_distribution<float> distRot(0.0f, 2.0f * 3.14159f);
     std::uniform_real_distribution<float> distTreePresence(0.0f, 1.0f);
 
-    int greenCount = 0;   // Grass/Jungle
-    int savannaCount = 0; // Savanna
+    int greenCount = 0;
+    int savannaCount = 0;
 
     for (size_t i = 0; i < cells.size(); ++i) {
         const auto& cell = cells[i];
 
-        // ========== ТОЛЬКО GRASS, JUNGLE, SAVANNA ==========
         const bool isVegetationBiome =
             (cell.biome == Biome::Grass ||
                 cell.biome == Biome::Jungle ||
@@ -593,7 +594,6 @@ void HexSphereSceneController::generateTreePlacements() {
             continue;
         }
 
-        // ========== ВЫСОТА ==========
         if (cell.height >= 2) {
             continue;
         }
@@ -619,7 +619,6 @@ void HexSphereSceneController::generateTreePlacements() {
             continue;
         }
 
-        // ========== ПЛОТНОСТЬ ПО БИОМУ ==========
         bool shouldPlaceTree = false;
         if (cell.biome == Biome::Grass) {
             shouldPlaceTree = distTreePresence(gen) < 0.35f;
@@ -635,12 +634,8 @@ void HexSphereSceneController::generateTreePlacements() {
             continue;
         }
 
-        // ========== СОЗДАНИЕ PLACEMENT ==========
-        // Вид, цвет и вариант дерева определяются позже в HexSphereRenderer
-        // через TreeBuilder::selectSpecies + выбор варианта из кэша.
         TreePlacement placement;
         placement.cellId = static_cast<int>(i);
-        // placement.treeType — УБРАНО
 
         if (!cell.poly.empty()) {
             std::uniform_int_distribution<int> distTri(
@@ -660,18 +655,20 @@ void HexSphereSceneController::generateTreePlacements() {
 
         placement.rotation = distRot(gen);
 
-        // ========== МАСШТАБ (без цветов!) ==========
-        float s = distScale(gen);
+        // ===== ДЕТЕРМИНИРОВАННЫЙ МАСШТАБ ПО cellId =====
+        // Хэш от cellId даёт стабильный 0..1, который не зависит
+        // от порядка обхода клеток и от высоты.
+        const uint32_t cellHash = static_cast<uint32_t>(i) * 2654435761u;
+        const float t = static_cast<float>(cellHash & 0xFFFFFFu) / 16777215.0f; // 0..1
+        float s = 0.85f + t * 0.30f;  // 0.85..1.15 — стабильно для одной клетки
+
         if (cell.biome == Biome::Jungle && cell.humidity > 0.7f) {
-            s *= 1.06f;
+            s *= 1.05f;
         }
         else if (cell.biome == Biome::Savanna && cell.humidity < 0.3f) {
-            s *= 0.94f;
+            s *= 0.95f;
         }
         placement.scale = s;
-
-        // placement.foliageColor / trunkColor / colorType / isYellowCellTree — УБРАНО.
-        // Всё это теперь берётся из TreeVariant в рендерере.
 
         if (cell.biome == Biome::Savanna) {
             ++savannaCount;
@@ -690,7 +687,6 @@ void HexSphereSceneController::generateTreePlacements() {
         << " savanna=" << savannaCount
         << " ms=" << timer.nsecsElapsed() / 1000000.0;
 }
-
 void HexSphereSceneController::regenerateTreePlacements() {
     generateTreePlacements();
 }

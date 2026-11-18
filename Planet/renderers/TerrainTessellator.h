@@ -25,6 +25,8 @@ struct TerrainMesh {
     std::vector<float> col;
     std::vector<float> norm;
     std::vector<float> ore;
+    // Four floats per vertex: local UV, rock weight, and owning cell ID.
+    std::vector<float> surface;
     std::vector<uint32_t> idx;
     std::vector<int> triOwner;
     std::vector<TriangleSurfaceRole> triSurfaceRole;
@@ -53,6 +55,8 @@ public:
     bool directWrite = false;
     const CoastalBandData* coastalBand = nullptr;
     const WaterParams* waterParams = nullptr;
+    uint32_t rockSeed = 0;
+    float rockShapeAmount = 1.0f;
 
     bool enableOreVisualization = true;
     float oreAnimationSpeed = 0.1f;
@@ -112,6 +116,7 @@ public:
         float h = 0.0f;
         int degree = 0;
         bool beachLike = false;
+        bool rockRelief = false;
     };
     PreCell makePreCell(const Cell& c, const std::vector<QVector3D>& dual) const;
 
@@ -137,6 +142,7 @@ public:
         std::vector<float>& col;
         std::vector<float>& norm;
         std::vector<float>& ore;
+        std::vector<float>& surface;
         std::vector<uint32_t>& idx;
         std::vector<int>* owner = nullptr;
         std::vector<TriangleSurfaceRole>* surfaceRole = nullptr;
@@ -147,6 +153,7 @@ public:
         bool direct = false;
         size_t triangleCursor = 0, triangleLimit = 0;
         float *directPos = nullptr, *directCol = nullptr, *directNorm = nullptr, *directOre = nullptr;
+        float* directSurface = nullptr;
         uint32_t* directIdx = nullptr;
         int* directOwner = nullptr;
         TriangleSurfaceRole* directRole = nullptr;

@@ -350,6 +350,9 @@
     <None Include="resources\water\water_shading.glsl" />
     <None Include="resources\terrain\terrain.vert" />
     <None Include="resources\terrain\terrain.frag" />
+    <ClCompile Include="textures\ProceduralTexture.cpp" />
+    <ClInclude Include="textures\ProceduralTexture.h" />
+    <ClInclude Include="generation\RockAppearance.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="tests\RiverGeneratorTests.cpp" />

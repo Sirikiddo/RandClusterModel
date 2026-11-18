@@ -4,6 +4,9 @@ in vec3 vNormal;
 in vec3 vWorldPos;
 in float vOreDensity;
 flat in int vOreType;
+in vec2 vSurfaceUV;
+in float vRockWeight;
+flat in uint vRockCell;
 
 out vec4 FragColor;
 
@@ -57,6 +60,37 @@ uniform mat4 uInvViewProjection;
 #include "../water/water_wave_field.glsl"
 #include "../water/water_common.glsl"
 #include "../water/water_shading.glsl"
+
+// ---------- камень на планете ----------
+uniform sampler2DArray uRockAlbedoMap;
+uniform sampler2DArray uRockNormalMap;
+uniform uint uRockAppearanceSeed;
+uniform float uRockUVScale;
+uniform float uRockNormalStrength;
+uniform float uRockStrength;
+
+// ---------- мох на камнях (планета) ----------
+uniform sampler2D uMossAlbedoMap;
+uniform sampler2D uMossNormalMap;
+uniform float uMossAmount;          // общая сила мха 0..1
+uniform float uMossScale;           // тайлинг UV текстур мха
+uniform float uMossPatchScale;      // частота пятен мха
+uniform float uMossCoverage;        // 0..1: какую долю поверхности покрывает мох
+uniform float uMossSlope;           // порог "плоскости" камня
+uniform float uMossNormalStrength;  // сила нормалей мха
+
+uint rockHash(uint value) {
+    value ^= value >> 16u;
+    value *= 0x7feb352du;
+    value ^= value >> 15u;
+    value *= 0x846ca68bu;
+    return value ^ (value >> 16u);
+}
+
+float rockRandom(uint channel) {
+    return float(rockHash(vRockCell ^ uRockAppearanceSeed ^ (channel * 0x9e3779b9u)) & 0x00ffffffu)
+        / 16777216.0;
+}
 
 float hash31(vec3 p) {
     p = fract(p * 0.1031);
@@ -182,12 +216,127 @@ void main() {
         FragColor = vec4(ambient + diffuse, 1.0);
         return;
     }
-    vec3 N = normalize(vNormal);
+    // ---------- камень: текстура + нормал-маппинг ----------
+    float material = min(floor(rockRandom(0u) * 3.0), 2.0);
+    vec2 rockUV = vSurfaceUV * uRockUVScale * mix(0.85, 1.18, rockRandom(1u));
+    if (material == 1.0) rockUV.y *= 1.6;
+    rockUV += vec2(rockRandom(2u), rockRandom(3u)) * 11.0;
+
+    vec3 Ngeo = normalize(vNormal);
+    vec3 dp1 = dFdx(vWorldPos);
+    vec3 dp2 = dFdy(vWorldPos);
+    vec2 duv1 = dFdx(rockUV);
+    vec2 duv2 = dFdy(rockUV);
+    float det = duv1.x * duv2.y - duv2.x * duv1.y;
+    vec3 T;
+    vec3 B;
+    if (abs(det) < 1e-8) {
+        T = normalize(abs(Ngeo.z) < 0.99 ? cross(vec3(0.0, 0.0, 1.0), Ngeo) : vec3(1.0, 0.0, 0.0));
+        B = cross(Ngeo, T);
+    }
+    else {
+        float r = 1.0 / det;
+        T = normalize((dp1 * duv2.y - dp2 * duv1.y) * r);
+        B = normalize((dp2 * duv1.x - dp1 * duv2.x) * r);
+    }
+
+    float rockWeight = clamp(vRockWeight * uRockStrength, 0.0, 1.0);
+
+    vec3 rockAlbedo = texture(uRockAlbedoMap, vec3(rockUV, material)).rgb;
+    rockAlbedo *= mix(0.94, 1.06, rockRandom(4u));
+    vec3 rockNormal = texture(uRockNormalMap, vec3(rockUV, material)).rgb * 2.0 - 1.0;
+    rockNormal.xy *= uRockNormalStrength * mix(0.85, 1.12, rockRandom(6u));
+
+    vec3 rockColor = rockAlbedo * 1.6;
+    vec3 baseColor = mix(vColor, rockColor, rockWeight);
+
+    vec3 nTan = normalize(mix(vec3(0.0, 0.0, 1.0), normalize(rockNormal), rockWeight));
+    vec3 N = normalize(mat3(T, B, Ngeo) * nTan);
+
+    // ---------- МОХ на камнях планеты ----------
+    // Принципы (те же, что в песочнице FS_ROCK, но с поправкой на мир):
+    //   * отдельное размещение пятен для каждого камня, постоянное до новой генерации;
+    //   * upFacing — dot(N_после_нормалей, Ngeo) — мох ложится на «плоские» участки камня;
+    //   * цвет берём из шейдера (dark/mid/top), а текстура мха модулирует яркость;
+    //   * два масштаба текстуры — мелкие детали поверх крупных;
+    //   * рваные края через шум в пороге и затемнение к краю (edge AO).
+    if (uMossAmount > 0.001 && rockWeight > 0.5 && rockRandom(5u) < 0.32) {
+        vec3 cellDir = normalize(vWorldPos);
+        vec3 mossOffset = vec3(rockRandom(7u), rockRandom(8u), rockRandom(9u)) * 23.0;
+        vec3 mossPosition = cellDir * uMossPatchScale * 0.35 + vec3(rockUV * 0.85, 0.0) + mossOffset;
+
+        float upFacing = smoothstep(uMossSlope - 0.15, uMossSlope + 0.15,
+                                    dot(N, Ngeo));
+
+        // Многослойная patchiness: крупные регионы + средние + мелкие + микро.
+        float patchLarge = fbm(mossPosition * 0.35);
+        float patchMed   = fbm(mossPosition * 1.1 + vec3(31.0, 17.0, 5.0));
+        float patchFine  = fbm(mossPosition * 3.2 + vec3(77.0, 53.0, 11.0));
+        float patchMicro = valueNoise(mossPosition * 9.0 + vec3(123.0));
+
+        float patchiness = patchLarge * 0.40
+                         + patchMed   * 0.30
+                         + patchFine  * 0.20
+                         + patchMicro * 0.10;
+
+        // Покрытие задаёт плотность пятен только на выбранной части камней.
+        float threshold = mix(0.62, 0.32, clamp(uMossCoverage, 0.0, 1.0));
+
+        // Рваный край: к порогу добавляем мелкий шум, чтобы контур был не «мыльный».
+        float edgeWobble = (patchFine  - 0.5) * 0.08
+                         + (patchMicro - 0.5) * 0.05;
+        float mossShape = smoothstep(threshold - 0.05 + edgeWobble,
+                                      threshold + 0.05 + edgeWobble,
+                                      patchiness);
+
+        // В самых «мшистых» зонах — плотнее (бугры, подушки).
+        float mossDensity = smoothstep(threshold + 0.05, threshold + 0.25, patchiness);
+
+        float mossMask = upFacing * mossShape * uMossAmount * rockWeight * mix(0.65, 0.95, rockRandom(10u));
+        if (mossMask > 0.001) {
+            // Текстуры мха: два масштаба — крупный рисунок + мелкая деталь.
+            vec2 mossUV1 = rockUV * 3.0;
+            vec2 mossUV2 = rockUV * 8.0 + vec2(0.5, 0.3);
+            vec3 mossTex1 = texture(uMossAlbedoMap, mossUV1).rgb;
+            vec3 mossTex2 = texture(uMossAlbedoMap, mossUV2).rgb;
+            vec3 mossTex  = mossTex1 * 0.7 + mossTex2 * 0.3;
+
+            // Нормали: тоже два масштаба, нормализуем сумму.
+            vec3 mossN1 = texture(uMossNormalMap, mossUV1).rgb * 2.0 - 1.0;
+            vec3 mossN2 = texture(uMossNormalMap, mossUV2).rgb * 2.0 - 1.0;
+            vec3 mossNormal = normalize(mossN1 + mossN2 * 0.6);
+            mossNormal.xy *= uMossNormalStrength * 1.8;
+
+            // Палитра мха — три уровня, чтобы не было «однотонного пятна».
+            vec3 mossDeep = vec3(0.04, 0.13, 0.02);   // самая тень (края, впадины)
+            vec3 mossMid  = vec3(0.14, 0.36, 0.08);   // база
+            vec3 mossTop  = vec3(0.30, 0.62, 0.16);   // освещённые бугры
+
+            // Яркость по текстуре (зелёный канал).
+            float texBright = clamp(mossTex.g * 1.9 - 0.15, 0.0, 1.0);
+            vec3 mossColor = mix(mossMid, mossTop, texBright);
+
+            // В плотных зонах — светлее и «мясистее».
+            mossColor = mix(mossColor, mossTop * 1.1, mossDensity * 0.5);
+
+            // Край — темнее (эффект «укоренения» в камне).
+            float edgeAO = smoothstep(0.0, 0.35, mossShape);
+            mossColor = mix(mossDeep, mossColor, edgeAO);
+
+            // Финальное смешивание.
+            baseColor = mix(baseColor, mossColor, mossMask);
+            vec3 nTanMoss = normalize(mix(nTan, mossNormal, mossMask));
+            N = normalize(mat3(T, B, Ngeo) * nTanMoss);
+        }
+    }
+    // ---------- /МОХ ----------
+
     vec3 L = normalize(-uLightDir);
     float diff = max(dot(N, L), 0.0);
-    vec3 ambient = 0.3 * vColor;
-    vec3 diffuse = 0.7 * diff * vColor;
-    vec3 result = ambient + diffuse;
+    vec3 ambient = 0.3 * baseColor;
+    vec3 diffuse = 0.7 * diff * baseColor;
+    vec3 result  = ambient + diffuse;
+
     if (uOreVisualizationEnabled && vOreDensity > 0.0 && vOreType > 0) {
         vec3 p = normalize(vWorldPos) * 34.0;
         float ridge = 1.0 - abs(fbm(p) * 2.0 - 1.0);

@@ -3,6 +3,7 @@ layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aColor;
 layout(location=2) in vec3 aNormal;
 layout(location=3) in vec2 aOreData;
+layout(location=4) in vec4 aSurface; // UV, rock weight, cell ID
 
 uniform mat4 uMVP;
 uniform mat4 uModel;
@@ -25,6 +26,9 @@ out vec3 vNormal;
 out vec3 vWorldPos;
 out float vOreDensity;
 flat out int vOreType;
+out vec2 vSurfaceUV;
+out float vRockWeight;
+flat out uint vRockCell;
 
 void main() {
     vec3 position = aPos;
@@ -57,5 +61,8 @@ void main() {
     vColor = aColor;
     vOreDensity = aOreData.x;
     vOreType = int(aOreData.y + 0.5);
+    vSurfaceUV = aSurface.xy;
+    vRockWeight = aSurface.z;
+    vRockCell = uint(aSurface.w + 0.5);
     gl_Position = uMVP * vec4(position, 1.0);
 }

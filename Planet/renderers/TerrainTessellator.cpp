@@ -1,4 +1,5 @@
 #include "renderers/TerrainTessellator.h"
+#include "generation/RockAppearance.h"
 
 #include <QFuture>
 #include <QElapsedTimer>
@@ -275,6 +276,28 @@ TerrainTessellator::PreCell TerrainTessellator::makePreCell(const Cell& c, const
         pc.inner[static_cast<size_t>(i)] = liftUnit(u, pc.h);
         pc.outerUnit[static_cast<size_t>(i)] = dual[static_cast<size_t>(c.poly[static_cast<size_t>(i)])];
     }
+    const bool rocky = c.biome == Biome::Rock || c.biome == Biome::Tundra;
+    if (rocky && !pc.beachLike && rockShapeAmount > 0.0f && deg >= 3) {
+        float radius = 0.0f;
+        for (int i = 0; i < deg; ++i) {
+            radius += (pc.inner[static_cast<size_t>(i)] - pc.center).length();
+        }
+        radius /= static_cast<float>(deg);
+        const float heightStep = surfaceModel_ ? surfaceModel_->heightStep() : 0.05f;
+        const float biomeAmount = c.biome == Biome::Rock ? 1.0f : 0.35f;
+        const float amplitude = std::min(heightStep * 0.20f, radius * 0.06f)
+            * std::clamp(rockShapeAmount, 0.0f, 1.0f) * biomeAmount;
+        const auto cellId = static_cast<uint32_t>(c.id);
+        pc.center += pc.center.normalized() * amplitude
+            * (0.25f + 0.75f * RockAppearance::random(cellId, rockSeed));
+        for (int i = 0; i < deg; ++i) {
+            auto& vertex = pc.inner[static_cast<size_t>(i)];
+            const float chip = RockAppearance::random(cellId, rockSeed, static_cast<uint32_t>(i + 1));
+            vertex += vertex.normalized() * amplitude * (chip - 0.5f) * 0.7f;
+        }
+        // Only the inset cap changes; shared outer edges retain their exact positions.
+        pc.rockRelief = true;
+    }
     return pc;
 }
 
@@ -316,7 +339,7 @@ void TerrainTessellator::MeshBuilder::setDirectRange(size_t begin, size_t end) {
     triangleCursor = begin;
     triangleLimit = end;
     directPos = pos.data(); directCol = col.data(); directNorm = norm.data();
-    directOre = ore.data(); directIdx = idx.data();
+    directOre = ore.data(); directSurface = surface.data(); directIdx = idx.data();
     directOwner = owner ? owner->data() : nullptr;
     directRole = surfaceRole ? surfaceRole->data() : nullptr;
 }
@@ -342,19 +365,49 @@ void TerrainTessellator::MeshBuilder::triToward(
 
     const uint32_t base = direct ? static_cast<uint32_t>(triangleCursor * 3u)
         : vertexBase + static_cast<uint32_t>(pos.size() / 3);
+    QVector3D faceNormal = n;
+    if (normalMode == NormalMode::Face && faceNormal.isNull()) {
+        // Qt rounds very small cross products to zero at high subdivision.
+        // Normalize explicitly for lighting, keeping the existing triangle winding.
+        faceNormal = QVector3D::crossProduct(B - A, C - A);
+        const float length = faceNormal.length();
+        faceNormal = length > 0.0f ? faceNormal / length : t;
+        if (QVector3D::dotProduct(faceNormal, t) < 0.0f) faceNormal = -faceNormal;
+    }
     // Keep face winding above; only the lighting normals change on level surfaces.
-    const QVector3D nA = normalMode == NormalMode::Radial ? A.normalized() : n;
-    const QVector3D nB = normalMode == NormalMode::Radial ? B.normalized() : n;
-    const QVector3D nC = normalMode == NormalMode::Radial ? C.normalized() : n;
+    const QVector3D nA = normalMode == NormalMode::Radial ? A.normalized() : faceNormal;
+    const QVector3D nB = normalMode == NormalMode::Radial ? B.normalized() : faceNormal;
+    const QVector3D nC = normalMode == NormalMode::Radial ? C.normalized() : faceNormal;
 
     float oreDensity = 0.0f;
     float oreType = 0.0f;
+
+    // UV и вес камня: нужны для текстурирования террейна.
+    float rockWeight = 0.0f;
+    QVector3D uvOrigin(0.0f, 0.0f, 0.0f);
+    QVector3D uvAxisU(1.0f, 0.0f, 0.0f);
+    QVector3D uvAxisV(0.0f, 0.0f, 1.0f);
+
     if (cells && cellOwner >= 0 && cellOwner < static_cast<int>(cells->size())) {
         const Cell& cell = (*cells)[static_cast<size_t>(cellOwner)];
         if (cell.biome == Biome::Rock && cell.oreType != OreType::None && cell.oreDensity > 0.0f) {
             oreDensity = std::clamp(cell.oreDensity, 0.0f, 1.0f);
             oreType = static_cast<float>(cell.oreType);
         }
+
+        rockWeight = (cell.biome == Biome::Rock || cell.biome == Biome::Tundra) ? 1.0f : 0.0f;
+
+        uvOrigin = cell.centroid;
+        const QVector3D up = cell.centroid.normalized();
+        const QVector3D seed = (std::fabs(up.z()) > 0.99f) ? QVector3D(1.0f, 0.0f, 0.0f) : QVector3D(0.0f, 0.0f, 1.0f);
+        const QVector3D tangent = QVector3D::crossProduct(seed, up).normalized();
+        const QVector3D bitangent = QVector3D::crossProduct(up, tangent).normalized();
+        const uint32_t hashCell = uint32_t(cellOwner) * 2654435761u;
+        const float angle = float(hashCell & 1023u) * (6.2831853f / 1024.0f);
+        const float ca = std::cos(angle);
+        const float sa = std::sin(angle);
+        uvAxisU = (tangent * ca + bitangent * sa).normalized();
+        uvAxisV = (bitangent * ca - tangent * sa).normalized();
     }
     if (direct) {
         if (triangleCursor >= triangleLimit) throw std::logic_error("Terrain writer exceeded its assigned range");
@@ -366,6 +419,16 @@ void TerrainTessellator::MeshBuilder::triToward(
         std::copy_n(colors, 9, directCol + triangleCursor * 9u);
         std::copy_n(normals, 9, directNorm + triangleCursor * 9u);
         std::copy_n(ores, 6, directOre + triangleCursor * 6u);
+        const auto writeSurfaceDirect = [&](float* dst, const QVector3D& p) {
+            const QVector3D d = p - uvOrigin;
+            dst[0] = QVector3D::dotProduct(d, uvAxisU);
+            dst[1] = QVector3D::dotProduct(d, uvAxisV);
+            dst[2] = rockWeight;
+            dst[3] = static_cast<float>(std::max(cellOwner, 0));
+        };
+        writeSurfaceDirect(directSurface + triangleCursor * 12u, A);
+        writeSurfaceDirect(directSurface + triangleCursor * 12u + 4u, B);
+        writeSurfaceDirect(directSurface + triangleCursor * 12u + 8u, C);
         directIdx[triangleCursor * 3u] = base;
         directIdx[triangleCursor * 3u + 1] = base + 1;
         directIdx[triangleCursor * 3u + 2] = base + 2;
@@ -383,6 +446,17 @@ void TerrainTessellator::MeshBuilder::triToward(
         oreDensity, oreType
         });
     idx.insert(idx.end(), { base, base + 1, base + 2 });
+
+    const auto pushSurface = [&](const QVector3D& p) {
+        const QVector3D d = p - uvOrigin;
+        surface.push_back(QVector3D::dotProduct(d, uvAxisU));
+        surface.push_back(QVector3D::dotProduct(d, uvAxisV));
+        surface.push_back(rockWeight);
+        surface.push_back(static_cast<float>(std::max(cellOwner, 0)));
+        };
+    pushSurface(A);
+    pushSurface(B);
+    pushSurface(C);
 
     if (owner) {
         owner->push_back(cellOwner);
@@ -412,7 +486,7 @@ void TerrainTessellator::buildInnerFan(MeshBuilder& mb, const Cell& c, const Pre
         const QVector3D& A = pc.inner[static_cast<size_t>(i)];
         const QVector3D& B = pc.inner[static_cast<size_t>((i + 1) % deg)];
         mb.triToward(pc.center, A, B, pc.color, pc.center, c.id,
-            TriangleSurfaceRole::Top, NormalMode::Radial);
+            TriangleSurfaceRole::Top, pc.rockRelief ? NormalMode::Face : NormalMode::Radial);
     }
 }
 
@@ -428,7 +502,7 @@ void TerrainTessellator::buildBlades(
         const QVector3D O0 = liftUnit(td.sideL[static_cast<size_t>(i)], eh.edgeH[static_cast<size_t>(i)]);
         const QVector3D O1 = liftUnit(td.sideR[static_cast<size_t>(i)], eh.edgeH[static_cast<size_t>(i)]);
         const QVector3D toward = pc.inner[static_cast<size_t>(i)] + pc.inner[static_cast<size_t>(j)] + O0 + O1;
-        const NormalMode normalMode = pc.h == eh.edgeH[static_cast<size_t>(i)]
+        const NormalMode normalMode = !pc.rockRelief && pc.h == eh.edgeH[static_cast<size_t>(i)]
             ? NormalMode::Radial : NormalMode::Face;
         mb.quadToward(pc.inner[static_cast<size_t>(i)], pc.inner[static_cast<size_t>(j)], O1, O0, pc.color, toward, c.id,
             TriangleSurfaceRole::Top, normalMode);
@@ -454,9 +528,9 @@ void TerrainTessellator::buildCorners(
 
         // Test each corner triangle independently: one side can be level while the other slopes.
         const bool levelApex = pc.h == eh.apexH[static_cast<size_t>(i)];
-        const NormalMode currMode = levelApex && pc.h == eh.edgeH[static_cast<size_t>(i)]
+        const NormalMode currMode = !pc.rockRelief && levelApex && pc.h == eh.edgeH[static_cast<size_t>(i)]
             ? NormalMode::Radial : NormalMode::Face;
-        const NormalMode prevMode = levelApex && pc.h == eh.edgeH[static_cast<size_t>(iPrev)]
+        const NormalMode prevMode = !pc.rockRelief && levelApex && pc.h == eh.edgeH[static_cast<size_t>(iPrev)]
             ? NormalMode::Radial : NormalMode::Face;
         mb.triToward(I, Ocurr, Apex, pc.color, I + Ocurr + Apex, c.id,
             TriangleSurfaceRole::Top, currMode);
@@ -664,6 +738,7 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
     auto resizeMesh = [](TerrainMesh& mesh, size_t triangles) {
         mesh.pos.resize(triangles * 9u); mesh.col.resize(triangles * 9u);
         mesh.norm.resize(triangles * 9u); mesh.ore.resize(triangles * 6u);
+        mesh.surface.resize(triangles * 12u);
         mesh.idx.resize(triangles * 3u); mesh.triOwner.resize(triangles);
         mesh.triSurfaceRole.resize(triangles);
     };
@@ -697,13 +772,14 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
             chunk.mesh.col.reserve(chunkTriangles * 9u);
             chunk.mesh.norm.reserve(chunkTriangles * 9u);
             chunk.mesh.ore.reserve(chunkTriangles * 6u);
+            chunk.mesh.surface.reserve(chunkTriangles * 12u);
             chunk.mesh.idx.reserve(chunkTriangles * 3u);
             chunk.mesh.triOwner.reserve(chunkTriangles);
             chunk.mesh.triSurfaceRole.reserve(chunkTriangles);
         }
 
         TerrainMesh& target = directWrite ? M : chunk.mesh;
-        MeshBuilder mb{ target.pos, target.col, target.norm, target.ore, target.idx };
+        MeshBuilder mb{ target.pos, target.col, target.norm, target.ore, target.surface, target.idx };
         mb.owner = &target.triOwner;
         mb.surfaceRole = &target.triSurfaceRole;
         mb.beachTriCount = &chunk.mesh.beachTriCount;
@@ -811,6 +887,7 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
             M.col.reserve(totalTriangles * 9u);
             M.norm.reserve(totalTriangles * 9u);
             M.ore.reserve(totalTriangles * 6u);
+            M.surface.reserve(totalTriangles * 12u);
             M.idx.reserve(totalTriangles * 3u);
             M.triOwner.reserve(totalTriangles);
             M.triSurfaceRole.reserve(totalTriangles);
@@ -821,6 +898,7 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
                 M.col.insert(M.col.end(), chunk.mesh.col.begin(), chunk.mesh.col.end());
                 M.norm.insert(M.norm.end(), chunk.mesh.norm.begin(), chunk.mesh.norm.end());
                 M.ore.insert(M.ore.end(), chunk.mesh.ore.begin(), chunk.mesh.ore.end());
+                M.surface.insert(M.surface.end(), chunk.mesh.surface.begin(), chunk.mesh.surface.end());
                 M.idx.insert(M.idx.end(), chunk.mesh.idx.begin(), chunk.mesh.idx.end());
                 M.triOwner.insert(M.triOwner.end(), chunk.mesh.triOwner.begin(), chunk.mesh.triOwner.end());
                 M.triSurfaceRole.insert(
@@ -836,7 +914,7 @@ TerrainMesh TerrainTessellator::build(const HexSphereModel& model) const {
     mergeMs = phaseTimer.nsecsElapsed() / 1000000.0;
     phaseTimer.restart();
     if (doEdgeCliffs) {
-        MeshBuilder cliffBuilder{ M.pos, M.col, M.norm, M.ore, M.idx };
+        MeshBuilder cliffBuilder{ M.pos, M.col, M.norm, M.ore, M.surface, M.idx };
         cliffBuilder.owner = &M.triOwner;
         cliffBuilder.surfaceRole = &M.triSurfaceRole;
         cliffBuilder.beachTriCount = &M.beachTriCount;

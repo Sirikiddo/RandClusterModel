@@ -24,6 +24,7 @@
 #include "renderers/PlanetSurfaceAtlasPass.h"
 #include "generation/MeshGenerators/WaterMeshGenerator.h"
 #include "ui/PlanetSettingsPanel.h"
+#include "resources/HexSphereWidget_shaders.h"
 
 namespace {
 void require(bool condition, const char* message) {
@@ -182,6 +183,20 @@ bool runWaterScreenPassTests() {
         require(gl.initializeOpenGLFunctions(), "OpenGL 3.3 unavailable");
         testConnectedLakeAtlas(gl);
         qInfo() << "Water screen pass GPU:" << reinterpret_cast<const char*>(gl.glGetString(GL_RENDERER));
+
+        // The shared terrain shader must keep both rock materials and rivers active.
+        QOpenGLShaderProgram terrainProgram, rockProgram;
+        compile(terrainProgram, shaderSource(":/Planet/resources/terrain/terrain.vert"),
+            shaderSource(":/Planet/resources/terrain/terrain.frag"));
+        compile(rockProgram, VS_ROCK, FS_ROCK);
+        require(terrainProgram.attributeLocation("aSurface") == 4,
+            "Terrain shader lost the rock vertex attributes");
+        for (const char* uniform : { "uRockAlbedoMap", "uRockNormalMap", "uMossAlbedoMap",
+                "uMossNormalMap", "uRockAppearanceSeed", "uIsRiver", "uIsRoad", "uOreVisualizationEnabled" }) {
+            require(terrainProgram.uniformLocation(uniform) >= 0,
+                "Terrain shader lost a rock, river, road or ore uniform");
+        }
+        qInfo() << "Rock sandbox and terrain/river shaders compiled and linked";
 
         const auto vertex = shaderSource(":/Planet/resources/water/water_shell.vert");
         const auto fragment = shaderSource(":/Planet/resources/water/water_shell.frag");
