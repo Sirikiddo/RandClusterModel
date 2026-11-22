@@ -173,18 +173,28 @@ void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, cons
 
     const float modelScale = ctx.graph.scene.getModelScaleFactor(); // Для изменения масштаба
 
-    QVector3D surfacePos;
+    // Масштаб модели зависит от размера ячейки, поэтому и посадочный подъём
+    // берём пропорциональным ему: фиксированный радиальный offset на высоких
+    // уровнях (L7) превышал высоту ячейки и модель «парил» над поверхностью.
+    // Базовая константа уменьшена, чтобы машинка вписывалась в одну клетку,
+    // а не перекрывала соседние.
+    const float carScale = 0.022f * modelScale;
+
+    // Посадка на ФАКТИЧЕСКИЙ меш (тот же источник высоты, что у дороги/реки),
+    // а не на аналитическую высоту клетки. Подъём заведомо больше посадочного
+    // сдвига ленты дороги (kRiverLandBiasScale*heightStep = 0.30*heightStep),
+    // поэтому машинка гарантированно стоит НА дороге, а не под ней, на любом L.
+    const float carLift = 0.40f * ctx.graph.scene.heightStep() + carScale * 0.6f;
+
+    QVector3D elevatedPos;
     if (entity.currentCell >= 0) {
-        surfacePos = computeSurfacePoint(ctx.graph.scene, entity.currentCell, ctx.graph.heightStep, 0.0f);
+        elevatedPos = ctx.graph.scene.surfacePointOnMesh(entity.currentCell, carLift);
     }
     else {
         auto* transform = ctx.graph.ecs.get<ecs::Transform>(entity.id);
-        if (transform) surfacePos = transform->position;
+        if (transform) elevatedPos = transform->position;
         else return;
     }
-
-    const float heightOffset = 0.025f;
-    QVector3D elevatedPos = surfacePos.normalized() * (surfacePos.length() + heightOffset);
 
     const GLboolean depthTestWasEnabled = gl_->glIsEnabled(GL_DEPTH_TEST);
     const GLboolean blendWasEnabled = gl_->glIsEnabled(GL_BLEND);
@@ -216,7 +226,6 @@ void EntityRenderer::renderCar(const HexSphereRenderer::RenderContext& ctx, cons
     model = model * basisFromHorizontalForward(up, forwardTangent);
     model = model * carModel_->localAlignment();
 
-    const float carScale = 0.035f * modelScale;  // Умножаем базовый масштаб на коэффициент
     model.scale(carScale);
 
     if (entity.selected) {
@@ -290,18 +299,15 @@ void EntityRenderer::renderFactory(const HexSphereRenderer::RenderContext& ctx, 
         const_cast<EntityRenderer*>(this)->initializeSteamResources();
     }
 
-    QVector3D surfacePos;
+    QVector3D elevatedPos;
     if (entity.currentCell >= 0) {
-        surfacePos = computeSurfacePoint(ctx.graph.scene, entity.currentCell, ctx.graph.heightStep, 0.0f);
+        elevatedPos = ctx.graph.scene.surfacePointOnMesh(entity.currentCell, 0.40f * ctx.graph.scene.heightStep());
     }
     else {
         auto* transform = ctx.graph.ecs.get<ecs::Transform>(entity.id);
-        if (transform) surfacePos = transform->position;
+        if (transform) elevatedPos = transform->position;
         else return;
     }
-
-    const float heightOffset = -0.04f * modelScale;
-    QVector3D elevatedPos = surfacePos.normalized() * (surfacePos.length() + heightOffset);
 
     const GLboolean depthTestWasEnabled = gl_->glIsEnabled(GL_DEPTH_TEST);
     const GLboolean blendWasEnabled = gl_->glIsEnabled(GL_BLEND);
@@ -386,19 +392,20 @@ void EntityRenderer::renderMine(const HexSphereRenderer::RenderContext& ctx, con
     if (!mineModel_ || !mineModel_->isReady() || progFactory_ == 0) return;
 
     const float modelScale = ctx.graph.scene.getModelScaleFactor();
+    const float mineScale = 0.008f * modelScale;
 
-    QVector3D surfacePos;
+    // Посадка на фактический меш (единый источник высоты с дорогой/рекой),
+    // подъём больше посадочного сдвига ленты дороги, чтобы шахта не оказывалась
+    // под дорогой на скосах L7.
+    QVector3D elevatedPos;
     if (entity.currentCell >= 0) {
-        surfacePos = computeSurfacePoint(ctx.graph.scene, entity.currentCell, ctx.graph.heightStep, 0.0f);
+        elevatedPos = ctx.graph.scene.surfacePointOnMesh(entity.currentCell, 0.40f * ctx.graph.scene.heightStep());
     }
     else {
         auto* transform = ctx.graph.ecs.get<ecs::Transform>(entity.id);
-        if (transform) surfacePos = transform->position;
+        if (transform) elevatedPos = transform->position;
         else return;
     }
-
-    const float heightOffset = -0.005f;
-    QVector3D elevatedPos = surfacePos.normalized() * (surfacePos.length() + heightOffset);
 
     const GLboolean depthTestWasEnabled = gl_->glIsEnabled(GL_DEPTH_TEST);
     const GLboolean blendWasEnabled = gl_->glIsEnabled(GL_BLEND);
@@ -422,7 +429,6 @@ void EntityRenderer::renderMine(const HexSphereRenderer::RenderContext& ctx, con
 
     model = model * basisFromHorizontalForward(elevatedPos.normalized(), forwardTangent);
 
-    const float mineScale = 0.008f * modelScale;
     model.scale(mineScale);
     model = model * mineModel_->localPlacement();
 

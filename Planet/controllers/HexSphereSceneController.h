@@ -89,6 +89,11 @@ public:
     const HexSphereModel& model() const { return model_; }
     HexSphereModel& modelMutable() { return model_; }
     const TerrainMesh& terrain() const { return terrainCPU_; }
+    // Точка на ФАКТИЧЕСКОМ рельефе (меше) по направлению центроида клетки,
+    // приподнятая на lift. Используется для посадки моделей, чтобы они стояли
+    // на том же реальном меше, что и дорога/река, а не на аналитической высоте
+    // клетки — иначе на скосах L7 дорога (на меше) оказывается выше модели.
+    QVector3D surfacePointOnMesh(int cellId, float lift) const;
     const WaterParams& waterParams() const { return waterParams_; }
     const WaterParams& resolvedWaterParamsValue() const { return resolvedWaterParams_; }
     const CoastalBandData& coastalBand() const { return coastalBand_; }
@@ -128,6 +133,14 @@ public:
     // Доля морской амплитуды волн, которую русло поднимает геометрически.
     // Наклон для затенения остаётся морским (см. renderers/HexSphereRenderer.cpp).
     static constexpr float kRiverWaveGeometryScale = 0.35f;
+    // Боковой meander русла: амплитуда (в угловой мере, радианы) и частота
+    // пространственно-непрерывной синусоиды по проекции точки на фиксированную
+    // ось. Делают реку извилистой, а не прямой геодезической дугой.
+    static constexpr float kRiverMeanderAmplitude = 0.085f;
+    static constexpr float kRiverMeanderFrequency = 9.0f;
+    // Посадка ленты русла относительно фактического рельефа (доля heightStep).
+    // Меньше — вода плотнее прилегает к ячейке и выглядит врезанной в рельеф.
+    static constexpr float kRiverLandBiasScale = 0.30f;
     const std::vector<RiverPath>& getRivers() const { return rivers_; }
     bool isCellOccupiedByRiver(int cellId) const { return riverOccupiedCells_.contains(cellId); }
     const QSet<int>& riverCells() const { return riverOccupiedCells_; }
@@ -237,6 +250,12 @@ private:
     void rebuildContributorScene();
 
     void updateTreeOccupiedCells();
+
+    // Радиус фактического тесселированного террейна по направлению из центра
+    // (ray-cast по треугольникам клетки-подсказки и её соседей). Используется и
+    // руслом реки, и дорогой, чтобы лента ложилась на реальные треугольники
+    // ячейки, а не на аналитическую высоту плато.
+    float terrainRadiusAt(const QVector3D& direction, int hintCell) const;
 
     SceneViewMode viewMode_ = SceneViewMode::Planet;
 

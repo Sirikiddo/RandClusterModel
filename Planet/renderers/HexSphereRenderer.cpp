@@ -1369,12 +1369,14 @@ void HexSphereRenderer::uploadScene(const HexSphereSceneController& scene, const
         pathMs = timer.nsecsElapsed() / 1000000.0;
         timer.restart();
         if (uploadedRiverRevision_ != scene.riverRevision()) {
-            std::vector<float> centerline;
-            std::vector<float> riverMesh = scene.buildRiverMesh(&centerline);
+            // Осевая линия-подложка убрана: она проступала сквозь полупрозрачную
+            // ленту воды как тёмная полоска посередине реки. Русло теперь рисуется
+            // только лентой (terrain-шейдер с uIsRiver), поэтому centerline больше
+            // не строим и не загружаем.
+            std::vector<float> riverMesh = scene.buildRiverMesh();
             const double riverBuildMs = timer.nsecsElapsed() / 1000000.0;
             timer.restart();
             uploadRiverInternal(riverMesh);
-            uploadRiverLineInternal(centerline);
             uploadedRiverRevision_ = scene.riverRevision();
             const double riverUploadMs = timer.nsecsElapsed() / 1000000.0;
             riverMs = riverBuildMs + riverUploadMs;
@@ -1464,14 +1466,12 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
 
     terrainRenderer_->render(ctx, terrainIndexCount_);
     copySceneDepthToTexture(viewportWidth, viewportHeight);
-    const WaterRenderer::Resources waterResources{
-        envCubemap_, sceneDepthTexture_, planetRadiusAtlas_,
-        planetSurfaceKindAtlas_, planetShoreDistanceAtlas_,
-        vaoWater_ };
-    //waterRenderer_->render(ctx, waterResources);
-    entityRenderer_->renderEntities(ctx);
-    overlayRenderer_->render(ctx);
 
+    // Дорогу рисуем СРАЗУ после террейна и ДО моделей. Раньше лента дороги шла
+    // после entityRenderer_->renderEntities и на почти компланарной глубине
+    // перекрывала машинку. Теперь дорога — часть поверхности ячейки (см.
+    // buildRoadMesh, проекция на рельеф), а модели поднимаются над ней, поэтому
+    // порядок «террейн → дорога → модели» даёт корректную глубину.
     if (roadVertexCount_ > 0 && progTerrain_ != 0) {
         gl_->glUseProgram(progTerrain_);
 
@@ -1493,14 +1493,32 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
             gl_->glUniform1i(uIsRoad_, 1);
         }
 
+        // Лента и полукруглые заглушки строятся веером с разным обходом, поэтому
+        // отсечение граней отключаем (как для реки) — иначе заглушки отсекаются
+        // как back-face и концы дороги становятся прямыми срезами.
+        const GLboolean roadCullWasEnabled = gl_->glIsEnabled(GL_CULL_FACE);
+        gl_->glDisable(GL_CULL_FACE);
+
         gl_->glBindVertexArray(vaoRoad_);
         gl_->glDrawArrays(GL_TRIANGLES, 0, roadVertexCount_);
         gl_->glBindVertexArray(0);
+
+        if (roadCullWasEnabled) {
+            gl_->glEnable(GL_CULL_FACE);
+        }
 
         if (uIsRoad_ >= 0) {
             gl_->glUniform1i(uIsRoad_, 0);
         }
     }
+
+    const WaterRenderer::Resources waterResources{
+        envCubemap_, sceneDepthTexture_, planetRadiusAtlas_,
+        planetSurfaceKindAtlas_, planetShoreDistanceAtlas_,
+        vaoWater_ };
+    //waterRenderer_->render(ctx, waterResources);
+    entityRenderer_->renderEntities(ctx);
+    overlayRenderer_->render(ctx);
 
     // ===================================================================
     // ================ РИСУЕМ РЕКИ ======================================
@@ -1578,29 +1596,9 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
         gl_->glEnable(GL_POLYGON_OFFSET_FILL);
         gl_->glPolygonOffset(-1.0f, -1.0f);
 
-        // Осевая линия рисуется ПОД руслом. Там, где лента воды есть, она
-        // непрозрачна и полностью закрывает линию; линия остаётся видимой
-        // только в реальных просветах, куда не попал ни один пиксель русла.
-        if (riverLineVertexCount_ > 0 && progRiverLine_ != 0) {
-            gl_->glUseProgram(progRiverLine_);
-            gl_->glUniformMatrix4fv(uMVP_RiverLine_, 1, GL_FALSE, ctx.mvp.constData());
-            gl_->glUniform3f(uViewPos_RiverLine_,
-                ctx.cameraPos.x(), ctx.cameraPos.y(), ctx.cameraPos.z());
-            gl_->glUniform2f(uViewportSize_RiverLine_,
-                static_cast<float>(ctx.viewportSize.width()),
-                static_cast<float>(ctx.viewportSize.height()));
-            gl_->glUniform1f(uWidthPx_RiverLine_, 3.5f);
-            // The terrain depth buffer is already populated. Keep depth test
-            // enabled so the diagnostic/underlay line cannot show through the
-            // far side of the planet.
-            gl_->glEnable(GL_DEPTH_TEST);
-            gl_->glDepthMask(GL_FALSE);
-            gl_->glLineWidth(1.0f);
-            gl_->glBindVertexArray(vaoRiverLine_);
-            gl_->glDrawArrays(GL_LINES, 0, riverLineVertexCount_);
-            gl_->glBindVertexArray(0);
-            gl_->glUseProgram(progTerrain_);
-        }
+        // Осевая линия-подложка (GL_LINES через progRiverLine_) удалена: она
+        // проступала сквозь полупрозрачную ленту воды как тёмная полоска
+        // посередине реки. Русло формирует только лента terrain-шейдера.
 
         // Глубину террейна проверяем вручную с допуском: кромка клиффа может
         // быть на волосок ближе к камере и вырезать часть русла. Настоящие
@@ -1614,11 +1612,13 @@ void HexSphereRenderer::renderScene(const RenderGraph& graph, const RenderCamera
             gl_->glBindTexture(GL_TEXTURE_2D, sceneDepthTexture_);
             gl_->glUniform1i(uSceneDepthTex_Terrain_, 1);
             if (uRiverDepthTolerance_ >= 0) {
-                // This is only a small rasterization cushion at cliff edges.
-                // A quarter world unit lets rivers survive in front of real
-                // terrain on the far side and makes them bleed through.
+                // Небольшая растеризационная подушка на кромках клиффов. На
+                // высоких уровнях шаг высоты мал, и прежний допуск 0.10*heightStep
+                // вырезал русло на скосах между клетками — река «пропадала» в
+                // местах перехода. Поднимаем долю, сохраняя пропорциональность
+                // уровню, чтобы река не проступала сквозь настоящие горы впереди.
                 gl_->glUniform1f(uRiverDepthTolerance_,
-                    std::max(0.002f, 0.10f * scene.heightStep()));
+                    std::max(0.003f, 0.30f * scene.heightStep()));
             }
         }
         else if (uRiverDepthTolerance_ >= 0) {

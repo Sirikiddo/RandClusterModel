@@ -518,8 +518,12 @@ float HexSphereSceneController::getModelScaleFactor() const {
     // Используем степенную функцию для более сильного масштабирования
     const float powerScale = std::pow(baseCellSize, 1.4f);
 
-    // Ограничения, чтобы модели не исчезали и не выходили за пределы
-    constexpr float kMinScale = 0.15f;
+    // Ограничения, чтобы модели не исчезали и не выходили за пределы.
+    // Нижний порог оставлен низким, чтобы на высоких уровнях (L6-L7) масштаб
+    // продолжал следовать за размером ячейки: при L7 cellSize≈0.168 и
+    // powerScale≈0.08, поэтому прежнее значение 0.15 раздувало модели относительно
+    // клеток и они выглядели слишком крупными.
+    constexpr float kMinScale = 0.05f;
     constexpr float kMaxScale = 3.5f;
     const float clampedScale = std::clamp(powerScale, kMinScale, kMaxScale);
 
@@ -729,6 +733,91 @@ void HexSphereSceneController::generateRivers() {
         << " ms=" << timer.nsecsElapsed() / 1000000.0;
 }
 
+float HexSphereSceneController::terrainRadiusAt(
+    const QVector3D& direction, int hintCell) const {
+    const auto& cells = model_.cells();
+    const int cellCount = static_cast<int>(cells.size());
+    const bool hasTerrainMesh = !terrainCPU_.pos.empty()
+        && !terrainCPU_.idx.empty()
+        && !terrainCPU_.triOwner.empty()
+        && terrainCPU_.cellTriStart.size() == static_cast<size_t>(cellCount) + 1u;
+
+    if (!hasTerrainMesh || hintCell < 0 || hintCell >= cellCount) {
+        const int fallback = std::clamp(hintCell, 0, std::max(cellCount - 1, 0));
+        return model_.radiusForHeight(
+            cells.empty() ? 0.0f : static_cast<float>(cells[static_cast<size_t>(fallback)].height));
+    }
+
+    const std::uint32_t* cellTriStart = terrainCPU_.cellTriStart.data();
+    const std::uint32_t* triByCell = terrainCPU_.triByCell.data();
+    const float* positions = terrainCPU_.pos.data();
+    const uint32_t* indices = terrainCPU_.idx.data();
+
+    auto vertex = [&](uint32_t index) {
+        return QVector3D(
+            positions[index * 3 + 0],
+            positions[index * 3 + 1],
+            positions[index * 3 + 2]);
+        };
+
+    float best = -1.0f;
+    auto testCell = [&](int cellId) {
+        if (cellId < 0 || cellId >= cellCount) {
+            return;
+        }
+        const uint32_t begin = cellTriStart[static_cast<std::size_t>(cellId)];
+        const uint32_t end = cellTriStart[static_cast<std::size_t>(cellId) + 1u];
+        for (uint32_t slot = begin; slot < end; ++slot) {
+            const uint32_t tri = triByCell[slot];
+            const QVector3D v0 = vertex(indices[tri * 3 + 0]);
+            const QVector3D v1 = vertex(indices[tri * 3 + 1]);
+            const QVector3D v2 = vertex(indices[tri * 3 + 2]);
+            const QVector3D e1 = v1 - v0;
+            const QVector3D e2 = v2 - v0;
+            const QVector3D pvec = QVector3D::crossProduct(direction, e2);
+            const float det = QVector3D::dotProduct(e1, pvec);
+            if (std::abs(det) < 1e-9f) {
+                continue;
+            }
+            const float invDet = 1.0f / det;
+            const QVector3D tvec = -v0;
+            const float u = QVector3D::dotProduct(tvec, pvec) * invDet;
+            if (u < 0.0f || u > 1.0f) {
+                continue;
+            }
+            const QVector3D qvec = QVector3D::crossProduct(tvec, e1);
+            const float v = QVector3D::dotProduct(direction, qvec) * invDet;
+            if (v < 0.0f || u + v > 1.0f) {
+                continue;
+            }
+            const float distance = QVector3D::dotProduct(e2, qvec) * invDet;
+            if (distance > 1e-6f) {
+                best = std::max(best, distance);
+            }
+        }
+        };
+
+    testCell(hintCell);
+    for (int neighbor : cells[static_cast<size_t>(hintCell)].neighbors) {
+        testCell(neighbor);
+    }
+
+    if (best > 0.0f) {
+        return best;
+    }
+    return model_.radiusForHeight(
+        static_cast<float>(cells[static_cast<size_t>(hintCell)].height));
+}
+
+QVector3D HexSphereSceneController::surfacePointOnMesh(int cellId, float lift) const {
+    const auto& cells = model_.cells();
+    if (cellId < 0 || cellId >= static_cast<int>(cells.size())) {
+        return QVector3D(0.0f, 0.0f, 1.0f);
+    }
+    const QVector3D dir = cells[static_cast<size_t>(cellId)].centroid.normalized();
+    return dir * (terrainRadiusAt(dir, cellId) + lift);
+}
+
 std::vector<float> HexSphereSceneController::buildRiverMesh(std::vector<float>* centerlineOut) const {
     if (centerlineOut) {
         centerlineOut->clear();
@@ -750,8 +839,9 @@ std::vector<float> HexSphereSceneController::buildRiverMesh(std::vector<float>* 
     // Русло слегка приподнято над поверхностью: иначе оно прячется в
     // микрорельефе и на кромках клеток. Подъём меньше шага высоты, поэтому вода
     // читается как поверхность, а не как висящая труба. У устья подъём
-    // минимальный, чтобы язык реки сливался с морем.
-    const float landBias = 0.55f * heightStep_;
+    // минимальный, чтобы язык реки сливался с морем. Коэффициент понижен,
+    // чтобы лента плотнее прилегала к рельефу и выглядела врезанной в ячейку.
+    const float landBias = kRiverLandBiasScale * heightStep_;
     const float waterBias = 0.0035f * modelScale;
     // Особенность реки против дороги: русло шире у устьев и уже в среднем течении.
     const float mouthHalfWidth = kRiverMouthHalfWidth * modelScale;
@@ -760,85 +850,8 @@ std::vector<float> HexSphereSceneController::buildRiverMesh(std::vector<float>* 
     // Русло должно ложиться на фактическую поверхность террейна, а не на
     // аналитическую высоту клеток: тесселятор сглаживает кромки и строит
     // клиффы, поэтому расчётная высота на неровных клетках не совпадает с
-    // мешем. Сэмплируем реальные треугольники террейна по направлению и
-    // приподнимаем воду ровно на surfaceBias.
-    // The tessellator already built the per-cell triangle CSR once per heat
-    // rebuild; reuse it instead of rescanning millions of triangles here.
-    const bool hasTerrainMesh = !terrainCPU_.pos.empty()
-        && !terrainCPU_.idx.empty()
-        && !terrainCPU_.triOwner.empty()
-        && terrainCPU_.cellTriStart.size() == static_cast<size_t>(cellCount) + 1u;
-    const std::uint32_t* cellTriStart = hasTerrainMesh
-        ? terrainCPU_.cellTriStart.data()
-        : nullptr;
-    const std::uint32_t* triByCell = hasTerrainMesh
-        ? terrainCPU_.triByCell.data()
-        : nullptr;
-
-    auto terrainRadiusAt = [&](const QVector3D& direction, int hintCell) -> float {
-        if (!hasTerrainMesh || hintCell < 0 || hintCell >= cellCount) {
-            const int fallback = std::clamp(hintCell, 0, std::max(cellCount - 1, 0));
-            return model_.radiusForHeight(
-                cells.empty() ? 0.0f : static_cast<float>(cells[static_cast<size_t>(fallback)].height));
-        }
-
-        const float* positions = terrainCPU_.pos.data();
-        const uint32_t* indices = terrainCPU_.idx.data();
-        auto vertex = [&](uint32_t index) {
-            return QVector3D(
-                positions[index * 3 + 0],
-                positions[index * 3 + 1],
-                positions[index * 3 + 2]);
-            };
-
-        float best = -1.0f;
-        auto testCell = [&](int cellId) {
-            if (cellId < 0 || cellId >= cellCount) {
-                return;
-            }
-            const uint32_t begin = cellTriStart[static_cast<std::size_t>(cellId)];
-            const uint32_t end = cellTriStart[static_cast<std::size_t>(cellId) + 1u];
-            for (uint32_t slot = begin; slot < end; ++slot) {
-                const uint32_t tri = triByCell[slot];
-                const QVector3D v0 = vertex(indices[tri * 3 + 0]);
-                const QVector3D v1 = vertex(indices[tri * 3 + 1]);
-                const QVector3D v2 = vertex(indices[tri * 3 + 2]);
-                const QVector3D e1 = v1 - v0;
-                const QVector3D e2 = v2 - v0;
-                const QVector3D pvec = QVector3D::crossProduct(direction, e2);
-                const float det = QVector3D::dotProduct(e1, pvec);
-                if (std::abs(det) < 1e-9f) {
-                    continue;
-                }
-                const float invDet = 1.0f / det;
-                const QVector3D tvec = -v0;
-                const float u = QVector3D::dotProduct(tvec, pvec) * invDet;
-                if (u < 0.0f || u > 1.0f) {
-                    continue;
-                }
-                const QVector3D qvec = QVector3D::crossProduct(tvec, e1);
-                const float v = QVector3D::dotProduct(direction, qvec) * invDet;
-                if (v < 0.0f || u + v > 1.0f) {
-                    continue;
-                }
-                const float distance = QVector3D::dotProduct(e2, qvec) * invDet;
-                if (distance > 1e-6f) {
-                    best = std::max(best, distance);
-                }
-            }
-            };
-
-        testCell(hintCell);
-        for (int neighbor : cells[static_cast<size_t>(hintCell)].neighbors) {
-            testCell(neighbor);
-        }
-
-        if (best > 0.0f) {
-            return best;
-        }
-        return model_.radiusForHeight(
-            static_cast<float>(cells[static_cast<size_t>(hintCell)].height));
-    };
+    // мешем. Выборка реальных треугольников террейна по направлению вынесена
+    // в метод terrainRadiusAt() — его же использует дорога.
 
     // Русло повторяет профиль рельефа. Тесселятор между клетками строит скос
     // (bladeHeightForEdge: среднее высот клеток при перепаде не больше
@@ -948,7 +961,30 @@ std::vector<float> HexSphereSceneController::buildRiverMesh(std::vector<float>* 
                 }
 
                 Sample sample;
-                sample.dir = slerpDirection(dirFrom, dirTo, t);
+                QVector3D baseDir = slerpDirection(dirFrom, dirTo, t);
+
+                // Волнистость русла: геодезическая дуга сама по себе прямая,
+                // поэтому добавляем боковое смещение в касательной плоскости.
+                // Фаза берётся от проекции точки на фиксированную ось, а не от
+                // локального t внутри ребра — так изгиб непрерывен на стыках
+                // клеток и река не «ломается» на углах. Seed по id реки делает
+                // форму детерминированной (стабильна между пересборками).
+                QVector3D travel = dirTo - dirFrom;
+                travel -= QVector3D::dotProduct(travel, baseDir) * baseDir;
+                if (travel.lengthSquared() > 1e-8f) {
+                    travel.normalize();
+                    const QVector3D lateral =
+                        QVector3D::crossProduct(baseDir, travel).normalized();
+                    const float phase =
+                        static_cast<float>(river.cellIds.front()) * 0.7f;
+                    const float s = QVector3D::dotProduct(
+                        baseDir, QVector3D(1.0f, 0.6f, 0.3f).normalized());
+                    const float meander = kRiverMeanderAmplitude
+                        * std::sin(s * kRiverMeanderFrequency + phase);
+                    baseDir = (baseDir + lateral * meander).normalized();
+                }
+
+                sample.dir = baseDir;
                 sample.radius = surfaceRadius(height);
                 sample.cellHint = (t <= 0.5f) ? from.id : to.id;
                 samples.push_back(sample);
@@ -1217,281 +1253,153 @@ std::vector<float> HexSphereSceneController::buildRoadMesh(const std::vector<int
     std::vector<float> vertices;
     if (path.size() < 2) return vertices;
 
-    // Получаем масштаб
+    const auto& cells = model_.cells();
+    const int cellCount = static_cast<int>(cells.size());
+    if (cells.empty()) return vertices;
+
     const float modelScale = getModelScaleFactor();
-
-    // Масштабируем параметры дороги
     const float roadWidth = 0.04f * modelScale;
-    const float heightOffset = 0.0000000099f * modelScale;
-    const float cornerSegments = 16;
-    const float capSegments = 12;  // Количество сегментов для полукруга
+    // Лента приподнимается над фактическим рельефом ровно на столько, чтобы не
+    // было z-fighting с террейном, но остаётся «в ячейке» (не вися над ней).
+    const float landBias = kRiverLandBiasScale * heightStep_;
 
-    // Получаем точки пути
-    auto pathPoints = buildPathPolyline(path);
-    if (pathPoints.size() < 2) return vertices;
-
-    // ===== УДЛИНЯЕМ ПЕРВУЮ И ПОСЛЕДНЮЮ ТОЧКИ =====
-    std::vector<QVector3D> extendedPoints = pathPoints;
-
-    if (extendedPoints.size() >= 2) {
-        QVector3D firstDir = (extendedPoints[1] - extendedPoints[0]).normalized();
-        QVector3D firstExtend = extendedPoints[0] - firstDir * (roadWidth * 2.0f);
-        extendedPoints.insert(extendedPoints.begin(), firstExtend);
+    // Все клетки маршрута должны существовать: terrainRadiusAt опирается на
+    // соседей клетки-подсказки.
+    for (int cellId : path) {
+        if (cellId < 0 || cellId >= cellCount) return vertices;
     }
 
-    if (extendedPoints.size() >= 2) {
-        size_t lastIdx = extendedPoints.size() - 1;
-        QVector3D lastDir = (extendedPoints[lastIdx] - extendedPoints[lastIdx - 1]).normalized();
-        QVector3D lastExtend = extendedPoints[lastIdx] + lastDir * (roadWidth * 2.0f);
-        extendedPoints.push_back(lastExtend);
-    }
-
-    // Структура сегмента
-    struct Segment {
-        QVector3D start;
-        QVector3D end;
-        QVector3D dir;
-        QVector3D up;
-        QVector3D right;
-        QVector3D startLeft;
-        QVector3D startRight;
-        QVector3D endLeft;
-        QVector3D endRight;
+    // Проекция направления на фактические треугольники террейна (тот же метод,
+    // что у реки). Возвращает точку на поверхности по направлению dir с учётом
+    // клетки-подсказки hintCell.
+    auto surfacePoint = [&](const QVector3D& dir, int hintCell) -> QVector3D {
+        const float radius = terrainRadiusAt(dir, hintCell) + landBias;
+        return dir.normalized() * radius;
     };
 
-    std::vector<Segment> segments;
-    segments.reserve(extendedPoints.size() - 1);
-
-    for (size_t i = 0; i + 1 < extendedPoints.size(); ++i) {
-        Segment seg;
-        seg.start = extendedPoints[i];
-        seg.end = extendedPoints[i + 1];
-        seg.dir = (seg.end - seg.start).normalized();
-        seg.up = seg.start.normalized();
-        seg.right = QVector3D::crossProduct(seg.dir, seg.up).normalized();
-
-        if (seg.right.length() < 0.001f) {
-            seg.right = QVector3D(1.0f, 0.0f, 0.0f);
-            seg.right = QVector3D::crossProduct(seg.up, seg.right).normalized();
-        }
-        seg.right.normalize();
-
-        seg.startLeft = seg.start + seg.right * roadWidth;
-        seg.startRight = seg.start - seg.right * roadWidth;
-        seg.endLeft = seg.end + seg.right * roadWidth;
-        seg.endRight = seg.end - seg.right * roadWidth;
-
-        seg.startLeft = seg.startLeft.normalized() * (seg.startLeft.length() + heightOffset);
-        seg.startRight = seg.startRight.normalized() * (seg.startRight.length() + heightOffset);
-        seg.endLeft = seg.endLeft.normalized() * (seg.endLeft.length() + heightOffset);
-        seg.endRight = seg.endRight.normalized() * (seg.endRight.length() + heightOffset);
-
-        segments.push_back(seg);
-    }
-
-    // ===== 1. РИСУЕМ ВСЕ СЕГМЕНТЫ =====
-    for (const auto& seg : segments) {
-        vertices.insert(vertices.end(), {
-            seg.startLeft.x(), seg.startLeft.y(), seg.startLeft.z(),
-            seg.endLeft.x(), seg.endLeft.y(), seg.endLeft.z(),
-            seg.startRight.x(), seg.startRight.y(), seg.startRight.z()
-            });
-
-        vertices.insert(vertices.end(), {
-            seg.startRight.x(), seg.startRight.y(), seg.startRight.z(),
-            seg.endLeft.x(), seg.endLeft.y(), seg.endLeft.z(),
-            seg.endRight.x(), seg.endRight.y(), seg.endRight.z()
-            });
-    }
-
-    // ===== 2. ЗАПОЛНЯЕМ ПОВОРОТЫ =====
-    for (size_t i = 0; i + 1 < segments.size(); ++i) {
-        const auto& prev = segments[i];
-        const auto& curr = segments[i + 1];
-
-        float dot = QVector3D::dotProduct(prev.dir, curr.dir);
-        float angle = std::acos(std::clamp(dot, -1.0f, 1.0f));
-
-        if (angle > 0.05f) {
-            QVector3D cross = QVector3D::crossProduct(prev.dir, curr.dir);
-            float turnSign = QVector3D::dotProduct(cross, prev.up) > 0 ? 1.0f : -1.0f;
-
-            QVector3D turnCenter;
-
-            QVector3D p1 = prev.end - prev.right * roadWidth * turnSign;
-            QVector3D p2 = curr.start - curr.right * roadWidth * turnSign;
-
-            QVector3D d1 = prev.right * turnSign;
-            QVector3D d2 = curr.right * turnSign;
-
-            QVector3D diff = p2 - p1;
-
-            QVector3D up = prev.up;
-            QVector3D right = prev.right;
-            QVector3D forward = prev.dir;
-
-            float d1_r = QVector3D::dotProduct(d1, right);
-            float d1_f = QVector3D::dotProduct(d1, forward);
-            float d2_r = QVector3D::dotProduct(d2, right);
-            float d2_f = QVector3D::dotProduct(d2, forward);
-            float diff_r = QVector3D::dotProduct(diff, right);
-            float diff_f = QVector3D::dotProduct(diff, forward);
-
-            float det = d1_r * (-d2_f) - d1_f * (-d2_r);
-            if (std::abs(det) > 0.0001f) {
-                float t1 = (diff_r * (-d2_f) - diff_f * (-d2_r)) / det;
-                turnCenter = p1 + d1 * t1;
-            }
-            else {
-                turnCenter = (p1 + p2) * 0.5f;
-            }
-
-            turnCenter = turnCenter.normalized() * (turnCenter.length());
-
-            int segmentsCount = std::max(6, int(cornerSegments * angle / 3.14159f));
-
-            QVector3D prevLeft = prev.endLeft;
-            QVector3D prevRight = prev.endRight;
-
-            for (int s = 0; s <= segmentsCount; ++s) {
-                float t = float(s) / float(segmentsCount);
-                float rotAngle = t * angle * turnSign;
-
-                QVector3D rotatedRight = QQuaternion::fromAxisAndAngle(
-                    prev.up,
-                    rotAngle * 180.0f / 3.14159f
-                ).rotatedVector(prev.right * turnSign);
-
-                QVector3D pointLeft = turnCenter + rotatedRight * roadWidth;
-                QVector3D pointRight = turnCenter - rotatedRight * roadWidth;
-
-                pointLeft = pointLeft.normalized() * (pointLeft.length() + heightOffset);
-                pointRight = pointRight.normalized() * (pointRight.length() + heightOffset);
-
-                if (s > 0) {
-                    vertices.insert(vertices.end(), {
-                        prevLeft.x(), prevLeft.y(), prevLeft.z(),
-                        pointLeft.x(), pointLeft.y(), pointLeft.z(),
-                        turnCenter.x(), turnCenter.y(), turnCenter.z()
-                        });
-
-                    vertices.insert(vertices.end(), {
-                        prevRight.x(), prevRight.y(), prevRight.z(),
-                        turnCenter.x(), turnCenter.y(), turnCenter.z(),
-                        pointRight.x(), pointRight.y(), pointRight.z()
-                        });
-
-                    vertices.insert(vertices.end(), {
-                        prevLeft.x(), prevLeft.y(), prevLeft.z(),
-                        prevRight.x(), prevRight.y(), prevRight.z(),
-                        pointLeft.x(), pointLeft.y(), pointLeft.z()
-                        });
-
-                    vertices.insert(vertices.end(), {
-                        prevRight.x(), prevRight.y(), prevRight.z(),
-                        pointRight.x(), pointRight.y(), pointRight.z(),
-                        pointLeft.x(), pointLeft.y(), pointLeft.z()
-                        });
-                }
-
-                prevLeft = pointLeft;
-                prevRight = pointRight;
-            }
+    // Обход рёбер маршрута с подшагами — как у реки. Подсказка клетки берётся
+    // от конца текущего ребра (t<=0.5 → from, иначе → to), поэтому выборка
+    // стабильна на стыках клеток и не «прыгает» между плато и скосом.
+    constexpr int kSubStepsPerEdge = 8;
+    struct Node {
+        QVector3D dir;
+        int hint = -1;
+    };
+    std::vector<Node> nodes;
+    const size_t count = path.size();
+    for (size_t i = 0; i + 1 < count; ++i) {
+        const QVector3D dirFrom = cells[static_cast<size_t>(path[i])].centroid.normalized();
+        const QVector3D dirTo = cells[static_cast<size_t>(path[i + 1])].centroid.normalized();
+        for (int k = 0; k < kSubStepsPerEdge; ++k) {
+            const float t = static_cast<float>(k) / static_cast<float>(kSubStepsPerEdge);
+            Node n;
+            n.dir = slerpDirection(dirFrom, dirTo, t);
+            n.hint = (t <= 0.5f) ? path[i] : path[i + 1];
+            nodes.push_back(n);
         }
     }
+    {
+        Node n;
+        n.dir = cells[static_cast<size_t>(path.back())].centroid.normalized();
+        n.hint = path.back();
+        nodes.push_back(n);
+    }
+    if (nodes.size() < 2) return vertices;
 
-    // ===== 3. ДОБАВЛЯЕМ ПОЛУКРУГИ НА КОНЦАХ =====
-    if (segments.size() >= 1) {
-        // ===== ПОЛУКРУГ В НАЧАЛЕ (смотрит назад) =====
-        const auto& firstSeg = segments.front();
-        QVector3D startCenter = firstSeg.start;
-        QVector3D startUp = firstSeg.up;
-        QVector3D startRight = firstSeg.right;
+    // Для каждой точки строим сечение ленты и ПРОЕЦИРУЕМ оба боковых края тоже
+    // на рельеф. Раньше края держались на радиусе центра, из-за чего на скосах
+    // и клиффах L7 лента «парит» над ячейкой по краям.
+    struct Frame {
+        QVector3D center;
+        QVector3D up;
+        QVector3D tangent;  // направление вперёд по дороге
+        QVector3D right;    // к левому краю
+        int hint = -1;
+    };
+    std::vector<Frame> frames(nodes.size());
+    std::vector<QVector3D> leftPts(nodes.size());
+    std::vector<QVector3D> rightPts(nodes.size());
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        const QVector3D up = nodes[i].dir.normalized();
+        const QVector3D center = surfacePoint(up, nodes[i].hint);
 
-        // ===== ПОВОРАЧИВАЕМ НАЧАЛЬНУЮ ТОЧКУ НА 35 ГРАДУСОВ =====
-        const float startRotationDegrees = 0.0f;  // Поворот против часовой стрелк
-        // Поворачиваем startRight на 35 градусов против часовой стрелки
-        QVector3D rotatedStartRight = QQuaternion::fromAxisAndAngle(
-            startUp,
-            -startRotationDegrees
-        ).rotatedVector(startRight);
+        // Касательная по центральной разности: на повороте сечение идёт по
+        // биссектрисе, лента не ломается на углах между клетками.
+        QVector3D tangent;
+        if (i > 0 && i + 1 < nodes.size()) {
+            tangent = nodes[i + 1].dir - nodes[i - 1].dir;
+        }
+        else if (i + 1 < nodes.size()) {
+            tangent = nodes[i + 1].dir - up;
+        }
+        else {
+            tangent = up - nodes[i - 1].dir;
+        }
+        tangent -= QVector3D::dotProduct(tangent, up) * up;
+        if (tangent.lengthSquared() < 1e-10f) {
+            tangent = QVector3D::crossProduct(up, QVector3D(0.0f, 1.0f, 0.0f));
+        }
+        if (tangent.lengthSquared() < 1e-10f) {
+            tangent = QVector3D(1.0f, 0.0f, 0.0f);
+        }
+        tangent.normalize();
 
-        // Левая точка теперь будет с противоположной стороны
-        QVector3D startLeft = startCenter - rotatedStartRight * roadWidth;
-        QVector3D startRightRotated = startCenter + rotatedStartRight * roadWidth;
+        QVector3D right = QVector3D::crossProduct(tangent, up);
+        if (right.lengthSquared() < 1e-10f) {
+            right = QVector3D(1.0f, 0.0f, 0.0f);
+        }
+        right.normalize();
 
-        // Поднимаем над поверхностью
-        startLeft = startLeft.normalized() * (startLeft.length() + heightOffset);
-        startRightRotated = startRightRotated.normalized() * (startRightRotated.length() + heightOffset);
+        const QVector3D ldir = (center + right * roadWidth).normalized();
+        const QVector3D rdir = (center - right * roadWidth).normalized();
+        leftPts[i] = surfacePoint(ldir, nodes[i].hint);
+        rightPts[i] = surfacePoint(rdir, nodes[i].hint);
 
-        // Начинаем с левого края (повёрнутого)
-        QVector3D prevCapPoint = startLeft;
+        frames[i] = Frame{center, up, tangent, right, nodes[i].hint};
+    }
 
-        // Закрываем левый угол
+    auto emitTri = [&](const QVector3D& a, const QVector3D& b, const QVector3D& c) {
         vertices.insert(vertices.end(), {
-            startCenter.x(), startCenter.y(), startCenter.z(),
-            startLeft.x(), startLeft.y(), startLeft.z(),
-            startRightRotated.x(), startRightRotated.y(), startRightRotated.z()
+            a.x(), a.y(), a.z(),
+            b.x(), b.y(), b.z(),
+            c.x(), c.y(), c.z()
             });
+    };
 
-        // Полукруг от повёрнутого левого края к повёрнутому правому
+    // Лента из треугольников между соседними сечениями.
+    for (size_t i = 0; i + 1 < nodes.size(); ++i) {
+        emitTri(leftPts[i], leftPts[i + 1], rightPts[i]);
+        emitTri(rightPts[i], leftPts[i + 1], rightPts[i + 1]);
+    }
+
+    // ===== ПОЛУКРУГЛЫЕ ЗАГЛУШКИ НА КОНЦАХ =====
+    // Дуга радиуса roadWidth в касательной плоскости, от левого края к правому,
+    // выпуклостью наружу (вперёд на конце, назад в начале). Каждая вершина дуги
+    // проектируется на рельеф, поэтому заглушка тоже лежит «в ячейке».
+    // Дуга опирается на ТЕ ЖЕ вершины торца ленты (leftPts/rightPts), а не на
+    // отдельно пересчитанный центр — иначе на стыке полукруга и прямоугольника
+    // появлялась ступенька/зазор.
+    const int capSegments = 12;
+    auto addCap = [&](size_t idx, float forwardSign) {
+        const QVector3D a = leftPts[idx];
+        const QVector3D b = rightPts[idx];
+        const int hint = frames[idx].hint;
+        const QVector3D chordMid = (a + b) * 0.5f;
+        const QVector3D c = surfacePoint(chordMid.normalized(), hint);
+        const QVector3D radial = a - chordMid;
+        const QVector3D bulge = frames[idx].tangent * forwardSign * radial.length();
+        QVector3D prev = a;
         for (int s = 1; s <= capSegments; ++s) {
-            float t = float(s) / float(capSegments);
-            float angle = t * 3.14159f;
-
-            // Вращаем от -startRight (влево) через "спину" к startRight (вправо)
-            QVector3D rotatedRight = QQuaternion::fromAxisAndAngle(
-                startUp,
-                angle * 180.0f / 3.14159f
-            ).rotatedVector(-rotatedStartRight);
-
-            QVector3D capPoint = startCenter + rotatedRight * roadWidth;
-            capPoint = capPoint.normalized() * (capPoint.length() + heightOffset);
-
-            vertices.insert(vertices.end(), {
-                startCenter.x(), startCenter.y(), startCenter.z(),
-                prevCapPoint.x(), prevCapPoint.y(), prevCapPoint.z(),
-                capPoint.x(), capPoint.y(), capPoint.z()
-                });
-
-            prevCapPoint = capPoint;
+            const float phi = static_cast<float>(s) / static_cast<float>(capSegments) * 3.14159265f;
+            const QVector3D p = chordMid + radial * std::cos(phi) + bulge * std::sin(phi);
+            const QVector3D proj = surfacePoint(p.normalized(), hint);
+            emitTri(c, prev, proj);
+            prev = proj;
         }
-
-        // Закрываем правый угол
-        vertices.insert(vertices.end(), {
-            startCenter.x(), startCenter.y(), startCenter.z(),
-            prevCapPoint.x(), prevCapPoint.y(), prevCapPoint.z(),
-            startRightRotated.x(), startRightRotated.y(), startRightRotated.z()
-            });
-
-        // Полукруг в конце
-        const auto& lastSeg = segments.back();
-        QVector3D endCenter = lastSeg.end;
-        QVector3D endUp = lastSeg.up;
-        QVector3D endRight = lastSeg.right;
-
-        prevCapPoint = lastSeg.endLeft;
-        for (int s = 1; s <= capSegments; ++s) {
-            float t = float(s) / float(capSegments);
-            float angle = t * 3.14159f;
-
-            QVector3D rotatedRight = QQuaternion::fromAxisAndAngle(
-                endUp,
-                angle * 180.0f / 3.14159f
-            ).rotatedVector(endRight);
-
-            QVector3D capPoint = endCenter + rotatedRight * roadWidth;
-            capPoint = capPoint.normalized() * (capPoint.length() + heightOffset);
-
-            vertices.insert(vertices.end(), {
-                endCenter.x(), endCenter.y(), endCenter.z(),
-                prevCapPoint.x(), prevCapPoint.y(), prevCapPoint.z(),
-                capPoint.x(), capPoint.y(), capPoint.z()
-                });
-
-            prevCapPoint = capPoint;
-        }
-    }
+        (void)b;
+    };
+    addCap(0, -1.0f);                       // начало: назад
+    addCap(frames.size() - 1, +1.0f);       // конец: вперёд
 
     return vertices;
 }
